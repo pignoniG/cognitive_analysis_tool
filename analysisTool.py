@@ -8,6 +8,8 @@
 ### Modules
 from vanilla import Window, PopUpButton, TextBox, Button, CheckBox
 from defconAppKit.windows.baseWindow import BaseWindowController
+import sys
+from PyObjCTools import AppHelper
 
 ### Constants
 MARGIN = 10
@@ -111,31 +113,43 @@ class MyInterface(BaseWindowController):
     # Callbacks
     def recFolderButtonCallback(self, sender):
         print('recFolderButtonCallback')
+        sys.stdout.flush()
 
     def agePopUpCallback(self, sender):
         print('agePopUpCallback')
+        sys.stdout.flush()
 
     def useCameraCheckCallback(self, sender):
         print('useCameraCheckCallback')
+        sys.stdout.flush()
 
     def plotOutputCheckCallback(self, sender):
         print('plotOutputCheckCallback')
+        sys.stdout.flush()
 
     def exportPdfCheckCallback(self, sender):
         print('exportPdfCheckCallback')
+        sys.stdout.flush()
 
     def exportCsvCheckCallback(self, sender):
         print('exportCsvCheckCallback')
+        sys.stdout.flush()
 
     def proceedButtonCallback(self, sender):
         print('proceedButtonCallback')
+        sys.stdout.flush()
 
     def windowCloseCallback(self, sender):
         print('windowCloseCallback')
+        sys.stdout.flush()
 
     def startProgress(self, text, tickCount):
         print('startProgress')
+        sys.stdout.flush()
 
 
 ### Instructions
 tool = MyInterface()
+
+if __name__ == "__main__":
+    AppHelper.runEventLoop()
