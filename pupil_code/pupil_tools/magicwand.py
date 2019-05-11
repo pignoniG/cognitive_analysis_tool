@@ -4,15 +4,11 @@ from collections import namedtuple
 from itertools import cycle
 import uuid  # for unique filenames
 
-
 #adapted from Alexander Reynolds work https://github.com/alkasm/magicwand
 #
 #A Python+OpenCV implementation similar to Adobe Photoshop's magic wand selection tool.
 
-
-
 Point = namedtuple('Point', 'x, y')
-
 
 class magicSelection:
 

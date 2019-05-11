@@ -20,10 +20,7 @@ from pupil_code.pupil_tools.data_tools import *
 #
 # A Python+OpenCV implementation similar to Adobe Photoshop's magic wand selection tool.
 #
-#####
-
-
-
+##### 
 
 def magicAnalysis(self):
 

@@ -37,7 +37,6 @@ def butter_bandstop_filter(data, lowcut, highcut, fs, order=5):
     y = lfilter(b, a, data)
     return y
 
-
 def nan_helper(y):
     """Helper to handle indices and logical indices of NaNs.
 
@@ -52,48 +51,25 @@ def nan_helper(y):
         >>> nans, x= nan_helper(y)
         >>> y[nans]= np.interp(x(nans), x(~nans), y[~nans])
     """
-
     return np.isnan(y), lambda z: z.nonzero()[0]
 
 def interpnan (y):
 
 	y= np.array(y)
-	nans, x= nan_helper(y)
-	y[nans]= np.interp(x(nans), x(~nans), y[~nans])
+	nans, x = nan_helper(y)
+	y[nans] = np.interp(x(nans), x(~nans), y[~nans])
 	return (y)	
 
 def interpzero (y):
 
-	y= np.array(y)
+	y = np.array(y)
 
-	
 	xnew = np.arange(len(y))
 
 	zero_idx = np.where(y==0)
 	xold = np.delete(xnew,zero_idx)
 	yold = np.delete(y, zero_idx)
 
-
 	f = interp1d(xold,yold)
 
 	return f(xnew)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
