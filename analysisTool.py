@@ -16,6 +16,8 @@ from PyObjCTools import AppHelper
 from vanilla.dialogs import getFolder
 from pupil_code.openCV_magic import magicAnalysis
 from pupil_code.lum_analysis import lumAnalysis
+from pupil_code.gps_plot import plotGpsCW
+
 import traceback
 import matplotlib.pyplot as plt
 
@@ -229,6 +231,12 @@ class MyInterface(BaseWindowController):
                                       'Calcualte Expected pupil size',
                                       callback=self.pupilSizeButtonCallback)
 
+        # # proceed button
+        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
+        self.w.gpsButton = Button((MARGIN, jumpingY, 220, CTRL_SIZES['CheckBoxRegularHeight']),
+                                      'Plot CW with GPS',
+                                      callback=self.gpsButtonCallback)
+
     
     # Callbacks
     def recFolderButtonCallback(self, sender):
@@ -303,6 +311,18 @@ class MyInterface(BaseWindowController):
     def pupilSizeButtonCallback(self, sender):
         try:
             lumAnalysis(self)
+        except Exception as e: 
+            print(e)
+
+            print ("Exception in user code:")
+            print ('-'*60)
+            traceback.print_exc(file = sys.stdout)
+            print ('-'*60)
+        sys.stdout.flush()
+
+    def gpsButtonCallback(self, sender):
+        try:
+            plotGpsCW(self)
         except Exception as e: 
             print(e)
 

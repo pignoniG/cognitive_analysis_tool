@@ -127,12 +127,12 @@ def lumAnalysis(self):
     
     recPupilValues_filter_scaled = [x * pupil_coeff  for x in recPupilValues_filter]
 
-    graphPlot(recSimpleTimeStamps,luxPupilValues ,"blue",0.8,"Sensor Calculated Pupil")
+    graphPlot(self.plotDist , recSimpleTimeStamps,luxPupilValues ,"blue",0.8,"Sensor Calculated Pupil")
     
     if not useCamera:
         
-        graphPlot(recSimpleTimeStamps,recPupilValues_scaled,"gray",0.5,"Raw EyeTracker Pupil")
-        graphPlot(recSimpleTimeStamps,recPupilValues_filter_scaled,"black",0.8,"Smoothed EyeTracker Pupil")
+        graphPlot(self.plotDist , recSimpleTimeStamps,recPupilValues_scaled,"gray",0.5,"Raw EyeTracker Pupil")
+        graphPlot(self.plotDist , recSimpleTimeStamps,recPupilValues_filter_scaled,"black",0.8,"Smoothed EyeTracker Pupil")
     
     
     if useCamera:
@@ -171,15 +171,15 @@ def lumAnalysis(self):
 
         recPupilValues_filter_scaled_Lum = [x * pupilLum_coeff for x in recPupilValues_filter]
     
-        graphPlot(recSimpleTimeStamps,spotPupilValues,"orange",1,"Camera Calculated Pupil")
+        graphPlot(self.plotDist , recSimpleTimeStamps,spotPupilValues,"orange",1,"Camera Calculated Pupil")
     
-        graphPlot(recSimpleTimeStamps,recPupilValues_filter_scaled_Lum,"black",0.8,"Smoothed EyeTracker Pupil")
+        graphPlot(self.plotDist , recSimpleTimeStamps,recPupilValues_filter_scaled_Lum,"black",0.8,"Smoothed EyeTracker Pupil")
     
     
     if useCamera:
-        distanceVal , distanceTime = drawDistance( recPupilValues_filter_scaled_Lum, spotPupilValues, recSimpleTimeStamps, distSampleLenght, "linear",pupilFiltering)
+        distanceVal , distanceTime = drawDistance(self.plotDist, recPupilValues_filter_scaled_Lum, spotPupilValues, recSimpleTimeStamps, distSampleLenght, pupilFiltering)
     else:
-        distanceVal , distanceTime = drawDistance( recPupilValues_filter_scaled, luxPupilValues, recSimpleTimeStamps, distSampleLenght, "linear",pupilFiltering)
+        distanceVal , distanceTime = drawDistance(self.plotDist, recPupilValues_filter_scaled, luxPupilValues, recSimpleTimeStamps, distSampleLenght, pupilFiltering)
     
 
 

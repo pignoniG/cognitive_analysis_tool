@@ -1,10 +1,8 @@
-
-from bisect import bisect_left
-import csv
-from scipy.signal import savgol_filter
+#from bisect import bisect_left
+#import csv
+#from scipy.signal import savgol_filter
 import numpy as np
 from datetime import *
-
 
 def effectiveCornealFluxDensity(L,a,e):
 	# Ported from R to python, originally written by Jose Gama (CVD) https://rdrr.io/rforge/CVD/man/
@@ -12,8 +10,6 @@ def effectiveCornealFluxDensity(L,a,e):
 	# L=luminance, a = field diameter in de, e = number of eyes (1 or 2)
 	# Watson A. B., Yellott J. I. (2012). A unified formula for light-adapted pupil size. Journal of Vision, 12(10):12, 1–16. http://journalofvision.org/12/10/12/, doi:10.1167/5.9.6.
 	return L*a*attenuationNumberOfEyes(e)
-
-
 
 def lightAdaptedPupilSizeWatsonAndYellott(L, a, y, y0, e):
 	# Ported from R to python, originally written by Jose Gama (CVD) https://rdrr.io/rforge/CVD/man/
@@ -54,18 +50,14 @@ def calcPupil(l,y,y0,e,a ):
 
 	return (pupilSizes)
 
-
 def lightPupillaryResponseMoonAndSpencer(L):
-
 	#an alternative Pupillary response equation
-
 	Lb=L/3.183098861838
 
 	D = 4.9 - 3 * np.tanh(0.4*(np.log10( Lb ) - 0.5) )
 	return D
 
 def linearRelation(x,x1, y1, x2, y2):
-
 	y = (x -x1)*(y2 -y1)/(x2 -x1)+y1
 	return y
 
@@ -86,13 +78,6 @@ def parabolicRelation(x, x1, y1, x2, y2, x3, y3):
 	yEq = m* x**2 + n*x + o
 	return yEq
 
-
-
-
-
-
-
-
 def relativeLuminanceClac(R,G,B):
 
 	# First converts the gamma-compressed RGB values to linear RGB
@@ -104,9 +89,9 @@ def relativeLuminanceClac(R,G,B):
 
 	gamma=2.4
 
-	R=R/255
-	G=G/255
-	B=B/255
+	R = R/255
+	G = G/255
+	B = B/255
 	if (R <= 0.03928):
 	    R = R /12.92 
 	else:
@@ -129,15 +114,14 @@ def inverserelativeLuminanceClac(L):
 	# inverse of the luminosity function 
 	# from "Relative luminance" 0 - 1 to gray-scale 0-255 
 
-	
-	gamma=2.4
+	gamma = 2.4
 
 	X = L
 	if (X <= 0.11784/12.92):
 	    X = X *12.92 
 	else:
-	    X =X**(1/gamma)	    
-	    X= (X*1.055)-0.055     
-	X=X*255
+	    X = X**(1/gamma)	    
+	    X = (X*1.055)-0.055     
+	X = X*255
 	return X
 
