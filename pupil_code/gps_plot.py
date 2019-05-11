@@ -40,7 +40,11 @@ def num2deg(xtile, ytile, zoom):
 
 
 
-def getImageCluster(lat_deg, lon_deg, delta_lat,  delta_long, zoom):
+def getImageCluster(lat_deg, lon_deg, delta_lat,  delta_long):
+    zoom =int(0.2/(delta_lat*delta_long))
+
+    print("zoom",zoom)
+
     smurl = r"http://a.tile.openstreetmap.org/{0}/{1}/{2}.png"
     xmin, ymax =deg2num(lat_deg, lon_deg, zoom)
     xmax, ymin =deg2num(lat_deg + delta_lat, lon_deg + delta_long, zoom)
@@ -231,7 +235,7 @@ def plotGpsCW(self):
 
 
 
-    a,lat_max, lon_min , lat_min, lon_max= getImageCluster(latMin, lonMin, latDelta,  lonDelta, 13)
+    a,lat_max, lon_min , lat_min, lon_max= getImageCluster(latMin, lonMin, latDelta,  lonDelta)
     #fig = track.figure()
     #fig.patch.set_facecolor('white')
     track.imshow(np.asarray(a),zorder=0, extent=[ lon_max,lon_min,lat_max, lat_min])
@@ -308,7 +312,7 @@ def plotGpsCW(self):
         b=c[2]
     
         track.plot(lon_closestValue,lat_closestValue ,marker='o',
-                        markersize=8.1, mfc=(r,g,b,0.2), mec=(0,0,0,0.0))
+                        markersize=8.1, mfc=(r,g,b,0.6), mec=(0,0,0,0.0))
     
      
     texts = []
@@ -325,7 +329,7 @@ def plotGpsCW(self):
         if distance_closestValue - prevDist>200:
             prevDist=distance_closestValue
             track.plot(lon_closestValue,lat_closestValue ,marker='.',markersize=3, mfc=(0,0,0,0), mec=(0,0,0,0.5))
-            texts.append(track.text(lon_closestValue+0.001,lat_closestValue+0.001, str(time_s)+"min", fontsize=16))
+            texts.append(track.text(lon_closestValue+0.001,lat_closestValue+0.001, str(time_s)+"min", fontsize=8))
     
     
     adjust_text(texts, only_move={'texts':'x'})
