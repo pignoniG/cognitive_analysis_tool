@@ -17,18 +17,11 @@ from vanilla.dialogs import getFolder
 from pupil_code.openCV_magic import magicAnalysis
 from pupil_code.lum_analysis import lumAnalysis
 import traceback
-
 import matplotlib.pyplot as plt
-
 
 #class SimpleAppAppDelegate(NSObject):
 #    def applicationDidFinishLaunching_(self, notification):
 #        tool=MyInterface()
-
-
-
-
-
 
 def saveSettings(settings):
     with open('settings.pkl', 'wb') as f:
@@ -74,7 +67,6 @@ CTRL_SIZES = {
     'SliderWithTicksMiniHeight': 16
     }
 
-
 ### Functions & Procedures
 
 ### Objects
@@ -83,6 +75,7 @@ class MyInterface(BaseWindowController):
     def updateInterface(self):
 
             if self.settingsDict['recordingFolder']:
+
                 if os.path.isfile(self.settingsDict['recordingFolder']+"/outputFromVideo.csv") :
                     self.w.analyzedVideoCaption.set("OK - World video already analyzed.")
                 else:
@@ -90,7 +83,6 @@ class MyInterface(BaseWindowController):
                     self.settingsDict['useCamera']=False
                 
                 self.w.recordingFolderCaption.set(self.settingsDict['recordingFolder'])
-
 
                 if os.path.isfile(self.settingsDict['recordingFolder']+"/exports/000/pupil_positions.csv") and os.path.isfile(self.settingsDict['recordingFolder']+"/exports/000/gaze_positions.csv"):
                     self.w.recordignFoundCaption .set("OK - Valid recording found.")
@@ -108,14 +100,11 @@ class MyInterface(BaseWindowController):
 
             self.w.exportDatasheet.set(self.settingsDict['exportData'])
 
-
             self.w.agePopUp.set(self.settingsDict['partAge'])
 
             self.w.timeLagEditText.set(self.settingsDict['timelag'])
 
             self.w.pupilFilteringEditText.set(self.settingsDict['pupilFiltering'])
-
-
 
 
     def __init__(self):
@@ -131,22 +120,20 @@ class MyInterface(BaseWindowController):
                 'exportData':True,
                 'pupilFiltering':1,
                 'exportFolder': False}
-
         
         #load settings
         if os.path.isfile("settings.pkl") :
             with open('settings.pkl', 'rb') as s:
                 self.settingsDict = pickle.load(s)
 
-        self.plotDist=plt
-        self.plotGps=plt
+        self.plotDist = plt
+        self.plotGps = plt
         self.w = Window((700, 800), 'Driver')
         self.buildWindow()
         self.updateInterface()
 
         self.setUpBaseWindowBehavior()
         self.w.open()
-
 
 
     def buildWindow(self):
@@ -159,9 +146,6 @@ class MyInterface(BaseWindowController):
 
         self.w.recordingFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Select a recording')
        
-
-
-
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
         self.w.recordignFoundCaption  = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
@@ -170,15 +154,12 @@ class MyInterface(BaseWindowController):
 
         self.w.analyzedVideoCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
         
-
         # export folder
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
         self.w.exportFolderButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['ButtonRegularHeight']),
                                         'Export Folder',
                                         callback=self.expFolderButtonCallback)
         self.w.exportFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']), 'Select an export folder')
-        
-
 
         # analyze video
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
@@ -197,11 +178,6 @@ class MyInterface(BaseWindowController):
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.analyzeVideoBar = ProgressBar((MARGIN, jumpingY, -10, 16), minValue=0, maxValue=100)
         self.w.analyzeVideoBar.show(False)
-
-
-
-        
-
 
         # # subject age
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
@@ -224,7 +200,6 @@ class MyInterface(BaseWindowController):
 
         self.w.timeLagTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17), "Time delta (s) to sicronize sensor data with eye data")
         
-
         ## pupilFiltering
         jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
         self.w.pupilFilteringEditText = EditText((MARGIN, jumpingY, 100, 22), "0",    
@@ -232,7 +207,6 @@ class MyInterface(BaseWindowController):
 
         self.w.pupilFilteringTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17), "Temporal resolution of the CW data (smoothing, min 1s )")
         
-
         ## plot output
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.showPlotCheck = CheckBox((MARGIN, jumpingY, 180, CTRL_SIZES['CheckBoxRegularHeight']),
@@ -255,13 +229,11 @@ class MyInterface(BaseWindowController):
                                       'Calcualte Expected pupil size',
                                       callback=self.pupilSizeButtonCallback)
 
-
-
     
     # Callbacks
     def recFolderButtonCallback(self, sender):
         
-        self.settingsDict['recordingFolder']=  f'{getFolder()[0]}'
+        self.settingsDict['recordingFolder'] = f'{getFolder()[0]}'
 
         self.w.recordingFolderCaption.set(self.settingsDict['recordingFolder'])
         self.updateInterface()
@@ -270,10 +242,10 @@ class MyInterface(BaseWindowController):
 
     def expFolderButtonCallback(self, sender):
         
-        self.settingsDict['exportFolder']=  f'{getFolder()[0]}'
+        self.settingsDict['exportFolder'] = f'{getFolder()[0]}'
         self.w.exportFolderCaption.set(self.settingsDict['exportFolder'])
-        
         self.updateInterface()
+
         sys.stdout.flush()
 
 
@@ -286,12 +258,11 @@ class MyInterface(BaseWindowController):
             print(e)
             print ("Exception in user code:")
             print ('-'*60)
-            traceback.print_exc(file=sys.stdout)
+            traceback.print_exc(file = sys.stdout)
             print ('-'*60)
-            
+        
+        self.updateInterface() 
         sys.stdout.flush()
-        self.updateInterface()
-
         
 
 
@@ -337,7 +308,7 @@ class MyInterface(BaseWindowController):
 
             print ("Exception in user code:")
             print ('-'*60)
-            traceback.print_exc(file=sys.stdout)
+            traceback.print_exc(file = sys.stdout)
             print ('-'*60)
         sys.stdout.flush()
 
@@ -354,17 +325,8 @@ class MyInterface(BaseWindowController):
         sys.stdout.flush()
 
 
+
 tool=MyInterface()
-
-
-
-
-
-
-
-
-
-    
 
 
 
