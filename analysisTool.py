@@ -6,28 +6,25 @@
 # ------------- #
 
 ### Modules
-from vanilla import Window, PopUpButton, TextBox, Button, CheckBox,ProgressBar, EditText
-from defconAppKit.windows.baseWindow import BaseWindowController
+# standard library
 import sys
 import os
+from os.path import join
 import pickle
-from AppKit import NSObject
-from PyObjCTools import AppHelper
+import traceback
+
+# dependencies
+import matplotlib.pyplot as plt
+from defconAppKit.windows.baseWindow import BaseWindowController
 from vanilla.dialogs import getFolder
+from vanilla.test.testTools import executeVanillaTest
+from vanilla import Window, PopUpButton, TextBox, Button, CheckBox
+from vanilla import ProgressBar, EditText
+
+# custom code
 from pupil_code.openCV_magic import magicAnalysis
 from pupil_code.lum_analysis import lumAnalysis
 from pupil_code.gps_plot import plotGpsCW
-
-import traceback
-import matplotlib.pyplot as plt
-
-#class SimpleAppAppDelegate(NSObject):
-#    def applicationDidFinishLaunching_(self, notification):
-#        tool=MyInterface()
-
-def saveSettings(settings):
-    with open('settings.pkl', 'wb') as f:
-        pickle.dump(settings, f, pickle.HIGHEST_PROTOCOL)
 
 ### Constants
 MARGIN = 10
@@ -67,64 +64,32 @@ CTRL_SIZES = {
     'SliderWithTicksRegularHeight': 23,
     'SliderWithTicksSmallHeight': 17,
     'SliderWithTicksMiniHeight': 16
-    }
+}
 
 ### Functions & Procedures
+def saveSettings(settings):
+    with open('settings.pkl', 'wb') as f:
+        pickle.dump(settings, f, pickle.HIGHEST_PROTOCOL)
 
 ### Objects
 class MyInterface(BaseWindowController):
 
-    def updateInterface(self):
-
-            if self.settingsDict['recordingFolder']:
-
-                if os.path.isfile(self.settingsDict['recordingFolder']+"/outputFromVideo.csv") :
-                    self.w.analyzedVideoCaption.set("OK - World video already analyzed.")
-                else:
-                    self.w.analyzedVideoCaption.set('! - World video data not found, analyze the video!')
-                    self.settingsDict['useCamera']=False
-                
-                self.w.recordingFolderCaption.set(self.settingsDict['recordingFolder'])
-
-                if os.path.isfile(self.settingsDict['recordingFolder']+"/exports/000/pupil_positions.csv") and os.path.isfile(self.settingsDict['recordingFolder']+"/exports/000/gaze_positions.csv"):
-                    self.w.recordignFoundCaption .set("OK - Valid recording found.")
-                else:
-                    self.w.recordignFoundCaption .set('! - Not a valid recording, remember to export form PupilPlayer!')
-
-            if self.settingsDict['exportFolder']:
-                self.w.exportFolderCaption.set(self.settingsDict['exportFolder'])
-
-            self.w.showAnalizeCheck.set(self.settingsDict['showVideoAnalysis'])
-
-            self.w.showPlotCheck.set(self.settingsDict['showPlot']) 
-
-            self.w.useCameraCheck.set(self.settingsDict['useCamera'])
-
-            self.w.exportDatasheet.set(self.settingsDict['exportData'])
-
-            self.w.agePopUp.set(self.settingsDict['partAge'])
-
-            self.w.timeLagEditText.set(self.settingsDict['timelag'])
-
-            self.w.pupilFilteringEditText.set(self.settingsDict['pupilFiltering'])
-
-
     def __init__(self):
         super(BaseWindowController, self).__init__()
 
-        #standard settings
-        self.settingsDict = {'recordingFolder': False ,
-                'showVideoAnalysis':False,
-                'partAge': 25, 
-                'useCamera': False,
-                'timelag':0,
-                'showPlot':True,
-                'exportData':True,
-                'pupilFiltering':1,
-                'exportFolder': False}
-        
-        #load settings
-        if os.path.isfile("settings.pkl") :
+        # standard settings
+        self.settingsDict = {'recordingFolder': False,
+                             'showVideoAnalysis': False,
+                             'partAge': 25,
+                             'useCamera': False,
+                             'timelag': 0,
+                             'showPlot': True,
+                             'exportData': True,
+                             'pupilFiltering': 1,
+                             'exportFolder': False}
+
+        # load settings
+        if os.path.isfile("settings.pkl"):
             with open('settings.pkl', 'rb') as s:
                 self.settingsDict = pickle.load(s)
 
@@ -137,7 +102,6 @@ class MyInterface(BaseWindowController):
         self.setUpBaseWindowBehavior()
         self.w.open()
 
-
     def buildWindow(self):
         jumpingY = MARGIN
 
@@ -146,36 +110,37 @@ class MyInterface(BaseWindowController):
                                         'Recording Folder',
                                         callback=self.recFolderButtonCallback)
 
-        self.w.recordingFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Select a recording')
-       
+        self.w.recordingFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
+                                                'Select a recording')
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
-        self.w.recordignFoundCaption  = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
-        
+        self.w.recordingFoundCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
         self.w.analyzedVideoCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
-        
+
         # export folder
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
         self.w.exportFolderButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['ButtonRegularHeight']),
-                                        'Export Folder',
-                                        callback=self.expFolderButtonCallback)
-        self.w.exportFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']), 'Select an export folder')
+                                           'Export Folder',
+                                           callback=self.expFolderButtonCallback)
+        self.w.exportFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']),
+                                             'Select an export folder')
 
         # analyze video
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
         self.w.analyzeVideoButton = Button((MARGIN, jumpingY, 140, CTRL_SIZES['ButtonRegularHeight']),
-                                        'Analize World Video',
-                                        callback=self.analyzeVideoButtonCallback)
-        self.w.analyzeVideoCaption = TextBox((140+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']), 'Process the world camera video.')
-        
-        ## show analyze video 
+                                           'Analize World Video',
+                                           callback=self.analyzeVideoButtonCallback)
+        self.w.analyzeVideoCaption = TextBox((140+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']),
+                                             'Process the world camera video.')
+
+        ## show analyze video
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.showAnalizeCheck = CheckBox((MARGIN, jumpingY, 600, CTRL_SIZES['CheckBoxRegularHeight']),
-                                          'Show video analysis (slow)',
-                                          callback=self.showAnalizeCallback)
+                                           'Show video analysis (slow)',
+                                           callback=self.showAnalizeCallback)
 
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.analyzeVideoBar = ProgressBar((MARGIN, jumpingY, -10, 16), minValue=0, maxValue=100)
@@ -197,23 +162,25 @@ class MyInterface(BaseWindowController):
 
         ## timelag
         jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
-        self.w.timeLagEditText = EditText((MARGIN, jumpingY, 100, 22), "0",    
-                                        callback=self.timeLagEditTextCallback)
+        self.w.timeLagEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.timeLagEditTextCallback)
 
-        self.w.timeLagTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17), "Time delta (s) to sicronize sensor data with eye data")
-        
+        self.w.timeLagTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "Time delta (s) to sicronize sensor data with eye data")
+
         ## pupilFiltering
         jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
-        self.w.pupilFilteringEditText = EditText((MARGIN, jumpingY, 100, 22), "0",    
-                                        callback=self.pupilFilteringEditTextCallback)
+        self.w.pupilFilteringEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                                 callback=self.pupilFilteringEditTextCallback)
 
-        self.w.pupilFilteringTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17), "Temporal resolution of the CW data (smoothing, min 1s )")
-        
+        self.w.pupilFilteringTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                               "Temporal resolution of the CW data (smoothing, min 1s )")
+
         ## plot output
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.showPlotCheck = CheckBox((MARGIN, jumpingY, 180, CTRL_SIZES['CheckBoxRegularHeight']),
-                                          'Generate/save plot',
-                                          callback=self.showPlotCheckCallback)
+                                        'Generate/save plot',
+                                        callback=self.showPlotCheckCallback)
         # ## export pdf
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.exportPdfCheck = CheckBox((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
@@ -222,25 +189,60 @@ class MyInterface(BaseWindowController):
         # ## export csv
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.exportDatasheet = CheckBox((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
-                                         'Export to CSV',
-                                         callback=self.exportDatasheetCallback)
+                                          'Export to CSV',
+                                          callback=self.exportDatasheetCallback)
 
         # # proceed button
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.pupilSizeButton = Button((MARGIN, jumpingY, 220, CTRL_SIZES['CheckBoxRegularHeight']),
-                                      'Calcualte Expected pupil size',
-                                      callback=self.pupilSizeButtonCallback)
+                                        'Calcualte Expected pupil size',
+                                        callback=self.pupilSizeButtonCallback)
 
         # # proceed button
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.gpsButton = Button((MARGIN, jumpingY, 220, CTRL_SIZES['CheckBoxRegularHeight']),
-                                      'Plot CW with GPS',
-                                      callback=self.gpsButtonCallback)
+                                  'Plot CW with GPS',
+                                  callback=self.gpsButtonCallback)
 
-    
+    def updateInterface(self):
+        if self.settingsDict['recordingFolder']:
+
+            csvPath = join(self.settingsDict['recordingFolder'], 'outputFromVideo.csv')
+            if os.path.isfile(csvPath):
+                self.w.analyzedVideoCaption.set("OK - World video already analyzed.")
+            else:
+                self.w.analyzedVideoCaption.set('! - World video data not found, analyze the video!')
+                self.settingsDict['useCamera']=False
+
+            self.w.recordingFolderCaption.set(self.settingsDict['recordingFolder'])
+
+            pupilCsvPath = join(self.settingsDict['recordingFolder'], 'exports', '000', 'pupil_positions.csv')
+            gazeCsvPath = join(self.settingsDict['recordingFolder'], 'exports', '000', 'gaze_positions.csv')
+            if os.path.isfile(pupilCsvPath) and os.path.isfile(gazeCsvPath):
+                self.w.recordingFoundCaption .set("OK - Valid recording found.")
+            else:
+                self.w.recordingFoundCaption .set('! - Not a valid recording, remember to export form PupilPlayer!')
+
+        if self.settingsDict['exportFolder']:
+            self.w.exportFolderCaption.set(self.settingsDict['exportFolder'])
+
+        self.w.showAnalizeCheck.set(self.settingsDict['showVideoAnalysis'])
+
+        self.w.showPlotCheck.set(self.settingsDict['showPlot'])
+
+        self.w.useCameraCheck.set(self.settingsDict['useCamera'])
+
+        self.w.exportDatasheet.set(self.settingsDict['exportData'])
+
+        self.w.agePopUp.set(self.settingsDict['partAge'])
+
+        self.w.timeLagEditText.set(self.settingsDict['timelag'])
+
+        self.w.pupilFilteringEditText.set(self.settingsDict['pupilFiltering'])
+
     # Callbacks
     def recFolderButtonCallback(self, sender):
-        
+
         self.settingsDict['recordingFolder'] = f'{getFolder()[0]}'
 
         self.w.recordingFolderCaption.set(self.settingsDict['recordingFolder'])
@@ -249,36 +251,33 @@ class MyInterface(BaseWindowController):
         sys.stdout.flush()
 
     def expFolderButtonCallback(self, sender):
-        
+
         self.settingsDict['exportFolder'] = f'{getFolder()[0]}'
         self.w.exportFolderCaption.set(self.settingsDict['exportFolder'])
         self.updateInterface()
 
         sys.stdout.flush()
 
-
     def analyzeVideoButtonCallback(self, sender):
 
         self.w.analyzeVideoBar.show(True)
         try:
             magicAnalysis(self)
-        except Exception as e: 
+        except Exception as e:
             print(e)
-            print ("Exception in user code:")
-            print ('-'*60)
-            traceback.print_exc(file = sys.stdout)
-            print ('-'*60)
-        
-        self.updateInterface() 
-        sys.stdout.flush()
-        
+            print("Exception in user code:")
+            print('-'*60)
+            traceback.print_exc(file=sys.stdout)
+            print('-'*60)
 
+        self.updateInterface()
+        sys.stdout.flush()
 
     def showAnalizeCallback(self, sender):
         self.settingsDict['showVideoAnalysis'] = sender.get()
         self.updateInterface()
         sys.stdout.flush()
-     
+
     def timeLagEditTextCallback(self, sender):
         self.settingsDict['timelag'] = float(sender.get())
         sys.stdout.flush()
@@ -311,44 +310,37 @@ class MyInterface(BaseWindowController):
     def pupilSizeButtonCallback(self, sender):
         try:
             lumAnalysis(self)
-        except Exception as e: 
+        except Exception as e:
             print(e)
 
-            print ("Exception in user code:")
-            print ('-'*60)
-            traceback.print_exc(file = sys.stdout)
-            print ('-'*60)
+            print("Exception in user code:")
+            print('-'*60)
+            traceback.print_exc(file=sys.stdout)
+            print('-'*60)
         sys.stdout.flush()
 
     def gpsButtonCallback(self, sender):
         try:
             plotGpsCW(self)
-        except Exception as e: 
+        except Exception as e:
             print(e)
 
-            print ("Exception in user code:")
-            print ('-'*60)
-            traceback.print_exc(file = sys.stdout)
-            print ('-'*60)
+            print("Exception in user code:")
+            print('-'*60)
+            traceback.print_exc(file=sys.stdout)
+            print('-'*60)
         sys.stdout.flush()
 
     def windowCloseCallback(self, sender):
         print('windowCloseCallback')
         print(self.settingsDict)
         saveSettings(self.settingsDict)
-
         sys.stdout.flush()
-        AppHelper.stopEventLoop()
 
     def startProgress(self, text, tickCount):
         print('startProgress')
         sys.stdout.flush()
 
 
-
-tool=MyInterface()
-
-
-
 if __name__ == "__main__":
-    AppHelper.runEventLoop()
+    executeVanillaTest(MyInterface)
