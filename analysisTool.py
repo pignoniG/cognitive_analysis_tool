@@ -25,22 +25,8 @@ from vanilla import ProgressBar, EditText
 from pupil_code.openCV_magic import magicAnalysis
 from pupil_code.lum_analysis import lumAnalysis
 from pupil_code.gps_plot import plotGpsCW
-
-<<<<<<< HEAD
 from pupil_code.lux_log import logLux
-import traceback
-import matplotlib.pyplot as plt
 
-#class SimpleAppAppDelegate(NSObject):
-#    def applicationDidFinishLaunching_(self, notification):
-#        tool=MyInterface()
-
-def saveSettings(settings):
-    with open('settings.pkl', 'wb') as f:
-        pickle.dump(settings, f, pickle.HIGHEST_PROTOCOL)
-
-=======
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
 ### Constants
 MARGIN = 10
 
@@ -89,64 +75,6 @@ def saveSettings(settings):
 ### Objects
 class MyInterface(BaseWindowController):
 
-<<<<<<< HEAD
-    def updateInterface(self):
-
-            if self.settingsDict['recordingFolder']:
-
-                if os.path.isfile(self.settingsDict['recordingFolder']+"/outputFromVideo.csv") :
-                    self.w.analyzedVideoCaption.set("OK - World video already analyzed.")
-                else:
-                    self.w.analyzedVideoCaption.set('! - World video data not found, analyze the video!')
-                    self.settingsDict['useCamera']=False
-                
-                self.w.recordingFolderCaption.set(self.settingsDict['recordingFolder'])
-
-                if os.path.isfile(self.settingsDict['recordingFolder']+"/exports/000/pupil_positions.csv") and os.path.isfile(self.settingsDict['recordingFolder']+"/exports/000/gaze_positions.csv"):
-                    self.w.recordignFoundCaption .set("OK - Valid recording found.")
-                else:
-                    self.w.recordignFoundCaption .set('! - Not a valid recording, remember to export form PupilPlayer!')
-
-            if self.settingsDict['exportFolder']:
-                self.w.exportFolderCaption.set(self.settingsDict['exportFolder'])
-
-            if self.settingsDict['luxFolder']:
-                self.w.luxFolderCaption.set(self.settingsDict['luxFolder'])
-
-            self.w.showAnalizeCheck.set(self.settingsDict['showVideoAnalysis'])
-
-            self.w.showPlotCheck.set(self.settingsDict['showPlot']) 
-
-            self.w.useCameraCheck.set(self.settingsDict['useCamera'])
-
-            self.w.exportDatasheet.set(self.settingsDict['exportData'])
-
-            self.w.agePopUp.set(self.settingsDict['partAge'])
-
-            self.w.timeLagEditText.set(self.settingsDict['timelag'])
-
-            self.w.pupilFilteringEditText.set(self.settingsDict['pupilFiltering'])
-
-
-    def __init__(self):
-        super(BaseWindowController, self).__init__()
-
-        #standard settings
-        self.settingsDict = {'recordingFolder': False ,
-                'showVideoAnalysis':False,
-                'partAge': 25, 
-                'useCamera': False,
-                'timelag':0,
-                'showPlot':True,
-                'exportData':True,
-                'pupilFiltering':1,
-                'exportFolder': False,
-                'luxFolder': False
-                }
-        
-        #load settings
-        if os.path.isfile("settings.pkl") :
-=======
     def __init__(self):
         super(BaseWindowController, self).__init__()
 
@@ -159,11 +87,11 @@ class MyInterface(BaseWindowController):
                              'showPlot': True,
                              'exportData': True,
                              'pupilFiltering': 1,
-                             'exportFolder': False}
+                             'exportFolder': False,
+                             'luxFolder': False}
 
         # load settings
         if os.path.isfile("settings.pkl"):
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
             with open('settings.pkl', 'rb') as s:
                 self.settingsDict = pickle.load(s)
 
@@ -187,7 +115,6 @@ class MyInterface(BaseWindowController):
                                                 'Select a recording')
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
-<<<<<<< HEAD
         # sensor data folder
         self.w.luxFolderButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['ButtonRegularHeight']),
                                         'Luminance Folder',
@@ -204,16 +131,10 @@ class MyInterface(BaseWindowController):
         self.w.luxButtonCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Connect the external sensor first!')
        
 
-
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
-
-
-        self.w.recordignFoundCaption  = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
-        
-=======
         self.w.recordingFoundCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
+
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
         self.w.analyzedVideoCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
@@ -325,6 +246,9 @@ class MyInterface(BaseWindowController):
         if self.settingsDict['exportFolder']:
             self.w.exportFolderCaption.set(self.settingsDict['exportFolder'])
 
+        if self.settingsDict['luxFolder']:
+            self.w.luxFolderCaption.set(self.settingsDict['luxFolder'])
+
         self.w.showAnalizeCheck.set(self.settingsDict['showVideoAnalysis'])
 
         self.w.showPlotCheck.set(self.settingsDict['showPlot'])
@@ -339,11 +263,6 @@ class MyInterface(BaseWindowController):
 
         self.w.pupilFilteringEditText.set(self.settingsDict['pupilFiltering'])
 
-<<<<<<< HEAD
-
-    
-=======
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
     # Callbacks
     def recFolderButtonCallback(self, sender):
 
@@ -380,21 +299,12 @@ class MyInterface(BaseWindowController):
             magicAnalysis(self)
         except Exception as e:
             print(e)
-<<<<<<< HEAD
             print ("Exception in user code:")
             print ('-'*60)
             traceback.print_exc(file = sys.stdout)
             print ('-'*60)
         
         self.updateInterface() 
-=======
-            print("Exception in user code:")
-            print('-'*60)
-            traceback.print_exc(file=sys.stdout)
-            print('-'*60)
-
-        self.updateInterface()
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
         sys.stdout.flush()
 
     def showAnalizeCallback(self, sender):
@@ -476,14 +386,5 @@ class MyInterface(BaseWindowController):
         sys.stdout.flush()
 
 
-<<<<<<< HEAD
-
-
-tool=MyInterface()
-
-
-
-=======
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
 if __name__ == "__main__":
     executeVanillaTest(MyInterface)

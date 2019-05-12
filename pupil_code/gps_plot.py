@@ -86,38 +86,21 @@ def getImageCluster(lat_deg, lon_deg, delta_lat, delta_long):
 
 def plotGpsCW(self):
 
-<<<<<<< HEAD
+    #self.plotGps.close()
+
     #SMALL_SIZE = 16
     #MEDIUM_SIZE = 20
     #BIGGER_SIZE = 24
-    #self.plot.rc('font', size=SMALL_SIZE)          # controls default text sizes
-    #self.plot.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
-    #self.plot.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
-    #self.plot.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    #self.plot.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    #self.plot.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
-    #self.plot.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-
-
-    data_source = self.settingsDict['luxFolder'] 
-
-=======
-    self.plotGps.close()
-
-    SMALL_SIZE = 16
-    MEDIUM_SIZE = 20
-    BIGGER_SIZE = 24
-
-    self.plotGps.rc('font', size=SMALL_SIZE)          # controls default text sizes
-    self.plotGps.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
-    self.plotGps.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
-    self.plotGps.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    self.plotGps.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    self.plotGps.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
-    self.plotGps.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+    #self.plotGps.rc('font', size=SMALL_SIZE)          # controls default text sizes
+    #self.plotGps.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+    #self.plotGps.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+    #self.plotGps.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    #self.plotGps.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    #self.plotGps.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+    #self.plotGps.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
     data_source = self.settingsDict['recordingFolder']
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
+
     recording_name = data_source.split("/")[-1]
 
     # export inside the recording
@@ -154,16 +137,11 @@ def plotGpsCW(self):
                 rawDistanceTime.append(float(row[4]))
         csvDataFile.close()
 
-<<<<<<< HEAD
-    for i in range( int(( rawDistanceTime[-1]- rawDistanceTime[0])/10)):
-        time_r= rawDistanceTime[0]+i*10
-        val = findClosestsAndIterpolate( time_r , rawDistanceTime, rawDistanceVal)
-    
-=======
-    for i in range(int((rawDistanceTime[-1]-rawDistanceTime[0])/5)):
-        time_r = rawDistanceTime[0]+i*5
+
+    for i in range(int((rawDistanceTime[-1]-rawDistanceTime[0])/10)):
+        time_r = rawDistanceTime[0]+i*10
         val = findClosestsAndIterpolate(time_r, rawDistanceTime, rawDistanceVal)
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
+
         distanceVal.append(val)
         distanceTime.append(time_r)
 
@@ -240,19 +218,11 @@ def plotGpsCW(self):
         s = speed(XY0[0], XY0[1], XY1[0], XY1[1], time_list[k], time_list[l])
         speed_list.append(s)
 
-<<<<<<< HEAD
-    #PLOT TRACK
-    #f,(track,speed,elevation)=self.plot.subplots(3,1)
-    f,(track)=self.plot.subplots(1,1,figsize=(6,11))
-    #f.set_figheight(8)
-    #f.set_figwidth(2)
-=======
     # PLOT TRACK
     # f,(track,speed,elevation)=self.plotGps.subplots(3,1)
-    f, (track) = self.plotGps.subplots(1, 1, figsize=(6, 11))
+    f, (track) = self.plot.subplots(1, 1, figsize=(6, 11))
     # f.set_figheight(8)
     # f.set_figwidth(2)
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
 
     lonMax = max(lon_list)
     lonMin = min(lon_list)
@@ -268,30 +238,12 @@ def plotGpsCW(self):
     track.set_xlim((lon_max, lon_min))
     track.set_ylim((lat_max, lat_min))
 
-<<<<<<< HEAD
-
-
-    a,lat_max, lon_min , lat_min, lon_max= getImageCluster(latMin, lonMin, latDelta,  lonDelta)
-    #fig = track.figure()
-    #fig.patch.set_facecolor('white')
-    track.imshow(np.asarray(a),zorder=0, extent=[ lon_max,lon_min,lat_max, lat_min])
-    track.set_xlim((lon_max,lon_min))
-    track.set_ylim((lat_max,lat_min))
- 
-
-    
-    #self.plot.subplots_adjust(hspace=0.5)
-    track.set_aspect(2)
-    #img = self.plot.imread("/Users/giovanni/Desktop/AAA_filed_test/map_n.jpg")
-    #track.imshow(img, zorder=0, extent=[5.1272, 5.2515, 60.2750, 60.4057])
-    track.plot(lon_list,lat_list,'k')
-=======
     # self.plotGps.subplots_adjust(hspace=0.5)
     track.set_aspect(2)
     # img = self.plotGps.imread("/Users/giovanni/Desktop/AAA_filed_test/map_n.jpg")
     # track.imshow(img, zorder=0, extent=[5.1272, 5.2515, 60.2750, 60.4057])
     track.plot(lon_list, lat_list, 'k')
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
+
     track.set_ylabel("Latitude")
     track.set_xlabel("Longitude")
     track.set_title(f"{recording_name} Track Plot")
@@ -341,28 +293,7 @@ def plotGpsCW(self):
                    markersize=8.1, mfc=(r, g, b, 0.6), mec=(0, 0, 0, 0.0))
 
     texts = []
-<<<<<<< HEAD
-    prevDist=0
-    for i in range( int((distanceTime[-1]-distanceTime[0])/60)):
-        time= int(distanceTime[0])+i*60
-        time_s= i
-      
-        lon_closestValue = findClosestsAndIterpolate( time , epoch_list, lon_list )
-        lat_closestValue = findClosestsAndIterpolate( time , epoch_list, lat_list )
-        distance_closestValue = findClosestsAndIterpolate( time , epoch_list, d_list )
-        speed_closestValue = findClosestsAndIterpolate( time , epoch_list, speed_list )
-                       
-        if distance_closestValue - prevDist>200:
-            prevDist=distance_closestValue
-            track.plot(lon_closestValue,lat_closestValue ,marker='.',markersize=3, mfc=(0,0,0,0), mec=(0,0,0,0.5))
-            texts.append(track.text(lon_closestValue+0.001,lat_closestValue+0.001, str(time_s)+"min", fontsize=8))
-    
-    
-    adjust_text(texts, only_move={'texts':'x'})
-    
-    self.plot.savefig(export_source_alt+'/plot'+recording_name+'.pdf', bbox_inches='tight')
-    self.plot.show(block=False)  
-=======
+
     prevDist = 0
     for i in range(int((distanceTime[-1]-distanceTime[0])/60)):
         time = int(distanceTime[0])+i*60
@@ -383,7 +314,6 @@ def plotGpsCW(self):
             texts.append(track.text(lon_closestValue+0.001, lat_closestValue+0.001, f"{time_s} min", fontsize=8))
 
     adjust_text(texts, only_move={'texts': 'x'})
-    self.plotGps.savefig(f'{export_source_alt}/plot{recording_name}.pdf',
+    self.plot.savefig(f'{export_source_alt}/plot{recording_name}.pdf',
                          bbox_inches='tight')
-    self.plotGps.show()
->>>>>>> 594c32cb1e97067f10a3ae454b5743d14b15471f
+    self.plot.show(block=False) 
