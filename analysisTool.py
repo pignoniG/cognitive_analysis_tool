@@ -18,6 +18,7 @@ from pupil_code.openCV_magic import magicAnalysis
 from pupil_code.lum_analysis import lumAnalysis
 from pupil_code.gps_plot import plotGpsCW
 
+from pupil_code.lux_log import logLux
 import traceback
 import matplotlib.pyplot as plt
 
@@ -94,6 +95,9 @@ class MyInterface(BaseWindowController):
             if self.settingsDict['exportFolder']:
                 self.w.exportFolderCaption.set(self.settingsDict['exportFolder'])
 
+            if self.settingsDict['luxFolder']:
+                self.w.luxFolderCaption.set(self.settingsDict['luxFolder'])
+
             self.w.showAnalizeCheck.set(self.settingsDict['showVideoAnalysis'])
 
             self.w.showPlotCheck.set(self.settingsDict['showPlot']) 
@@ -121,16 +125,17 @@ class MyInterface(BaseWindowController):
                 'showPlot':True,
                 'exportData':True,
                 'pupilFiltering':1,
-                'exportFolder': False}
+                'exportFolder': False,
+                'luxFolder': False
+                }
         
         #load settings
         if os.path.isfile("settings.pkl") :
             with open('settings.pkl', 'rb') as s:
                 self.settingsDict = pickle.load(s)
 
-        self.plotDist = plt
-        self.plotGps = plt
-        self.w = Window((700, 800), 'Driver')
+        self.plot = plt
+        self.w = Window((700, 800), 'Cognitive Worklaod Pupil Analisis')
         self.buildWindow()
         self.updateInterface()
 
@@ -149,6 +154,27 @@ class MyInterface(BaseWindowController):
         self.w.recordingFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Select a recording')
        
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
+
+        # sensor data folder
+        self.w.luxFolderButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['ButtonRegularHeight']),
+                                        'Luminance Folder',
+                                        callback=self.luxFolderButtonCallback)
+
+        self.w.luxFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Select where to save/read the lumiance sensor data')
+       
+       # lux button
+        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
+        self.w.luxButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
+                                      'log the luminance',
+                                      callback=self.luxButtonCallback)
+
+        self.w.luxButtonCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Connect the external sensor first!')
+       
+
+
+        jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
+
+
 
         self.w.recordignFoundCaption  = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
         
@@ -237,6 +263,7 @@ class MyInterface(BaseWindowController):
                                       'Plot CW with GPS',
                                       callback=self.gpsButtonCallback)
 
+
     
     # Callbacks
     def recFolderButtonCallback(self, sender):
@@ -248,6 +275,17 @@ class MyInterface(BaseWindowController):
 
         sys.stdout.flush()
 
+        # Callbacks
+    def luxFolderButtonCallback(self, sender):
+        
+        self.settingsDict['luxFolder'] = f'{getFolder()[0]}'
+
+        self.w.luxFolderCaption.set(self.settingsDict['luxFolder'])
+        self.updateInterface()
+
+        sys.stdout.flush()
+        
+
     def expFolderButtonCallback(self, sender):
         
         self.settingsDict['exportFolder'] = f'{getFolder()[0]}'
@@ -255,7 +293,6 @@ class MyInterface(BaseWindowController):
         self.updateInterface()
 
         sys.stdout.flush()
-
 
     def analyzeVideoButtonCallback(self, sender):
 
@@ -271,8 +308,6 @@ class MyInterface(BaseWindowController):
         
         self.updateInterface() 
         sys.stdout.flush()
-        
-
 
     def showAnalizeCallback(self, sender):
         self.settingsDict['showVideoAnalysis'] = sender.get()
@@ -340,9 +375,20 @@ class MyInterface(BaseWindowController):
         sys.stdout.flush()
         AppHelper.stopEventLoop()
 
-    def startProgress(self, text, tickCount):
-        print('startProgress')
+        
+
+    def luxButtonCallback(self, sender):
+        try:
+            logLux(self)
+        except Exception as e: 
+            print(e)
+
+            print ("Exception in user code:")
+            print ('-'*60)
+            traceback.print_exc(file = sys.stdout)
+            print ('-'*60)
         sys.stdout.flush()
+
 
 
 

@@ -18,7 +18,7 @@ import os
 ##### define the recordings folder
 
 def lumAnalysis(self):
-    self.plotDist.close()
+    
     data_source=self.settingsDict['recordingFolder'] 
     recording_name=data_source.split("/")[-1]
 
@@ -30,7 +30,7 @@ def lumAnalysis(self):
     export_source_alt=self.settingsDict['exportFolder'] 
 
     #PlotSize
-    fig, ax = self.plotDist.subplots(figsize=(10,5))
+    fig, ax = self.plot.subplots(figsize=(10,5))
     ax.set_ylim(-5, 10)
     
     
@@ -127,12 +127,12 @@ def lumAnalysis(self):
     
     recPupilValues_filter_scaled = [x * pupil_coeff  for x in recPupilValues_filter]
 
-    graphPlot(self.plotDist , recSimpleTimeStamps,luxPupilValues ,"blue",0.8,"Sensor Calculated Pupil")
+    graphPlot(self.plot , recSimpleTimeStamps,luxPupilValues ,"blue",0.8,"Sensor Calculated Pupil")
     
     if not useCamera:
         
-        graphPlot(self.plotDist , recSimpleTimeStamps,recPupilValues_scaled,"gray",0.5,"Raw EyeTracker Pupil")
-        graphPlot(self.plotDist , recSimpleTimeStamps,recPupilValues_filter_scaled,"black",0.8,"Smoothed EyeTracker Pupil")
+        graphPlot(self.plot , recSimpleTimeStamps,recPupilValues_scaled,"gray",0.5,"Raw EyeTracker Pupil")
+        graphPlot(self.plot , recSimpleTimeStamps,recPupilValues_filter_scaled,"black",0.8,"Smoothed EyeTracker Pupil")
     
     
     if useCamera:
@@ -171,28 +171,28 @@ def lumAnalysis(self):
 
         recPupilValues_filter_scaled_Lum = [x * pupilLum_coeff for x in recPupilValues_filter]
     
-        graphPlot(self.plotDist , recSimpleTimeStamps,spotPupilValues,"orange",1,"Camera Calculated Pupil")
+        graphPlot(self.plot , recSimpleTimeStamps,spotPupilValues,"orange",1,"Camera Calculated Pupil")
     
-        graphPlot(self.plotDist , recSimpleTimeStamps,recPupilValues_filter_scaled_Lum,"black",0.8,"Smoothed EyeTracker Pupil")
+        graphPlot(self.plot , recSimpleTimeStamps,recPupilValues_filter_scaled_Lum,"black",0.8,"Smoothed EyeTracker Pupil")
     
     
     if useCamera:
-        distanceVal , distanceTime = drawDistance(self.plotDist, recPupilValues_filter_scaled_Lum, spotPupilValues, recSimpleTimeStamps, distSampleLenght, pupilFiltering)
+        distanceVal , distanceTime = drawDistance(self.plot, recPupilValues_filter_scaled_Lum, spotPupilValues, recSimpleTimeStamps, distSampleLenght, pupilFiltering)
     else:
-        distanceVal , distanceTime = drawDistance(self.plotDist, recPupilValues_filter_scaled, luxPupilValues, recSimpleTimeStamps, distSampleLenght, pupilFiltering)
+        distanceVal , distanceTime = drawDistance(self.plot, recPupilValues_filter_scaled, luxPupilValues, recSimpleTimeStamps, distSampleLenght, pupilFiltering)
     
 
 
-    handles, labels = self.plotDist.gca().get_legend_handles_labels()
+    handles, labels = self.plot.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
-    self.plotDist.legend(by_label.values(), by_label.keys())
+    self.plot.legend(by_label.values(), by_label.keys())
     
-    self.plotDist.xlabel('Time s')
-    self.plotDist.ylabel('Pupil diameter mm')
-    self.plotDist.title("CW"+ recording_name)
+    self.plot.xlabel('Time s')
+    self.plot.ylabel('Pupil diameter mm')
+    self.plot.title("CW"+ recording_name)
     if showPlot:
-        self.plotDist.savefig(export_source+'/plot'+recording_name+'.pdf', bbox_inches='tight')
-        self.plotDist.savefig(export_source_alt+'/plot_'+recording_name+'.pdf', bbox_inches='tight')
+        self.plot.savefig(export_source+'/plot'+recording_name+'.pdf', bbox_inches='tight')
+        self.plot.savefig(export_source_alt+'/plot_'+recording_name+'.pdf', bbox_inches='tight')
     
     if export:
         csv_header = ["timestamp_unix","timestamp_relative","frame_n","confidence","mm_pupil_diameter_scaled","mm_pupil_diameter_calc_lux","px_pupil_diameter_raw","recording_name","age"]
@@ -213,7 +213,7 @@ def lumAnalysis(self):
         saveCsv(export_source,"pupilOutputDistance.csv",csv_header,csv_rows)
         
     if showPlot:
-            self.plotDist.show()
+            self.plot.show(block=False)
     
     
     

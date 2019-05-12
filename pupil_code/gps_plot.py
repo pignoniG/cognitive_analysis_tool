@@ -76,22 +76,19 @@ def getImageCluster(lat_deg, lon_deg, delta_lat,  delta_long):
 
 def plotGpsCW(self):
 
-    self.plotGps.close()
-    
-    SMALL_SIZE = 16
-    MEDIUM_SIZE = 20
-    BIGGER_SIZE = 24
-
-    self.plotGps.rc('font', size=SMALL_SIZE)          # controls default text sizes
-    self.plotGps.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
-    self.plotGps.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
-    self.plotGps.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    self.plotGps.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    self.plotGps.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
-    self.plotGps.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+    #SMALL_SIZE = 16
+    #MEDIUM_SIZE = 20
+    #BIGGER_SIZE = 24
+    #self.plot.rc('font', size=SMALL_SIZE)          # controls default text sizes
+    #self.plot.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+    #self.plot.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+    #self.plot.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    #self.plot.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    #self.plot.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+    #self.plot.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
-    data_source = self.settingsDict['recordingFolder'] 
+    data_source = self.settingsDict['luxFolder'] 
 
     recording_name = data_source.split("/")[-1]
 
@@ -135,8 +132,8 @@ def plotGpsCW(self):
     
         csvDataFile.close() 
 
-    for i in range( int(( rawDistanceTime[-1]- rawDistanceTime[0])/5)):
-        time_r= rawDistanceTime[0]+i*5
+    for i in range( int(( rawDistanceTime[-1]- rawDistanceTime[0])/10)):
+        time_r= rawDistanceTime[0]+i*10
         val = findClosestsAndIterpolate( time_r , rawDistanceTime, rawDistanceVal)
     
         distanceVal.append(val)
@@ -220,8 +217,8 @@ def plotGpsCW(self):
     
 
     #PLOT TRACK
-    #f,(track,speed,elevation)=self.plotGps.subplots(3,1)
-    f,(track)=self.plotGps.subplots(1,1,figsize=(6,11))
+    #f,(track,speed,elevation)=self.plot.subplots(3,1)
+    f,(track)=self.plot.subplots(1,1,figsize=(6,11))
     #f.set_figheight(8)
     #f.set_figwidth(2)
 
@@ -244,9 +241,9 @@ def plotGpsCW(self):
  
 
     
-    #self.plotGps.subplots_adjust(hspace=0.5)
+    #self.plot.subplots_adjust(hspace=0.5)
     track.set_aspect(2)
-    #img = self.plotGps.imread("/Users/giovanni/Desktop/AAA_filed_test/map_n.jpg")
+    #img = self.plot.imread("/Users/giovanni/Desktop/AAA_filed_test/map_n.jpg")
     #track.imshow(img, zorder=0, extent=[5.1272, 5.2515, 60.2750, 60.4057])
     track.plot(lon_list,lat_list,'k')
     track.set_ylabel("Latitude")
@@ -334,5 +331,5 @@ def plotGpsCW(self):
     
     adjust_text(texts, only_move={'texts':'x'})
     
-    self.plotGps.savefig(export_source_alt+'/plot'+recording_name+'.pdf', bbox_inches='tight')
-    self.plotGps.show()  
+    self.plot.savefig(export_source_alt+'/plot'+recording_name+'.pdf', bbox_inches='tight')
+    self.plot.show(block=False)  
