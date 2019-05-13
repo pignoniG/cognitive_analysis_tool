@@ -37,6 +37,31 @@ from pupil_code.pupil_tools.signal_tools import *
 
 ### Instructions
 
+
+# GEODETIC TO CARTERSIAN FUNCTION
+def geo2cart(lon, lat, h):
+    a = 6378137        # WGS84 Major axis
+    b = 6356752.3142   # WGS84 Minor axis
+    e2 = 1-(b**2/a**2)
+    N = float(a/sqrt(1-e2*(sin(radians(abs(lat)))**2)))
+    X = (N+h)*cos(radians(lat))*cos(radians(lon))
+    Y = (N+h)*cos(radians(lat))*sin(radians(lon))
+    return X, Y
+
+# DISTANCE FUNCTION
+def distance(x1, y1, x2, y2):
+    d = sqrt((x1-x2)**2+(y1-y2)**2)
+    return d
+
+# SPEED FUNCTION
+def speed(x0, y0, x1, y1, t0, t1):
+    d = sqrt((x0-x1)**2+(y0-y1)**2)
+    delta_t = t1-t0
+    if delta_t == 0:
+        delta_t = 0.001
+    s = float(d/delta_t)
+    return s
+
 def deg2num(lat_deg, lon_deg, zoom):
     lat_rad = radians(lat_deg)
     n = 2 ** zoom
@@ -52,10 +77,8 @@ def num2deg(xtile, ytile, zoom):
     return (lat_deg, lon_deg)
 
 def getImageCluster(lat_deg, lon_deg, delta_lat, delta_long):
-    zoom = int(0.2/(delta_lat*delta_long))
 
-    print("zoom", zoom)
-
+    zoom = 13
     smurl = r"http://a.tile.openstreetmap.org/{0}/{1}/{2}.png"
     xmin, ymax = deg2num(lat_deg, lon_deg, zoom)
     xmax, ymin = deg2num(lat_deg + delta_lat, lon_deg + delta_long, zoom)
@@ -82,7 +105,6 @@ def getImageCluster(lat_deg, lon_deg, delta_lat, delta_long):
     print("lat_max", "lon_min", "lat_min", "lon_max")
 
     return Cluster, lat_max, lon_min, lat_min, lon_max
-
 
 def plotGpsCW(self):
 
@@ -138,8 +160,8 @@ def plotGpsCW(self):
         csvDataFile.close()
 
 
-    for i in range(int((rawDistanceTime[-1]-rawDistanceTime[0])/10)):
-        time_r = rawDistanceTime[0]+i*10
+    for i in range(int((rawDistanceTime[-1]-rawDistanceTime[0])/5)):
+        time_r = rawDistanceTime[0]+i*5
         val = findClosestsAndIterpolate(time_r, rawDistanceTime, rawDistanceVal)
 
         distanceVal.append(val)
@@ -173,31 +195,8 @@ def plotGpsCW(self):
         time_list.append(total_second)
         epoch_list.append(int(time_secondEph))
 
-    # GEODETIC TO CARTERSIAN FUNCTION
-    def geo2cart(lon, lat, h):
-        a = 6378137        # WGS84 Major axis
-        b = 6356752.3142   # WGS84 Minor axis
-        e2 = 1-(b**2/a**2)
-        N = float(a/sqrt(1-e2*(sin(radians(abs(lat)))**2)))
-        X = (N+h)*cos(radians(lat))*cos(radians(lon))
-        Y = (N+h)*cos(radians(lat))*sin(radians(lon))
-        return X, Y
-
-    # DISTANCE FUNCTION
-    def distance(x1, y1, x2, y2):
-        d = sqrt((x1-x2)**2+(y1-y2)**2)
-        return d
-
-    # SPEED FUNCTION
-    def speed(x0, y0, x1, y1, t0, t1):
-        d = sqrt((x0-x1)**2+(y0-y1)**2)
-        delta_t = t1-t0
-        if delta_t == 0:
-            delta_t = 0.001
-        s = float(d/delta_t)
-        return s
-
-    # POPULATE DISTANCE AND SPEED LIST
+    
+# POPULATE DISTANCE AND SPEED LIST
     d_list = [0.0]
     speed_list = [0.0]
     l = 0
@@ -262,20 +261,26 @@ def plotGpsCW(self):
     # elevation.set_ylabel("GPS Elevation(m)")
     # elevation.grid()
     # ANIMATION/DYNAMIC PLOT
-
     distanceVal_std = np.nanstd(distanceVal)
+    
+    #distanceVal_mean = np.nanmean(distanceVal)
+    #distanceVal_min = min(distanceVal)
+    #distanceVal_max = max(distanceVal)
+    #distanceVal_var = distanceVal_max-distanceVal_min
+    
     for i in range(len(distanceTime)-1):
         lon_closestValue = findClosestsAndIterpolate(distanceTime[i], epoch_list, lon_list)
         lat_closestValue = findClosestsAndIterpolate(distanceTime[i], epoch_list, lat_list)
 
         track.plot(lon_closestValue, lat_closestValue, marker='o',
                    markersize=8, mfc=(1, 1, 1, 1), mec=(1, 1, 1, 0.0))
-
+    
+    
     for i in range(len(distanceTime)-1):
         lon_closestValue = findClosestsAndIterpolate(distanceTime[i], epoch_list, lon_list)
         lat_closestValue = findClosestsAndIterpolate(distanceTime[i], epoch_list, lat_list)
         curr_distanceVal = distanceVal[i]
-        c = (curr_distanceVal + distanceVal_std*1.5) / (distanceVal_std*1.5)*2
+        c = (curr_distanceVal + distanceVal_std*1.5) / ((distanceVal_std*1.5)*2)
         # c = (distanceVal[i] - distanceVal_min) /(distanceVal_var)
 
         if c < 0:
@@ -291,7 +296,7 @@ def plotGpsCW(self):
 
         track.plot(lon_closestValue, lat_closestValue, marker='o',
                    markersize=8.1, mfc=(r, g, b, 0.6), mec=(0, 0, 0, 0.0))
-
+        
     texts = []
 
     prevDist = 0

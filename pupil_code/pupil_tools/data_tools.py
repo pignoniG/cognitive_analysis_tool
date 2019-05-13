@@ -78,9 +78,9 @@ def readLux(lux_data_source, data_source, recStartTime, recEndTime):
     for hour in range(startHour-1, endHour + 2):
         fileName = f'{startMonth}_{startDay}_{hour}.csv'
 
-        if os.path.isfile(lux_data_source+fileName):
+        if os.path.isfile(lux_data_source+"/"+fileName):
 
-            with open(join(lux_data_source, fileName)) as csvDataFile:
+            with open(join(lux_data_source+"/", fileName)) as csvDataFile:
                 for row in csv.reader(csvDataFile):
                     x = float(row[4])
                     x = 1.706061*x + 0.66935

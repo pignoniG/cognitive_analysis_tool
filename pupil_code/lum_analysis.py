@@ -26,9 +26,10 @@ from pupil_code.pupil_tools.colour_tools import calcPupil
 
 ### Functions & Procedures
 def lumAnalysis(self):
-    self.plot.close()
+    #self.plot.close()
     data_source = self.settingsDict['recordingFolder']
     lux_data_source = self.settingsDict['luxFolder']
+    print( lux_data_source)
     recording_name = data_source.split("/")[-1]
 
     recording_source = os.path.dirname(data_source)
