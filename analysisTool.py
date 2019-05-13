@@ -97,7 +97,7 @@ class MyInterface(BaseWindowController):
                 self.settingsDict = pickle.load(s)
 
         self.plot = plt
-        self.w = Window((700, 800), 'Cognitive Worklaod Pupil Analisis')
+        self.w = Window((600, 850), 'Cognitive Worklaod Pupil Analisis')
         self.buildWindow()
         self.updateInterface()
 
@@ -107,6 +107,35 @@ class MyInterface(BaseWindowController):
     def buildWindow(self):
         jumpingY = MARGIN
 
+        # lux button
+        self.w.aCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
+                                                '(a) Log the luminace data or open saved luminace data.')
+
+        jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
+        
+        self.w.luxButton = Button((MARGIN, jumpingY, 160, CTRL_SIZES['CheckBoxRegularHeight']),
+                                      'log the luminance',
+                                      callback=self.luxButtonCallback)
+
+
+        self.w.luxButtonCaption = TextBox((160+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Connect the external sensor first!')
+
+        jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
+
+        # sensor data folder
+        self.w.luxFolderButton = Button((MARGIN, jumpingY, 160, CTRL_SIZES['ButtonRegularHeight']),
+                                        'Luminance Folder',
+                                        callback=self.luxFolderButtonCallback)
+
+        self.w.luxFolderCaption = TextBox((160+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Select where to save/read the lumiance sensor data')
+       
+        jumpingY += CTRL_SIZES['CheckBoxRegularHeight']*2 + MARGIN
+
+        
+        self.w.bCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
+                                                '(b) Select a recording.')
+        jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
+
         # recording folder
         self.w.recFolderButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['ButtonRegularHeight']),
                                         'Recording Folder',
@@ -114,23 +143,6 @@ class MyInterface(BaseWindowController):
 
         self.w.recordingFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
                                                 'Select a recording')
-        jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
-
-        # sensor data folder
-        self.w.luxFolderButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['ButtonRegularHeight']),
-                                        'Luminance Folder',
-                                        callback=self.luxFolderButtonCallback)
-
-        self.w.luxFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Select where to save/read the lumiance sensor data')
-       
-       # lux button
-        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
-        self.w.luxButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
-                                      'log the luminance',
-                                      callback=self.luxButtonCallback)
-
-        self.w.luxButtonCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Connect the external sensor first!')
-       
 
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
@@ -141,12 +153,22 @@ class MyInterface(BaseWindowController):
         self.w.analyzedVideoCaption = TextBox((120+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), '')
 
         # export folder
+        jumpingY += CTRL_SIZES['ButtonRegularHeight']*2 + MARGIN
+
+        self.w.cCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
+                                                '(c) Select were to save the output (csv and pdf).')
+
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
         self.w.exportFolderButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['ButtonRegularHeight']),
                                            'Export Folder',
                                            callback=self.expFolderButtonCallback)
         self.w.exportFolderCaption = TextBox((120+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']),
                                              'Select an export folder')
+
+        jumpingY += CTRL_SIZES['ButtonRegularHeight']*2 + MARGIN
+
+        self.w.dCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
+                                                '(d) Analize the video data to compute the lumince on the gaze area (optional).')
 
         # analyze video
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
@@ -167,6 +189,17 @@ class MyInterface(BaseWindowController):
         self.w.analyzeVideoBar = ProgressBar((MARGIN, jumpingY, -10, 16), minValue=0, maxValue=100)
         self.w.analyzeVideoBar.show(False)
 
+
+        jumpingY += CTRL_SIZES['ButtonRegularHeight']*1 + MARGIN
+
+        self.w.eCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
+                                                '(e) Calculate the expected pupil size and workload.')
+        
+        # # proceed button
+        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
+        self.w.pupilSizeButton = Button((MARGIN, jumpingY, 220, CTRL_SIZES['CheckBoxRegularHeight']),
+                                        'Calcualte Expected pupil size',
+                                        callback=self.pupilSizeButtonCallback)
         # # subject age
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
         self.w.ageCaption = TextBox((MARGIN, jumpingY, 120, CTRL_SIZES['TextBoxRegularHeight']), 'Subject Age:')
@@ -202,28 +235,26 @@ class MyInterface(BaseWindowController):
         self.w.showPlotCheck = CheckBox((MARGIN, jumpingY, 180, CTRL_SIZES['CheckBoxRegularHeight']),
                                         'Generate/save plot',
                                         callback=self.showPlotCheckCallback)
-        # ## export pdf
-        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
-        self.w.exportPdfCheck = CheckBox((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
-                                         'Export PDF',
-                                         callback=self.exportPdfCheckCallback)
+
         # ## export csv
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.exportDatasheet = CheckBox((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
                                           'Export to CSV',
                                           callback=self.exportDatasheetCallback)
 
-        # # proceed button
-        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
-        self.w.pupilSizeButton = Button((MARGIN, jumpingY, 220, CTRL_SIZES['CheckBoxRegularHeight']),
-                                        'Calcualte Expected pupil size',
-                                        callback=self.pupilSizeButtonCallback)
+        jumpingY += CTRL_SIZES['ButtonRegularHeight']*2 + MARGIN
 
-        # # proceed button
+        self.w.fCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
+                                                '(f) Plot Workload over GPS data.')
+        
+        # # gps button
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.gpsButton = Button((MARGIN, jumpingY, 220, CTRL_SIZES['CheckBoxRegularHeight']),
                                   'Plot CW with GPS',
                                   callback=self.gpsButtonCallback)
+        self.w.gpsCaption = TextBox((220+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']),
+                                  'Place "gps_track.gpx" inside the recordign folder')
+
 
     def updateInterface(self):
         if self.settingsDict['recordingFolder']:
@@ -334,9 +365,6 @@ class MyInterface(BaseWindowController):
         self.settingsDict['showPlot'] = sender.get()
         sys.stdout.flush()
 
-    def exportPdfCheckCallback(self, sender):
-        print('exportPdfCheckCallback')
-        sys.stdout.flush()
 
     def exportDatasheetCallback(self, sender):
         self.settingsDict['exportData'] = sender.get()
