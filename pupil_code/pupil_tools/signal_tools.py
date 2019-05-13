@@ -1,7 +1,16 @@
-from scipy.signal import butter, lfilter, freqz
+#!/usr/bin/env python3
+# coding: utf-8
+
+# ------------ #
+# Signal Tools #
+# ------------ #
+
+### Modules
+from scipy.signal import butter, lfilter
 from scipy.interpolate import interp1d
 import numpy as np
 
+### Functions & Procedures
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
@@ -53,23 +62,17 @@ def nan_helper(y):
     """
     return np.isnan(y), lambda z: z.nonzero()[0]
 
-def interpnan (y):
+def interpnan(y):
+    y = np.array(y)
+    nans, x = nan_helper(y)
+    y[nans] = np.interp(x(nans), x(~nans), y[~nans])
+    return (y)
 
-	y= np.array(y)
-	nans, x = nan_helper(y)
-	y[nans] = np.interp(x(nans), x(~nans), y[~nans])
-	return (y)	
-
-def interpzero (y):
-
-	y = np.array(y)
-
-	xnew = np.arange(len(y))
-
-	zero_idx = np.where(y==0)
-	xold = np.delete(xnew,zero_idx)
-	yold = np.delete(y, zero_idx)
-
-	f = interp1d(xold,yold)
-
-	return f(xnew)
+def interpzero(y):
+    y = np.array(y)
+    xnew = np.arange(len(y))
+    zero_idx = np.where(y == 0)
+    xold = np.delete(xnew, zero_idx)
+    yold = np.delete(y, zero_idx)
+    f = interp1d(xold, yold)
+    return f(xnew)
