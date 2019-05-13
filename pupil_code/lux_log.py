@@ -85,19 +85,14 @@ def logLux(self):
 	while True:
 	
 		message=ser.readline()
-	
+
 		if message:
-	
 			try:
-	
 				message=float(message.decode(encoding='UTF-8',errors='strict'))
-	
 				add_new_data(message,data_source)
-	
 				print (message)
 	
 			except Exception as e:
-	
 				print (e)
 		 
 
