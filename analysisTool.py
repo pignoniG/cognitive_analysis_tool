@@ -14,12 +14,13 @@ import pickle
 import traceback
 
 # dependencies
-import matplotlib.pyplot as plt
-from defconAppKit.windows.baseWindow import BaseWindowController
+
+from PyObjCTools import AppHelper
 from vanilla.dialogs import getFolder
 from vanilla.test.testTools import executeVanillaTest
-from vanilla import Window, PopUpButton, TextBox, Button, CheckBox
-from vanilla import ProgressBar, EditText
+from vanilla import Window, PopUpButton, TextBox, Button, CheckBox,ProgressBar, EditText
+from defconAppKit.windows.baseWindow import BaseWindowController
+import matplotlib.pyplot as plt
 
 # custom code
 from pupil_code.openCV_magic import magicAnalysis

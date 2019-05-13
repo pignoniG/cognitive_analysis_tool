@@ -4,7 +4,8 @@ It has been tested in two configurations:
 Adalogger FeatherWing + Adafruit Feather M4 Express + Adafruit TSL2591 High Dynamic Range Digital Light Sensor
 
 https://www.adafruit.com/product/3857
-https://www.adafruit.com/product/2922
+
+
 https://www.adafruit.com/product/1980
 
 Or
