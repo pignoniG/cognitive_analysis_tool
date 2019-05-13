@@ -60,19 +60,11 @@ def readCamera(data_source):
                 frame = frame+1
     return indexLum, timeStampsLum, avgLum, spotLum
 
-def readLux(recording_source, data_source, recStartTime, recEndTime):
-
-    lux_data_source = join(data_source, "SD_dump")
-    normpath(lux_data_source)
-
-    correction = 3600*2
+def readLux(lux_data_source, data_source, recStartTime, recEndTime):
+    
+    print("reading the pc saved lux")
+    correction = 0
     coeff = 0.001
-
-    if os.path.isdir(lux_data_source) is False:
-        print("reading the pc saved lux")
-        lux_data_source = join(recording_source, "SD_dump")
-        correction = 0
-        coeff = 0.001
 
     ##### read lux values#####
     startMonth = recStartTime.month

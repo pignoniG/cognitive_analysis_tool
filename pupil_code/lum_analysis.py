@@ -28,6 +28,7 @@ from pupil_code.pupil_tools.colour_tools import calcPupil
 def lumAnalysis(self):
     self.plot.close()
     data_source = self.settingsDict['recordingFolder']
+    lux_data_source = self.settingsDict['luxFolder']
     recording_name = data_source.split("/")[-1]
 
     recording_source = os.path.dirname(data_source)
@@ -102,7 +103,7 @@ def lumAnalysis(self):
     recPupilValues = signal.savgol_filter(recPupilValues, int(sampleFreq/10)+1, 6)
     recConfidence = signal.savgol_filter(recConfidence, int(sampleFreq/10)+1, 6)
 
-    luxTimeStamps, luxValues = readLux(recording_source,
+    luxTimeStamps, luxValues = readLux(lux_data_source,
                                        data_source,
                                        recStartTime,
                                        recEndTime)
