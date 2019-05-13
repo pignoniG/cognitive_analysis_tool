@@ -257,7 +257,7 @@ def drawDistance(plotElem, pupilValuesA, pupilValuesB, recTimeStamps, sampleLeng
                   markersize=0,
                   color='red',
                   linewidth=1,
-                  label="cognitive wl")
+                  label="Cognitive wl")
 
     plotElem.axhline(y=dtw_WLmean-dtw_WLstd,
                      color='black',

@@ -253,7 +253,7 @@ class MyInterface(BaseWindowController):
                                   'Plot CW with GPS',
                                   callback=self.gpsButtonCallback)
         self.w.gpsCaption = TextBox((220+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']),
-                                  'Place "gps_track.gpx" inside the recordign folder')
+                                  'Place "gps_track.gpx" inside the recording folder')
 
 
     def updateInterface(self):
