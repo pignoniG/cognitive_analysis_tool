@@ -105,15 +105,15 @@ def readGaze(export_source):
     gaze_pos_y = []
 
     with open(join(export_source, "gaze_positions.csv")) as csvGazeFile:
-        for index, row in csv.reader(csvGazeFile):
+        for index, row in enumerate( csv.reader(csvGazeFile)):
             if index > 0:
                 gaze_pos.append(row)
                 gaze_pos_x.append(float(row[3]))
                 gaze_pos_y.append(float(row[4]))
 
     # filtering the noisy gaze x and y
-    gaze_pos_x = savgol_filter(gaze_pos_x, 120*1+1, 2)
-    gaze_pos_y = savgol_filter(gaze_pos_y, 120*1+1, 2)
+    #gaze_pos_x = savgol_filter(gaze_pos_x, 120*1+1, 2)
+    #gaze_pos_y = savgol_filter(gaze_pos_y, 120*1+1, 2)
 
     return gaze_pos, gaze_pos_x, gaze_pos_y
 

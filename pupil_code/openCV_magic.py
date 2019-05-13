@@ -116,7 +116,6 @@ def magicAnalysis(self):
 
     frame_index = -1
     frame_index_alt = 0
-    correction = 0
 
     first_row = True
 
@@ -188,14 +187,13 @@ def magicAnalysis(self):
 
                     # print the frame rate and persentage every 1000 frames
                     if frame_index % 100 == 0:
-                        # print ( round((frame_index/length)*100),"%" )
+                        print ( round((frame_index/length)*100),"%" )
                         self.w.analyzeVideoBar.set(round((frame_index/length)*100))
-
-                correction = gaze_frame_n - frame_index
+ 
 
                 # Press Q on keyboard to    exit
                 if showVideo:
-                    if cv2.waitKey(25) & 0xFF == ord('q'):
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
 
             else:
