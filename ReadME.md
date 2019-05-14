@@ -1,27 +1,27 @@
 # Cognitive workload tool for the Pupil eye tracker
 
-This script/application 
+This script/application
 Is part of my master’s thesis project in MIXD developed at
-NTNU Gjøvik in the fall 2018 and spring 2019 semesters. 
-The aim of the project was to experiment on the processing of eye tracking data, using an affordable eye tracker form 
-[Pupil Labs](https://pupil-labs.com ), for the measure of  [cognitive workload](https://en.wikipedia.org/wiki/Cognitive_load). 
+NTNU Gjøvik in the fall 2018 and spring 2019 semesters.
+The aim of the project was to experiment on the processing of eye tracking data, using an affordable eye tracker form
+[Pupil Labs](https://pupil-labs.com ), for the measure of [cognitive workload](https://en.wikipedia.org/wiki/Cognitive_load).
 
 The pupillary response (size of the pupil over time) is effected by the instantaneous cognitive workload level of the subject, higher workload results in a dilated pupil.
 Light intensity around the eye has also an effect on the pupil diameter as the pupil adjust to different luminosity.
 
-This has historically limited the application of pupillometry to controlled laboratory study. 
+This has historically limited the application of pupillometry to controlled laboratory study.
 
-The scope of this software is to quantify the visual stimuli  that the subject is receiving to subtract the effect of light from the pupillary response and allow the use of pupillometry in a filed condition with variable light.
+The scope of this software is to quantify the visual stimuli that the subject is receiving to subtract the effect of light from the pupillary response and allow the use of pupillometry in a filed condition with variable light.
 
 This is done combining the gaze data and world video from the Pupil Mobile Eye Tracking Headset and calibrating it on the go with absolute luminance data from an external sensor
-[Adafruit TSL2591](https://www.adafruit.com/product/1980). 
- 
+[Adafruit TSL2591](https://www.adafruit.com/product/1980).
+
 ## Getting Started
-- You should be familiar with the Pupil Mobile Eye Tracking Headset and the software suite that comes with it, be able to calibrate the gaze, make a recording and export it using the Pupil Player application. 
+- You should be familiar with the Pupil Mobile Eye Tracking Headset and the software suite that comes with it, be able to calibrate the gaze, make a recording and export it using the Pupil Player application.
 
 - Visit the [Pupil Labs Docs](https://docs.pupil-labs.com) for more informations about the eye tracker and eye tracking software.
 
-### Hardware 
+### Hardware
 The workload analysis require the use of an external Luminosity Sensor, the [Adafruit TSL2591 board](https://www.adafruit.com/product/1980).
 
 To be able to compute the workload you need to make sure to record the output of the light sensor during the recording. This can be done in two ways either by connecting the micro controller to your computer or saving the data on the SD card directly.
@@ -32,7 +32,7 @@ The luminance value are timestamped with a Unix epoch time, unfortunately the Ar
 
 - To log on the micro controller you only need to power it up.
 
-- To log on a laptop you need to select a folder and press the "log the luminance" button. 
+- To log on a laptop you need to select a folder and press the "log the luminance" button.
 
 - In both cases one csv will be saved per hour containing the luminance values saved at around 10Hz
 
@@ -53,7 +53,7 @@ Example of BOM:
 - [CR1220](https://www.adafruit.com/product/380) backup battery for the real time clock.
 - [Micro SD card](https://www.adafruit.com/product/1294) 4-8gb is good for many days of logging.
 
-- [Ribbon Cable](https://www.amazon.com/TronicsPros-65-6ft-Extension-Connector-Multicolor/dp/B015RLUAV0/ref=sr_1_5?keywords=ribbon+4+wires&qid=1557823467&s=gateway&sr=8-5), at least 3-4 meters if you use a computer, 1.5m if you use the battery and the data logger says  on the participant.
+- [Ribbon Cable](https://www.amazon.com/TronicsPros-65-6ft-Extension-Connector-Multicolor/dp/B015RLUAV0/ref=sr_1_5?keywords=ribbon+4+wires&qid=1557823467&s=gateway&sr=8-5), at least 3-4 meters if you use a computer, 1.5m if you use the battery and the data logger says on the participant.
 
 Alternative to the Adafruit boards is to use:
 
@@ -64,7 +64,7 @@ Alternative to the Adafruit boards is to use:
 
 #### Prepare the luminance sensor
 
-You can flash your micro controller with the Arduino IDE and the respective Arduino code included in the  "Lux Sensor" folder. 
+You can flash your micro controller with the Arduino IDE and the respective Arduino code included in the "Lux Sensor" folder.
 
 The Adalogger FeatherWing code requires the Adafruit_Sensor and Adafruit_TSL2591 libraries for the sensor and uses the RTC_PCF8523 RTC.
 
@@ -106,47 +106,48 @@ Open a new Terminal window and start typing:
 /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 ```
 This will also install the Command line Tools for Xcode.
-Then use Homebrew to install python 3 and Open CV, it will take a while.
+Then use Homebrew to install python 3 and Open CV, be patient, it will take a while.
 
 ```
 brew install python3
 brew install opencv
 ```
 
-Install Vanilla and dependences 
+Measurements, calculations and plots are made with the following tools:
 ```
-python3 -m pip install pyobjc git+https://github.com/typesupply/vanilla git+https://github.com/typesupply/defconAppKit
-```
-
-```
-pip3 install matplotlib
-pip3 install Pillow
-pip3 install numpy
-pip3 install adjustText
-pip3 install scipy
-pip3 install DateTime
-pip3 install pyserial
+python3.x -m pip install matplotlib
+python3.x -m pip install Pillow
+python3.x -m pip install numpy
+python3.x -m pip install adjustText
+python3.x -m pip install scipy
+python3.x -m pip install DateTime
+python3.x -m pip install pyserial
 ```
 
+This project uses pyObjC and vanilla for the user interface on macOS.
+You can install them with the following commands:
+```
+python3.x -m pip install pyobjc
+python3.x -m pip git+https://github.com/typesupply/vanilla
+python3.x -m pip git+https://github.com/typesupply/defconAppKit
+```
 
 #### Running the application
 
-To run the software lunch the python application  
+To run the software lunch the python application
 Download the software folder "cognitive_analysis_tool" on your computer and execute the "analysisTool.py" file.
 This will assume that you have placed the folder in your home directory.
 
 ```
-cd /Users/YOURUSER/cognitive_analysis_tool 
+cd /Users/YOURUSER/cognitive_analysis_tool
 python3 analysisTool.py
 ```
-
-
 
 
 ### Record Luminance data on Mac OS
 
 To record the luminance data select a folder to save the data by pressing **Luminance Folder** step (a).
-Press **Log the luminance** to start saving. 
+Press **Log the luminance** to start saving.
 The interface will freeze but you should see the luminance value change in the terminal window. Press ctrl + z to top the logging.
 
 ### Record Luminance without a computer
@@ -158,17 +159,17 @@ Once finished disconnect the power and connect the SD card to your computer to r
 Visit the [Pupil Labs Docs](https://docs.pupil-labs.com) for instruction on how successfully make an eye tracking recording.
 Only a few parameters should be adjusted:
 
-- **World camera** 
+- **World camera**
 	- Use the wide angle camera at 1280x720px to avoid eccessive vignetting 30 or 60 fps at your discretion.
 	- Use the automatic exposure.
 	- Keep the standard post processing settings.
 
-- **Eye Camera** 
+- **Eye Camera**
 	- Preferably use the higher resolution setting 400x400px and highest frequency 120Hz.
 	- Use the automatic exposure.
 	- Keep the standard post processing settings.
 
-- **Recording** 
+- **Recording**
 	- Gaze calibration is important if you wish to use the more advanced algorithm that uses the world video in conjunction with the luminance sensor, for static image or a diffuse field (e.g. fixed luminance in a laboratory condition) the sole luminance sensor will be sufficient.
 
 Once you have made a recording, either with the mobile software or Pupil Capture process it with the Pupil Player to export the raw data.
@@ -234,18 +235,20 @@ Make sure you select all the necessary folders:
 - **age**
 - **mm_pupil_diameter_calc_camera** Pupil Diameter in mm Calculated using the Luminance sensor and the world camera.
 
-### GPS Plot 
+### GPS Plot
 To plot the gps you need to calculate the workload first, and a "gps_track.gpx" file needs to be present inside the recording folder, an internet connection si necessary to download the background map from Open Street Maps.
 
 
 ## Authors
 
-* **Giovanni Pignoni** - *Initial work* 
+* **Giovanni Pignoni** - *Initial work*
 
+RA: QUESTO LINKA A UNA RISORSA CHE NON ESISTE
 See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
 
 ## License
 
+RA: QUESTO LINKA A UNA RISORSA CHE NON ESISTE, BISOGNA AGGIUNGERE il file LICENSE.md
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
 
 ## Acknowledgments
