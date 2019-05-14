@@ -263,7 +263,7 @@ def lumAnalysis(self):
         saveCsv(export_source, "pupilOutput.csv", csv_header, csv_rows)
         saveCsv(export_source_alt, f"{recording_name}_pupilOutput.csv", csv_header, csv_rows)
 
-        csv_header = ["distanceVal", "distanceTime", "recording_name", "age", "distanceTimeEpoch"]
+        csv_header = ["drelative_wl", "timestamp_relative", "recording_name", "age", "timestamp_unix"]
         distanceTimeEpoch = [x + float(recordingInfo["Start Time (System)"]) for x in distanceTime]
         csv_rows = [distanceVal, distanceTime, recording_name, age, distanceTimeEpoch]
 

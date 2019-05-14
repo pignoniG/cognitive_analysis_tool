@@ -18,8 +18,3 @@ https://www.adafruit.com/product/1980
 They are equivalent in functionality but since the modules have different RTC the code is different.
 
 
-The Adalogger FeatherWing code requires the Adafruit_Sensor and Adafruit_TSL2591 libraries for the sensor and uses the RTC_PCF8523 RTC.
-
-The Nano Data Logging Shield code requires the Adafruit_Sensor and Adafruit_TSL2591 libraries for the sensor and uses the DS1307RTC RTC.
-
-Use the example code in the respective libraries to initialise the RTC

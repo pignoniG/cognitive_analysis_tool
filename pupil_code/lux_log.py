@@ -5,25 +5,18 @@ import numpy
 from datetime import *
 import os
 import errno
-
+import cv2
 import time as t
 import serial
-
+import serial.tools.list_ports
 from os.path import expanduser
 home = expanduser("~")
 
 
-
-
-
-def add_new_data(data_point,data_source):
+def add_new_data(data_point , data_source):
 	now = datetime.now().timetuple()
-
 	day = datetime.now().strftime("%Y-%m-%d")
 	u_now = t.time()*1000
-	#print(day,u_now)
-   
-
 
 	fileName = str(now[1])+"_"+ str(now[2]) +"_"+ str(now[3]) + ".csv";
 	fileName = data_source+'/'+fileName
@@ -41,14 +34,10 @@ def add_new_data(data_point,data_source):
 		writer.writerow(row)
 		csvFile.close()
 
-
-
-
-
-
 def logLux(self):
+
+	
 	data_source=self.settingsDict['luxFolder']
-	import serial.tools.list_ports
 	ports = list(serial.tools.list_ports.comports())
 
 	for p in ports:
@@ -75,22 +64,28 @@ def logLux(self):
 				timeout=0.3)
 			break
 
-    
+		if "Arduino" in p[1]:
+			print ("This is an Arduino")
+			ser = serial.Serial(
+				port=p[0],
+				baudrate = 250000,
+				parity=serial.PARITY_NONE,
+				stopbits=serial.STOPBITS_ONE,
+				bytesize=serial.EIGHTBITS,
+				timeout=0.3)
+			break
 
-
-	counter=0
-		  
-
-	
 	while True:
-	
 		message=ser.readline()
+
 
 		if message:
 			try:
 				message=float(message.decode(encoding='UTF-8',errors='strict'))
+				self.w.luxButtonCaption.set(str(message)+" cd/m2")
 				add_new_data(message,data_source)
 				print (message)
+
 	
 			except Exception as e:
 				print (e)

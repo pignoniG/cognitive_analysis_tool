@@ -18,7 +18,7 @@ import traceback
 from PyObjCTools import AppHelper
 from vanilla.dialogs import getFolder
 from vanilla.test.testTools import executeVanillaTest
-from vanilla import Window, PopUpButton, TextBox, Button, CheckBox,ProgressBar, EditText
+from vanilla import Window, PopUpButton, TextBox, Button, CheckBox,ProgressBar, EditText,ProgressSpinner
 from defconAppKit.windows.baseWindow import BaseWindowController
 import matplotlib.pyplot as plt
 
@@ -117,8 +117,12 @@ class MyInterface(BaseWindowController):
                                       'log the luminance',
                                       callback=self.luxButtonCallback)
 
+        
 
-        self.w.luxButtonCaption = TextBox((160+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Connect the external sensor first!')
+        self.w.luxButtonCaption = TextBox((176+MARGIN*3, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Connect the external sensor first!')
+
+
+
 
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
@@ -198,7 +202,7 @@ class MyInterface(BaseWindowController):
         # # proceed button
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.pupilSizeButton = Button((MARGIN, jumpingY, 220, CTRL_SIZES['CheckBoxRegularHeight']),
-                                        'Calcualte Expected pupil size',
+                                        'Calculate Workload',
                                         callback=self.pupilSizeButtonCallback)
         # # subject age
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
@@ -404,6 +408,7 @@ class MyInterface(BaseWindowController):
 
     def luxButtonCallback(self, sender):
         try:
+
             logLux(self)
         except Exception as e: 
             print(e)
