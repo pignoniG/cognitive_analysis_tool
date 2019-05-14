@@ -22,7 +22,7 @@ This is done combining the gaze data and world video from the Pupil Mobile Eye T
 - Visit the [Pupil Labs Docs](https://docs.pupil-labs.com) for more informations about the eye tracker and eye tracking software.
 
 ### Hardware 
-The workload analysis require the use of an external Luminosity Sensor, the [Adafruit TSL2591 board] (https://www.adafruit.com/product/1980).
+The workload analysis require the use of an external Luminosity Sensor, the [Adafruit TSL2591 board](https://www.adafruit.com/product/1980).
 
 To be able to compute the workload you need to make sure to record the output of the light sensor during the recording. This can be done in two ways either by connecting the micro controller to your computer or saving the data on the SD card directly.
 
@@ -69,11 +69,11 @@ You can flash your micro controller with the Arduino IDE and the respective Ardu
 The Adalogger FeatherWing code requires the Adafruit_Sensor and Adafruit_TSL2591 libraries for the sensor and uses the RTC_PCF8523 RTC.
 
 See the Adafruit documentation to get started:
-[Feather M4 and how to use it with he arduino IDE](https://learn.adafruit.com/adafruit-feather-m4-express-atsamd51/setup).
+[Feather M4](https://learn.adafruit.com/adafruit-feather-m4-express-atsamd51/setup),how to use it with he Arduino IDE.
 [Adaloggher RTC](https://learn.adafruit.com/adafruit-adalogger-featherwing/adafruit2-rtc-with-arduino)
 Remember to set the time with one of the examples.
 
-[tsl2591 wiring off thesensor and libraries](https://learn.adafruit.com/adafruit-tsl2591/wiring-and-test).
+[tsl2591](https://learn.adafruit.com/adafruit-tsl2591/wiring-and-test), wiring of the sensor and libraries.
 
 The Nano Data Logging Shield code requires the Adafruit_Sensor and Adafruit_TSL2591 libraries for the sensor and uses the DS1307RTC RTC.
 
@@ -86,8 +86,8 @@ Pinout of the tsl2591:
 - **Vin**, will take 3-5VDC safely, connect it to the 3V pin on the Feather
 - **GND** - common ground for power and logic, connect it to the ground pin on the Feather
 
-- **SCL** - I2C clock pin, connect to your microcontrollers I2C clock line (Labeled SCL on the Feather).
-- **SDA** - I2C data pin, connect to your microcontrollers I2C data line (Labeled SDA on the Feather).
+- **SCL** - I2C clock pin, connect to your micro-controllers I2C clock line (Labeled SCL on the Feather).
+- **SDA** - I2C data pin, connect to your micro-controllers I2C data line (Labeled SDA on the Feather).
 
 
 
@@ -151,7 +151,7 @@ The interface will freeze but you should see the luminance value change in the t
 
 ### Record Luminance without a computer
 
-Once the Real Time Clock is set and the mciorcontroller is flashed with the correct software and you have inserted a formatted (FAT32) micro SD card, you only need to power op the Micro controller to start logging.
+Once the Real Time Clock is set and the micro-controller is flashed with the correct software and you have inserted a formatted (FAT32) micro SD card, you only need to power op the Micro controller to start logging.
 Once finished disconnect the power and connect the SD card to your computer to retrive the data.
 
 ### Prepare a Pupil Recording
@@ -187,7 +187,7 @@ Multiple applications can produce a gpx file, we tested
 
 Pre-processing of the world video is required to improve the analysis of the visual stimuli, the script will go trough the video to identify the area around the gaze of the subject. So that the algorithm can evaluate to what the eye was actually adapting (as opposed to a more vague average luminance in front of the participant).
 
-To pre-process the world video, select the **Recording folder** pressing the relative button, step(b) in the interface. Then press **Analize World Video** to start. If you wish to see how the algorithm is interpreting the area around the gaze select "Show Video Analysis", but consider that the process will run slower. Press "q" at any moment to abort the analysis.
+To pre-process the world video, select the **Recording folder** pressing the relative button, step(b) in the interface. Then press **Analyse World Video** to start. If you wish to see how the algorithm is interpreting the area around the gaze select "Show Video Analysis", but consider that the process will run slower. Press "q" at any moment to abort the analysis.
 
 A outputFromVideo.csv file will be saved inside the the recording folder.
 

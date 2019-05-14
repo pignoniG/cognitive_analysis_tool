@@ -172,13 +172,13 @@ class MyInterface(BaseWindowController):
         jumpingY += CTRL_SIZES['ButtonRegularHeight']*2 + MARGIN
 
         self.w.dCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
-                                                '(d) Analize the video data to compute the lumince on the gaze area (optional).')
+                                                '(d) Analyze the video data to compute the lumince on the gaze area (optional).')
 
         # analyze video
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
         self.w.analyzeVideoButton = Button((MARGIN, jumpingY, 140, CTRL_SIZES['ButtonRegularHeight']),
-                                           'Analize World Video',
+                                           'Analyze World Video',
                                            callback=self.analyzeVideoButtonCallback)
         self.w.analyzeVideoCaption = TextBox((140+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']),
                                              'Process the world camera video.')
