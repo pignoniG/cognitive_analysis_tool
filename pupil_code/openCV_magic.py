@@ -189,7 +189,6 @@ def magicAnalysis(self):
                     if frame_index % 100 == 0:
                         print ( round((frame_index/length)*100),"%" )
                         self.w.analyzeVideoBar.set(round((frame_index/length)*100))
- 
 
                 # Press Q on keyboard to    exit
                 if showVideo:

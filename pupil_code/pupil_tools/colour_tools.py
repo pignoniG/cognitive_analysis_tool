@@ -7,7 +7,6 @@
 
 ### Modules
 import numpy as np
-from datetime import *
 
 ### Functions & Procedures
 def effectiveCornealFluxDensity(L, a, e):
@@ -115,7 +114,7 @@ def inverserelativeLuminanceClac(L):
     gamma = 2.4
     X = L
     if (X <= 0.11784/12.92):
-        X = X *12.92
+        X = X * 12.92
     else:
         X = X**(1/gamma)
         X = (X*1.055)-0.055
