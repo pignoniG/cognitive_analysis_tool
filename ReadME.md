@@ -1,11 +1,10 @@
 # Cognitive workload tool for the Pupil eye tracker
-![The tool user Interface](img/assembled.jpg)
 
-This script/application
-Is part of my master's thesis project in MIXD developed at
-NTNU Gjøvik in the fall 2018 and spring 2019 semesters.
+This script/application is part of my master's thesis project in MIXD developed at NTNU Gjøvik in the fall 2018 and spring 2019 semesters.
 The project aimed to experiment on the processing of eye tracking data, using an affordable eye tracker form
 [Pupil Labs](https://pupil-labs.com ), for the measure of [cognitive workload](https://en.wikipedia.org/wiki/Cognitive_load).
+
+![The tool user Interface](https://raw.githubusercontent.com/pignoniG/cognitive_analysis_tool/develop/img/interface.jpg)
 
 The pupillary response (size of the pupil over time) is effected by the instantaneous cognitive workload level of the subject, higher workload results in a dilated pupil.
 Light intensity around the eye also has an effect on the pupil diameter as the pupil adjust to different luminosity.
@@ -17,12 +16,16 @@ The scope of this software is to quantify the visual stimuli that the subject is
 This is done combining the gaze data and world video from the Pupil Mobile Eye Tracking Headset and calibrating it on the go with absolute luminance data from an external sensor
 [Adafruit TSL2591](https://www.adafruit.com/product/1980).
 
+![A participant wearing the eye trackers.](https://raw.githubusercontent.com/pignoniG/cognitive_analysis_tool/develop/img/partecipant.jpg)
+
 ## Getting Started
 - You should be familiar with the Pupil Mobile Eye Tracking Headset and the software suite that comes with it, be able to calibrate the gaze, make a recording and export it using the Pupil Player application.
 
 - Visit the [Pupil Labs Docs](https://docs.pupil-labs.com) for more information about the eye tracker and eye tracking software.
 
 ### Hardware
+![The assembled eye tracker.](https://raw.githubusercontent.com/pignoniG/cognitive_analysis_tool/develop/img/assembled.jpg)
+
 The workload analysis requires the use of an external Luminosity Sensor, the [Adafruit TSL2591 board](https://www.adafruit.com/product/1980).
 
 To be able to compute the workload you need to make sure to record the output of the light sensor during the recording. This can be done in two ways either by connecting the Microcontroller to your computer or saving the data on the SD card directly.
@@ -30,6 +33,8 @@ To be able to compute the workload you need to make sure to record the output of
 Saving to the computer ensures that the timing of the luminance data is in sync with the eye tracking data as both are recorded on the same machine (same clock). The RTC on the Arduino will drift several seconds every day compared with the time on your computer or smartphone. If you decide to save the luminosity data on the SD card, you will also have to manually re-sync the two, specifying how much the Arduino clock is ahead or behind the computer clock. 
 
 The luminance value is timestamped with a Unix epoch time. Unfortunately, the Arduino code doesn't handle timezones. The best way to handle this is to set the time of the RTC to your local time (if your pc says it's 11:30 the Arduino should also say 11:30) and then include the difference (e.g. for Europe CET you should include the UTC Offset: UTC +1 and add 3600 seconds to compensate).
+
+![The Sensor and Logger.](https://raw.githubusercontent.com/pignoniG/cognitive_analysis_tool/develop/img/sensor.jpg)
 
 - To log on the Microcontroller, you only need to power it up.
 
