@@ -5,6 +5,7 @@ The project aimed to experiment on the processing of eye tracking data, using an
 [Pupil Labs](https://pupil-labs.com ), for the measure of [cognitive workload](https://en.wikipedia.org/wiki/Cognitive_load).
 
 ![The tool user Interface](https://raw.githubusercontent.com/pignoniG/cognitive_analysis_tool/develop/img/interface.jpg)
+*The tool user Interface.*
 
 The pupillary response (size of the pupil over time) is effected by the instantaneous cognitive workload level of the subject, higher workload results in a dilated pupil.
 Light intensity around the eye also has an effect on the pupil diameter as the pupil adjust to different luminosity.
@@ -17,6 +18,7 @@ This is done combining the gaze data and world video from the Pupil Mobile Eye T
 [Adafruit TSL2591](https://www.adafruit.com/product/1980).
 
 ![A participant wearing the eye trackers.](https://raw.githubusercontent.com/pignoniG/cognitive_analysis_tool/develop/img/partecipant.jpg)
+*A participant wearing the eye trackers.*
 
 ## Getting Started
 - You should be familiar with the Pupil Mobile Eye Tracking Headset and the software suite that comes with it, be able to calibrate the gaze, make a recording and export it using the Pupil Player application.
@@ -25,6 +27,7 @@ This is done combining the gaze data and world video from the Pupil Mobile Eye T
 
 ### Hardware
 ![The assembled eye tracker.](https://raw.githubusercontent.com/pignoniG/cognitive_analysis_tool/develop/img/assembled.jpg)
+*The assembled eye tracker.*
 
 The workload analysis requires the use of an external Luminosity Sensor, the [Adafruit TSL2591 board](https://www.adafruit.com/product/1980).
 
@@ -35,6 +38,7 @@ Saving to the computer ensures that the timing of the luminance data is in sync 
 The luminance value is timestamped with a Unix epoch time. Unfortunately, the Arduino code doesn't handle timezones. The best way to handle this is to set the time of the RTC to your local time (if your pc says it's 11:30 the Arduino should also say 11:30) and then include the difference (e.g. for Europe CET you should include the UTC Offset: UTC +1 and add 3600 seconds to compensate).
 
 ![The Sensor and Logger.](https://raw.githubusercontent.com/pignoniG/cognitive_analysis_tool/develop/img/sensor.jpg)
+*The Sensor and Logger.*
 
 - To log on the Microcontroller, you only need to power it up.
 
