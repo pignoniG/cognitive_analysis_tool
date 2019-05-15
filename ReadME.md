@@ -1,4 +1,5 @@
 # Cognitive workload tool for the Pupil eye tracker
+![The tool user Interface](img/assembled.jpg)
 
 This script/application
 Is part of my master's thesis project in MIXD developed at
