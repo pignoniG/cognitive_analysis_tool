@@ -242,20 +242,14 @@ Make sure you select all the necessary folders:
 To plot the GPS, you need to calculate the workload first and a "gps_track.gpx" file needs to be present inside the recording folder; an internet connection is necessary to download the background map from Open Street Maps.
 
 
-## Authors
-
-* **Giovanni Pignoni** - *Initial work*
-
-RA: QUESTO LINKA A UNA RISORSA CHE NON ESISTE
-See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
-
 ## License
 
-RA: QUESTO LINKA A UNA RISORSA CHE NON ESISTE, BISOGNA AGGIUNGERE il file LICENSE.md
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
 
 ## Acknowledgments
 
-* Hat tip to anyone whose code was used
-* Inspiration
-* etc
+The magicwand.py script has been adapted from 
+Alexander Reynolds work [magicwand](https://github.com/alkasm/magicwand), A Python+OpenCV implementation similar to Adobe Photoshop's magic wand selection tool.
+
+The "Light Adapted Pupil Size" code has been ported from R to python and was originally written by Jose Gama [CVD](https://rdrr.io/rforge/CVD/man/). And it is based on the publication by Watson A. B., Yellott J. I. (2012). A unified formula for light-adapted pupil size. Journal of Vision, 12(10):12, 1–16. http://journalofvision.org/12/10/12/, doi:10.1167/5.9.6.
+
