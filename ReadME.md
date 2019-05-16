@@ -46,7 +46,7 @@ The luminance value is timestamped with a Unix epoch time. Unfortunately, the Ar
 
 - In both cases, the data will be divided into one new .csv per hour, containing the luminance values saved at around 10Hz.
 
-To mount the board on the eye-tracker, you will need a 3d printed hardware kit; it can be ordered from [Shapeways](https://www.shapeways.com/product/edit/FYMYA9VE6) or downloaded and print it with a generic filament printer. The .stl 3d model is inside the "Lux Sensor" folder; it includes the hardware to secure the sensor to the workload camera on the Pupil Headset and clips to do some basic cable management.
+To mount the board on the eye-tracker, you will need a 3d printed hardware kit; it can be ordered from [Shapeways](https://www.shapeways.com/product/FYMYA9VE6/adafruit-pupil-lumiance-sensor-kit) or downloaded and print it with a generic filament printer. The .stl 3d model is inside the "Lux Sensor" folder; it includes the hardware to secure the sensor to the workload camera on the Pupil Headset and clips to do some basic cable management.
 
 To assemble the data logger, you will need a four conductors flat cable and a microcontroller, code is included to use both an Arduino Nano or the more powerful Adafruit Feather M4 Express. The Adafruit Feather is quite handy because it can be connected directly to a lithium battery and be used as a portable data logger.
 
