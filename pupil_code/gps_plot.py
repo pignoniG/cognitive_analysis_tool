@@ -13,6 +13,8 @@ import csv
 import calendar
 import xml.dom.minidom as mnd
 import urllib
+import urllib.request
+
 import io
 from os.path import join
 from math import radians, log, tan, cos, pi, atan, sinh, degrees, sqrt, sin
@@ -93,9 +95,14 @@ def getImageCluster(lat_deg, lon_deg, delta_lat, delta_long):
             try:
                 imgurl = smurl.format(zoom, xtile, ytile)
                 print(f"Opening: {imgurl}")
-                imgstr = urllib.request.urlopen(imgurl).read()
+
+                req = urllib.request.Request(imgurl, headers={'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1; Win64; x64)'})
+                print("A")
+                imgstr = urllib.request.urlopen(req).read()
                 tile = Image.open(io.BytesIO(imgstr))
+
                 Cluster.paste(tile, box=((xtile-xmin)*256, (ytile-ymin)*255))
+
             except Exception as error:
                 print(error)
                 print("Couldn't download image")
