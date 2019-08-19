@@ -128,22 +128,22 @@ brew install opencv
 Measurements, calculations and plots are made with the following tools:
 
 ```
-python3.x -m pip install matplotlib
-python3.x -m pip install Pillow
-python3.x -m pip install numpy
-python3.x -m pip install adjustText
-python3.x -m pip install scipy
-python3.x -m pip install DateTime
-python3.x -m pip install pyserial
+python3 -m pip install matplotlib
+python3 -m pip install Pillow
+python3 -m pip install numpy
+python3 -m pip install adjustText
+python3 -m pip install scipy
+python3 -m pip install DateTime
+python3 -m pip install pyserial
 ```
 
 This project uses pyObjC and vanilla for the user interface on macOS.
 You can install them with the following commands:
 
 ```
-python3.x -m pip install pyobjc
-python3.x -m pip git+https://github.com/typesupply/vanilla
-python3.x -m pip git+https://github.com/typesupply/defconAppKit
+python3 -m pip install pyobjc
+python3 -m pip install git+https://github.com/typesupply/vanilla
+python3 -m pip install git+https://github.com/typesupply/defconAppKit
 ```
 
 #### Running the application
