@@ -39,7 +39,7 @@ def magicAnalysis(self):
     video_source = join(data_source, "world.mp4")
 
     if os.path.isfile(video_source) is False:
-        print(f"Video not vound at {video_source}")
+        print(f"Video not found at {video_source}")
         return None
 
     cap = cv2.VideoCapture(video_source)
@@ -52,7 +52,7 @@ def magicAnalysis(self):
         # this data is not always available
         video = info["World Camera Resolution"].split("x")
         video_w, video_h = int(video[0]), int(video[1])
-        print("The video resolution is={video_w}x{video_h}")
+        print("The video resolution is={}x{}".format(video_w,video_h))
 
     except Exception as ee:
         print("Unable to automatically read the video resolution.")
