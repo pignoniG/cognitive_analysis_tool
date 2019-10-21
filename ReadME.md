@@ -135,6 +135,7 @@ python3 -m pip install adjustText
 python3 -m pip install scipy
 python3 -m pip install DateTime
 python3 -m pip install pyserial
+python3 -m pip install multitasking
 ```
 
 This project uses pyObjC and vanilla for the user interface on macOS.
