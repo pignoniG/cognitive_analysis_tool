@@ -3,12 +3,16 @@ import os
 import csv
 from os.path import join
 import numpy as np
+import multitasking
 import time as t
-from pupil_code.pupil_tools.magicwand import magicSelection
+import math
 
+from pupil_code.pupil_tools.magicwand import magicSelection
 from pupil_code.pupil_tools.colour_tools import relativeLuminanceClac
 from pupil_code.pupil_tools.data_tools import readInfo, readGaze
 
+multitasking.set_max_threads(multitasking.config["CPU_CORES"] * 20)
+    
 #####
 # uses a "magic wand" approach to select th area of similar
 # color/luminance around the user gaze and calculates the average
@@ -20,16 +24,100 @@ from pupil_code.pupil_tools.data_tools import readInfo, readGaze
 #
 #####
 
+@multitasking.task
+def frameGrabber(g_id,src,frame_str,frame_n,gaze_pos,output_list,last_sel,showVideo):
+
+    start = t.time()
+    i=0
+    #Opening a local video stream
+    vid = cv2.VideoCapture(src)
+    #settign the start frame
+    vid.set(cv2.CAP_PROP_POS_FRAMES,frame_str)
+    #wile readign frames
+
+    while(vid.isOpened()):
+
+        #the vid is closed when all the farem group is analised
+        if i >= frame_n:
+            break
+
+        grabbed,frame = vid.read()
+
+        #if a frame is correctly read
+        if grabbed:
+            #frame=cv2.GaussianBlur(frame,(11,11),cv2.BORDER_DEFAULT)
+            absolute_frame_n = frame_str + i
+            frameAsinc(absolute_frame_n,
+                       frame,
+                       gaze_pos,
+                       output_list,last_sel,showVideo,g_id)
+            i += 1
+        else:
+            break
+
+    vid.release()
+
+    #print("Final analisis time of the frame grabber id=",g_id," is ",t.time() - start, "s")
+
+
+#@multitasking.task
+def subFrameAsinc(frame_n,frame,x,y,t,lum,avgStd,output_list,last_sel,showVideo,g_id):
+
+    sel = magicSelection(frame,x,y, avgStd*1.5,connectivity=8)
+    
+    if showVideo:
+        #save the selection output for visualisation
+        last_sel [g_id]= sel.export();
+
+    R_pixval , G_pixval , B_pixval = sel.return_stats()    # read the mean rgb of the selection
+    
+    pixval = relativeLuminanceClac(R_pixval, G_pixval, B_pixval)   # mean relative luminance of the selection
+ 
+    if output_list[frame_n] is None :
+        output_list[frame_n]=[]
+
+    output_list[frame_n].append([frame_n, t, lum, pixval])
+
+
+#@multitasking.task
+def frameAsinc(frame_n,frame, gaze_pos, output_list,last_sel,showVideo,g_id):
+
+    lumMean, lumStddev = cv2.meanStdDev(frame)
+    lum = float(relativeLuminanceClac(lumMean[0], lumMean[1], lumMean[2]))           # mean relative luminance
+    avgStd = (float(lumStddev[0])+float(lumStddev[1])+float(lumStddev[2])) / 3  # mean sd across rgb           
+
+
+    if gaze_pos[frame_n]:
+
+        for i in range(len(gaze_pos[frame_n][1])):
+
+            x = gaze_pos[frame_n][1][i]
+            y = gaze_pos[frame_n][2][i]
+            t = gaze_pos[frame_n][3][i]
+
+            subFrameAsinc(frame_n,frame,x,y,t,lum,avgStd,output_list,last_sel,showVideo,g_id)
+
+
 def magicAnalysis(self):
 
+    print("Your cpu has ",multitasking.config["CPU_CORES"]," cores" )
+
     cv2.ocl.setUseOpenCL(True)
+
+    # start with an empty progress bar
     self.w.analyzeVideoBar.set(0)
     self.w.analyzeVideoBar.show(True)
 
+    # read initial parameters from the interface
+
     data_source = self.settingsDict['recordingFolder']
     showVideo = self.settingsDict['showVideoAnalysis']
-
     export_source = join(data_source, "exports", "000")
+
+    cv_threads = int(multitasking.config["CPU_CORES"]) * 12;
+
+    #if showVideo:
+        #cv_threads = int(multitasking.config["CPU_CORES"]);
 
     # The video resolution is automatically read from the info.csv file if available
     video_w = 1280
@@ -37,13 +125,16 @@ def magicAnalysis(self):
 
     # Start the video capture from file
     video_source = join(data_source, "world.mp4")
+    #video_source = "/Users/giovannipignoni/Downloads/file_example_MP4_1920_18MG.mp4"
 
     if os.path.isfile(video_source) is False:
         print(f"Video not found at {video_source}")
         return None
 
+    #count the frames in the video
     cap = cv2.VideoCapture(video_source)
-    length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frames_n= int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
 
     ##### read record info.csv #####
     info = readInfo(data_source)
@@ -58,28 +149,34 @@ def magicAnalysis(self):
         print("Unable to automatically read the video resolution.")
         print(ee)
 
-    ##### read pupil_positions.csv #####
+   ##### read pupil_positions.csv #####
     # Unpacking the gaze data
     gaze_positions, gaze_positions_x, gaze_positions_y = readGaze(export_source)
 
     prev_frame_index = 0
-    gaze_pix_positions = []
+
+    gaze_list_max_frame= int(gaze_positions[-1][1])
+    gaze_list_min_frame= int(gaze_positions[0][1])
+
+    gaze_pix_size = frames_n
+    if gaze_list_max_frame > frames_n :
+        gaze_pix_size = gaze_list_max_frame
+
+   
+    gaze_pix_positions = [None]*int(gaze_pix_size+1)
+
     gaze_frame_list_x = []
     gaze_frame_list_y = []
     gaze_frame_list_time = []
 
     prev_frame_x = 0
     prev_frame_y = 0
-
-    # lets see how fast this thing can go
-    start_time = t.time()
-    index = -1
+    
+    index = 0
 
     # Reading all the gaze sample
-    # going trough all the gaze samples
 
     for gaze_sample in gaze_positions:
-        index = index+1
 
         frame_index = int(gaze_sample[1])
         frame_time = float(gaze_sample[0])
@@ -90,7 +187,8 @@ def magicAnalysis(self):
             gaze_frame_list_x = np.clip(gaze_frame_list_x, 0, video_w-1)
             gaze_frame_list_y = np.clip(gaze_frame_list_y, 0, video_h-1)
 
-            gaze_pix_positions.append((frame_index, gaze_frame_list_x, gaze_frame_list_y, gaze_frame_list_time))
+            gaze_pix_positions[frame_index]=frame_index, gaze_frame_list_x, gaze_frame_list_y, gaze_frame_list_time
+
             gaze_frame_list_x = []
             gaze_frame_list_y = []
             gaze_frame_list_time = []
@@ -112,21 +210,119 @@ def magicAnalysis(self):
         gaze_frame_list_time.append(float(frame_time))
         prev_frame_index = frame_index
 
+        index += 1
+
     ##### end read pupil_positions.csv #####
 
-    frame_index = -1
-    frame_index_alt = 0
+    #create  a list long as the video file to store the resoult of the analisis
+    analised_list=[None]*int(frames_n)
 
+    #List of the main open CV threads 
+    frame_grabbers = [] 
+
+    #Number of frames to analise
+    print ("We will analise from",gaze_list_min_frame,"to", gaze_list_max_frame )
+
+    frames_to_analise_n = gaze_list_max_frame - gaze_list_min_frame
+
+    #Number of frames for each Open CV thread
+    frame_range = int(frames_to_analise_n / cv_threads)
+
+    #Time counter to calcualte fps
+    start = t.time()
+
+    #List to store the last frames analised (used only for visalisation)
+    last_selection = [None]*int(cv_threads)
+
+    for cv_thread in range(cv_threads):
+
+        grabber_id = cv_thread
+
+        first_frame = gaze_list_min_frame + (frame_range * cv_thread)
+
+        frame_grabbers.append(frameGrabber(grabber_id,
+                                           video_source,
+                                           first_frame,
+                                           frame_range,
+                                           gaze_pix_positions,
+                                           analised_list,
+                                           last_selection,
+                                           showVideo )) 
+
+    #The main tread will ceck regularly if all the Open CV threads are finished
+    grabbing = True
+    if showVideo:
+        mosaic_col_n = int(math.sqrt(cv_threads))
+        mosaic_row_n = int(cv_threads/mosaic_col_n)
+
+        scale = 1/mosaic_col_n
+    
+        mosaic_empty = np.zeros((video_h,video_w, 3), dtype = "uint8")
+        mosaic_empty = cv2.resize( mosaic_empty,None,fx=scale,fy=scale)
+
+
+    while grabbing:
+        for grabber in frame_grabbers:
+            grabbing=False
+            if (grabber.is_alive()):
+                grabbing=True
+
+        #Count how many frames have been analised by cekking how many elements in the list have been populated
+        anzl_frames = 0
+        for row in analised_list:
+            if row:
+                anzl_frames +=1 
+
+        fps  = int(anzl_frames /(t.time() - start));
+
+        print("The analisis is at",round((anzl_frames/frames_to_analise_n)*100),"%","@",fps,"fps" )
+
+        self.w.analyzeVideoBar.set(round((anzl_frames/frames_to_analise_n)*100))
+
+        #The process can be visualised as a mosaic
+        if showVideo:  
+            mosaic_list = []
+            mosaic_row = []  
+            try:
+                i=0
+                for selection in last_selection:
+                    selection = cv2.resize(selection,None,fx=scale,fy=scale)
+
+                    if i < mosaic_row_n: 
+                        mosaic_row.append(selection)
+                        i +=1
+
+                    else:
+                        im_h = cv2.hconcat(mosaic_row)
+                        mosaic_list.append(im_h)
+                        mosaic_row = []
+                        mosaic_row.append(selection)
+                        i = 1
+
+                if len(mosaic_row) < mosaic_row_n:
+                    diff = mosaic_row_n - len(mosaic_row)
+                    for a in range(diff):
+                        mosaic_row.append(mosaic_empty)
+        
+                im_h = cv2.hconcat(mosaic_row)
+                mosaic_list.append(im_h)
+
+
+                cv2.imshow("Mosaic",cv2.vconcat(mosaic_list))
+
+            except Exception as ee:
+                print("No frames to show so far")
+                   
+            
+           
+        t.sleep(1)
+
+    t.sleep(2)
+    print("Final analisis time is",int(t.time() - start), "s")
+    print("saving to CSV...")
+    
     first_row = True
-
-    gaze_positions_x = []
-    gaze_positions_y = []
-
     row = ["frame_index", "time", "AVGlum", "SpotLum"]
-
-    # Check if came=[]ra opened successfully
-    if (cap.isOpened() is False):
-        print("Error opening video stream or file")
 
     with open(join(data_source, 'outputFromVideo.csv'), 'w') as csvFile:
         writer = csv.writer(csvFile)
@@ -134,72 +330,16 @@ def magicAnalysis(self):
             writer.writerow(row)
             first_row = False
 
-        # Read until video is completed
-        while(cap.isOpened()):
+        for frame_rows in analised_list:
 
-            # Capture frame-by-frame
-            ret, frame = cap.read()
-            frame_index += 1
+            if frame_rows:
+                for gaze_row in frame_rows:
+                    writer.writerow(gaze_row) 
 
-            if ret is True:
-                gaze_frame_n = gaze_pix_positions[frame_index_alt][0]
+    print("saved to CSV!")
 
-                if frame_index+1 > gaze_frame_n and frame_index_alt+2 < len(gaze_pix_positions):
-                    frame_index_alt = frame_index_alt+1
-                    gaze_frame_n = gaze_pix_positions[frame_index_alt][0]
 
-                if gaze_frame_n == frame_index+1:
-                    gaze_frame_n = gaze_pix_positions[frame_index_alt][0]
-
-                    gaze_positions_x = gaze_pix_positions[frame_index_alt][1]
-                    gaze_positions_y = gaze_pix_positions[frame_index_alt][2]
-                    gaze_positions_time = gaze_pix_positions[frame_index_alt][3]
-
-                    # mean and standard deviation of the rgb values
-                    lumMean, lumStddev = cv2.meanStdDev(frame)
-
-                    lum = relativeLuminanceClac(lumMean[0], lumMean[1], lumMean[2])            # mean relative luminance
-                    avgStd = (float(lumStddev[0])+float(lumStddev[1])+float(lumStddev[2])) / 3  # mean sd across rgb
-
-                    for i in range(0, len(gaze_positions_time)):
-                        # for each gaze position relative to this frame
-                        # frame=cv2.GaussianBlur(frame,(11,11),cv2.BORDER_DEFAULT)
-
-                        # select the area with similar color and luminance around the gaze point within the specified tolerance
-
-                        selection = magicSelection(frame,
-                                                   gaze_positions_x[i],
-                                                   gaze_positions_y[i],
-                                                   avgStd*1.5,
-                                                   connectivity=8)
-                        stats = selection.return_stats()    # read the mean rgb of the selection
-
-                        if showVideo:
-                            selection.show()
-
-                        R_pixval = float(stats[0])
-                        G_pixval = float(stats[1])
-                        B_pixval = float(stats[2])
-
-                        pixval = relativeLuminanceClac(R_pixval, G_pixval, B_pixval)   # mean relative luminance of the selection
-                        row = [frame_index, gaze_positions_time[i], float(lum), pixval]
-                        writer.writerow(row)
-
-                    # print the frame rate and persentage every 1000 frames
-                    if frame_index % 100 == 0:
-                        print ( round((frame_index/length)*100),"%" )
-                        self.w.analyzeVideoBar.set(round((frame_index/length)*100))
-
-                # Press Q on keyboard to    exit
-                if showVideo:
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
-
-            else:
-                csvFile.close()
-                break
-
-    cap.release()
+    self.w.analyzeVideoBar.set(100)
 
     # Closes all the frames
     cv2.destroyAllWindows()
