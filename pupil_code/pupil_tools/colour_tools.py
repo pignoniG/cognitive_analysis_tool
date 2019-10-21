@@ -8,7 +8,6 @@
 ### Modules
 import numpy as np
 
-
 ### Functions & Procedures
 def effectiveCornealFluxDensity(L, a, e):
     # Ported from R to python, originally written by Jose Gama (CVD) https://rdrr.io/rforge/CVD/man/
@@ -40,7 +39,7 @@ def attenuationNumberOfEyes(eyes):
     # attenuation as a function M(e) of number of eyes e (1 or 2)
     # M(1) = 0.1, M(2) = 1, otherwise 0
     # Watson A. B., Yellott J. I. (2012). A unified formula for light-adapted pupil size. Journal of Vision, 12(10):12, 1–16. http://journalofvision.org/12/10/12/, doi:10.1167/5.9.6.
-    if eyes == 1: #how many eyes are in use 
+    if eyes == 1:
         eyes = 0.1
     elif eyes == 2:
         eyes = 1
