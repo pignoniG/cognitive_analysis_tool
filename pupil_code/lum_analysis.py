@@ -76,12 +76,12 @@ def lumAnalysis(self):
     recordingInfo = readInfo(data_source)
 
     # get Time from the info file
-    recStartTime = datetime.fromtimestamp(float(recordingInfo["Start Time (System)"]))
-    recStartTimeAlt = float(recordingInfo["Start Time (Synced)"])
-    bootTime = datetime.fromtimestamp(float(recordingInfo["Start Time (System)"])-recStartTimeAlt)
+    recStartTime = datetime.fromtimestamp(float(recordingInfo["start_time_system_s"]))
+    recStartTimeAlt = float(recordingInfo["start_time_synced_s"])
+    bootTime = datetime.fromtimestamp(float(recordingInfo["start_time_system_s"])-recStartTimeAlt)
     timeFromBoot = recStartTime-bootTime
-    recDuration = recordingInfo["Duration Time"].split(":")
-    recDurationSeconds = timedelta(seconds=(int(recDuration[0])*60 + int(recDuration[1])) * 60 + int(recDuration[2]))
+    recDuration = recordingInfo["duration_s"]
+    recDurationSeconds = timedelta(seconds=float(recDuration))
     recEndTime = recStartTime + recDurationSeconds
 
     print("Reconding started at :", recStartTime)
@@ -264,7 +264,7 @@ def lumAnalysis(self):
         saveCsv(export_source_alt, f"{recording_name}_pupilOutput.csv", csv_header, csv_rows)
 
         csv_header = ["drelative_wl", "timestamp_relative", "recording_name", "age", "timestamp_unix"]
-        distanceTimeEpoch = [x + float(recordingInfo["Start Time (System)"]) for x in distanceTime]
+        distanceTimeEpoch = [x + float(recordingInfo["start_time_system_s"]) for x in distanceTime]
         csv_rows = [distanceVal, distanceTime, recording_name, age, distanceTimeEpoch]
 
         saveCsv(export_source_alt, f"{recording_name}_pupilOutputDistance.csv", csv_header, csv_rows)
