@@ -75,6 +75,17 @@ def logLux(self):
 				timeout=0.3)
 			break
 
+		if "IOUSBHostDevice" in p[1]:
+			print ("This is an Moteino")
+			ser = serial.Serial(
+				port=p[0],
+				baudrate = 250000,
+				parity=serial.PARITY_NONE,
+				stopbits=serial.STOPBITS_ONE,
+				bytesize=serial.EIGHTBITS,
+				timeout=0.3)
+			break
+
 	while True:
 		message=ser.readline()
 
