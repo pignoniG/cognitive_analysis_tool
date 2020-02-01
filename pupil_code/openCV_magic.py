@@ -57,7 +57,7 @@ def frameGrabber(g_id,src,frame_str,frame_n,gaze_pos,output_list,last_sel,showVi
 
     vid.release()
 
-    #print("Final analisis time of the frame grabber id=",g_id," is ",t.time() - start, "s")
+    print("Final analisis time of the frame grabber id=",g_id," is ",t.time() - start, "s")
 
 
 #@multitasking.task
@@ -114,7 +114,8 @@ def magicAnalysis(self):
     showVideo = self.settingsDict['showVideoAnalysis']
     export_source = join(data_source, "exports", "000")
 
-    cv_threads = int(multitasking.config["CPU_CORES"]) * 12;
+    cv_threads = int(multitasking.config["CPU_CORES"]) * 2;
+    
 
     #if showVideo:
         #cv_threads = int(multitasking.config["CPU_CORES"]);
@@ -134,6 +135,7 @@ def magicAnalysis(self):
     #count the frames in the video
     cap = cv2.VideoCapture(video_source)
     frames_n= int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print("frames_n=",frames_n)
     cap.release()
 
     ##### read record info.csv #####
@@ -159,7 +161,8 @@ def magicAnalysis(self):
     gaze_list_min_frame= int(gaze_positions[0][1])
 
     gaze_pix_size = frames_n
-    if gaze_list_max_frame > frames_n :
+
+    if gaze_list_max_frame > gaze_pix_size :
         gaze_pix_size = gaze_list_max_frame
 
    
@@ -215,7 +218,7 @@ def magicAnalysis(self):
     ##### end read pupil_positions.csv #####
 
     #create  a list long as the video file to store the resoult of the analisis
-    analised_list=[None]*int(frames_n)
+    analised_list=[None]*int(gaze_pix_size)
 
     #List of the main open CV threads 
     frame_grabbers = [] 
@@ -240,6 +243,9 @@ def magicAnalysis(self):
 
         first_frame = gaze_list_min_frame + (frame_range * cv_thread)
 
+
+
+
         frame_grabbers.append(frameGrabber(grabber_id,
                                            video_source,
                                            first_frame,
@@ -262,10 +268,13 @@ def magicAnalysis(self):
 
 
     while grabbing:
+        tempGrabbing=False
+
         for grabber in frame_grabbers:
-            grabbing=False
             if (grabber.is_alive()):
-                grabbing=True
+                tempGrabbing=True
+        grabbing=tempGrabbing
+
 
         #Count how many frames have been analised by cekking how many elements in the list have been populated
         anzl_frames = 0
