@@ -321,10 +321,9 @@ def magicAnalysis(self):
 
             except Exception as ee:
                 print("No frames to show so far")
-                   
-            
-           
-        t.sleep(1)
+        
+        else:
+            t.sleep(1)
 
     t.sleep(2)
     print("Final analisis time is",int(t.time() - start), "s")
