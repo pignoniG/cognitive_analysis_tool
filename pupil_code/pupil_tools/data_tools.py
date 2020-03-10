@@ -56,6 +56,7 @@ def readCamera(data_source):
     avgLum = []   # average "relative lumiance" of the sine
     timeStampsLum = []
     spotLum = []   # "relative lumiance" on the spot
+    fieldDiameter = []   # "relative lumiance" on the spot
     frame = 0
 
     with open(join(data_source, 'outputFromVideo.csv')) as csvDataFile:
@@ -66,8 +67,9 @@ def readCamera(data_source):
                 timeStampsLum.append(float(row[1]))
                 avgLum.append(float(row[2]))
                 spotLum.append(float(row[3]))
+                fieldDiameter.append(float(row[4]))
                 frame = frame+1
-    return indexLum, timeStampsLum, avgLum, spotLum
+    return indexLum, timeStampsLum, avgLum, spotLum ,fieldDiameter
 
 def readLux(lux_data_source, data_source, recStartTime, recEndTime):
     
