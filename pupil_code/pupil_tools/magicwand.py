@@ -12,7 +12,7 @@ from collections import namedtuple
 # dependecies
 import cv2
 import numpy as np
-
+import math
 ### Constants
 Point = namedtuple('Point', 'x, y')
 
@@ -25,6 +25,7 @@ class magicSelection:
         # general params
         self.name = "window"
         self._seed_point = Point(xI, yI)
+    
         self._image = image
         self._h, self._w = image.shape[:2]
         if len(image.shape) == 3:
@@ -39,16 +40,44 @@ class magicSelection:
         self._tolerance = (tolerance,)*3
 
         self._flood_mask = np.zeros((self._h+2, self._w+2), dtype=np.uint8)
+
+        
+
+
+     
         self._magicwand()
 
     def _magicwand(self):
         self._flood_mask[:] = 0
         flags = self.connectivity | 255 << 8   # bit shift
         flags |= cv2.FLOODFILL_FIXED_RANGE | cv2.FLOODFILL_MASK_ONLY
+
+
         flood_image = self._image.copy()
+
+            
         cv2.floodFill(flood_image, self._flood_mask, self._seed_point, 0,
                       self._tolerance, self._tolerance, flags)
+  
+
         self._mask = self._flood_mask[1:-1, 1:-1].copy()
+
+        stddev, mean = 0, 0
+
+        mean = cv2.meanStdDev(self._image, mean, stddev, self._mask)[0]
+        stddev = cv2.meanStdDev(self._image, mean, stddev, self._mask)[1]
+        
+        self._mask_exteded = cv2.inRange(self._image, mean-stddev*1.2, mean+stddev*1.2)
+
+        self._mask = self._mask | self._mask_exteded
+
+
+        self._mask_size = cv2.countNonZero(self._mask)
+     
+        self._stim_diameter = math.sqrt(self._mask_size/math.pi)*2
+        
+
+
         # self._mask=cv2.GaussianBlur( self._mask,(11,11),cv2.BORDER_DEFAULT)
 
     def show(self):
@@ -58,6 +87,7 @@ class magicSelection:
         cv2.circle(self._applied_mask,
                    (self._seed_point[0], self._seed_point[1]),
                    10, (127, 127, 127), -1)
+
         cv2.imshow(self.name, self._applied_mask)
     
     
@@ -67,13 +97,28 @@ class magicSelection:
 
         cv2.circle(self._applied_mask,
                    (self._seed_point[0], self._seed_point[1]),
-                   30, (127,255, 127), -1)
+                   40, self.mean, -1)
 
+        cv2.circle(self._applied_mask,
+                   (self._seed_point[0], self._seed_point[1]),
+                   40, (255,255,255), 2)
+
+        cv2.circle(self._applied_mask,
+                   (self._seed_point[0], self._seed_point[1]),
+                  5, (0,0,255), -1)
+    
+
+        cv2.circle(self._applied_mask,
+                   (self._seed_point[0], self._seed_point[1]),
+                   int(self._stim_diameter/2), (127, 127, 127), 5)
+
+        
         return(self._applied_mask)
 
     def return_stats(self):
         # return(self.mean,self.stddev,self.min,self.max)
-        return(self.mean)
+
+        return(self.mean,self._stim_diameter)
 
     @property
     def mask(self):
@@ -89,6 +134,7 @@ class magicSelection:
     def selection(self):
         self._drawselection()
         return self._selection
+
 
     @property
     def contours(self):
