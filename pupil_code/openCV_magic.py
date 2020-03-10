@@ -62,21 +62,21 @@ def frameGrabber(g_id,src,frame_str,frame_n,gaze_pos,output_list,last_sel,showVi
 
 #@multitasking.task
 def subFrameAsinc(frame_n,frame,x,y,t,lum,avgStd,output_list,last_sel,showVideo,g_id):
-
+   
     sel = magicSelection(frame,x,y, avgStd*1.5,connectivity=8)
     
     if showVideo:
         #save the selection output for visualisation
         last_sel [g_id]= sel.export();
 
-    R_pixval , G_pixval , B_pixval = sel.return_stats()    # read the mean rgb of the selection
+    (R_pixval , G_pixval , B_pixval),stim_diameter = sel.return_stats()    # read the mean rgb of the selection
     
     pixval = relativeLuminanceClac(R_pixval, G_pixval, B_pixval)   # mean relative luminance of the selection
  
     if output_list[frame_n] is None :
         output_list[frame_n]=[]
 
-    output_list[frame_n].append([frame_n, t, lum, pixval])
+    output_list[frame_n].append([frame_n, t, lum, pixval,stim_diameter])
 
 
 #@multitasking.task
@@ -215,6 +215,8 @@ def magicAnalysis(self):
 
         index += 1
 
+
+
     ##### end read pupil_positions.csv #####
 
     #create  a list long as the video file to store the resoult of the analisis
@@ -330,7 +332,7 @@ def magicAnalysis(self):
     print("saving to CSV...")
     
     first_row = True
-    row = ["frame_index", "time", "AVGlum", "SpotLum"]
+    row = ["frame_index", "time", "AVGlum", "SpotLum","StimDiameter_px"]
 
     with open(join(data_source, 'outputFromVideo.csv'), 'w') as csvFile:
         writer = csv.writer(csvFile)
