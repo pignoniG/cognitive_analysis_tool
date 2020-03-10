@@ -6,13 +6,13 @@ import numpy as np
 import multitasking
 import time as t
 import math
-
+import scipy.signal as signal
 from pupil_code.pupil_tools.magicwand import magicSelection
 from pupil_code.pupil_tools.colour_tools import relativeLuminanceClac
 from pupil_code.pupil_tools.data_tools import readInfo, readGaze
 
 multitasking.set_max_threads(multitasking.config["CPU_CORES"] * 20)
-    
+
 #####
 # uses a "magic wand" approach to select th area of similar
 # color/luminance around the user gaze and calculates the average
@@ -135,27 +135,25 @@ def magicAnalysis(self):
     #count the frames in the video
     cap = cv2.VideoCapture(video_source)
     frames_n= int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    video_w  = int( cap.get(cv2.CAP_PROP_FRAME_WIDTH))   # float
+    video_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))  # float
+    print("The video resolution is={}x{}".format(video_w,video_h))
+
     print("frames_n=",frames_n)
     cap.release()
 
-    ##### read record info.csv #####
-    info = readInfo(data_source)
-
-    try:
-        # this data is not always available
-        video = info["World Camera Resolution"].split("x")
-        video_w, video_h = int(video[0]), int(video[1])
-        print("The video resolution is={}x{}".format(video_w,video_h))
-
-    except Exception as ee:
-        print("Unable to automatically read the video resolution.")
-        print(ee)
 
    ##### read pupil_positions.csv #####
     # Unpacking the gaze data
     gaze_positions, gaze_positions_x, gaze_positions_y = readGaze(export_source)
 
     prev_frame_index = 0
+
+    gaze_positions_x = signal.savgol_filter(gaze_positions_x,61, 1)
+    gaze_positions_y = signal.savgol_filter(gaze_positions_y, 61, 1)
+
+
 
     gaze_list_max_frame= int(gaze_positions[-1][1])
     gaze_list_min_frame= int(gaze_positions[0][1])
