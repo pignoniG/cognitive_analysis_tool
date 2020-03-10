@@ -14,6 +14,7 @@ from collections import OrderedDict
 # dependencies
 import scipy.signal as signal
 import numpy as np
+import math
 from datetime import datetime, timedelta
 
 # custom
@@ -99,7 +100,7 @@ def lumAnalysis(self):
     # remove nan form the pupil arrary
     recPupilValues = interpnan(recPupilValues)
 
-    recPupilValues_filter = signal.savgol_filter(recPupilValues, 1*sampleFreq+1, 2)
+    recPupilValues_filter = signal.savgol_filter(recPupilValues, 3*sampleFreq+1, 2)
 
     recPupilValues = signal.savgol_filter(recPupilValues, int(sampleFreq/10)+1, 6)
     recConfidence = signal.savgol_filter(recConfidence, int(sampleFreq/10)+1, 6)
@@ -143,12 +144,7 @@ def lumAnalysis(self):
               "Sensor Calculated Pupil")
 
     if not useCamera:
-        graphPlot(self.plot,
-                  recSimpleTimeStamps,
-                  recPupilValues_scaled,
-                  "gray",
-                  0.5,
-                  "Raw EyeTracker Pupil")
+        
         graphPlot(self.plot,
                   recSimpleTimeStamps,
                   recPupilValues_filter_scaled,
@@ -157,23 +153,38 @@ def lumAnalysis(self):
                   "Smoothed EyeTracker Pupil")
 
     if useCamera:
-        indexLum, timeStampsLum, avgLum, spotLum = readCamera(data_source)
+        indexLum, timeStampsLum, avgLum, spotLum, fieldDiameters = readCamera(data_source)
+        
+        fieldDiameters = upsampleLux(timeStampsLum, fieldDiameters, recTimeStamps, recordingInfo, False)
 
         avgLum = upsampleLux(timeStampsLum, avgLum, recTimeStamps, recordingInfo, False)
         spotLum = upsampleLux(timeStampsLum, spotLum, recTimeStamps, recordingInfo, False)
+         
 
         scaledSpotLum = []
         for i in range(0, len(recTimeStamps)):
 
             sensorLux = luxValues[i]
             cameraALum = avgLum[i]
+            cameraALumExpanded =  cameraALum*256
             cameraSLum = spotLum[i]
+            cameraSLumExpanded =  cameraSLum*256
 
-            cameraLum_min = sensorLux / (cameraALum * 10+1)
-            cameraLum_max = cameraLum_min * 11
+            #fieldDiameter = fieldDiameters[i] #unused
 
+            #fieldAngle = 2*math.atan(fieldDiameter/2*180) #unused
+
+            fieldAngle = 160
+            
+            #avoid division by 0
+            if cameraALumExpanded == 0:
+              cameraALumExpanded = 0.01
+
+            cameraLum_min = 0
+            cameraLum_max = (sensorLux * 255 )/ cameraALumExpanded
             # linear interpolation method
             scaledSpot = ((cameraLum_max * cameraSLum)+ (cameraLum_min * (1-cameraSLum)) )/2
+
             scaledSpotLum.append(scaledSpot)
 
         scaledSpotLum = signal.savgol_filter(interpnan(interpzero(scaledSpotLum)), sampleFreq*3+1, 1)
