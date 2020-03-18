@@ -181,7 +181,7 @@ def lumAnalysis(self):
               cameraALumExpanded = 0.01
 
             cameraLum_min = 0
-            cameraLum_max = (sensorLux * 255 )/ cameraALumExpanded
+            cameraLum_max = sensorLux/cameraALum
             # linear interpolation method
             scaledSpot = ((cameraLum_max * cameraSLum)+ (cameraLum_min * (1-cameraSLum)) )/2
 
