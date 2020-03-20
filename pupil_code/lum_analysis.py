@@ -166,19 +166,13 @@ def lumAnalysis(self):
 
             sensorLux = luxValues[i]
             cameraALum = avgLum[i]
-            cameraALumExpanded =  cameraALum*256
             cameraSLum = spotLum[i]
-            cameraSLumExpanded =  cameraSLum*256
 
             #fieldDiameter = fieldDiameters[i] #unused
-
             #fieldAngle = 2*math.atan(fieldDiameter/2*180) #unused
 
             fieldAngle = 160
             
-            #avoid division by 0
-            if cameraALumExpanded == 0:
-              cameraALumExpanded = 0.01
 
             cameraLum_min = 0
             cameraLum_max = sensorLux/cameraALum
