@@ -59,6 +59,17 @@ class magicSelection:
                    (self._seed_point[0], self._seed_point[1]),
                    10, (127, 127, 127), -1)
         cv2.imshow(self.name, self._applied_mask)
+    
+    
+    def export(self):
+        self._applied_mask = cv2.bitwise_and(
+            self._image, self._image, mask=self._mask)
+
+        cv2.circle(self._applied_mask,
+                   (self._seed_point[0], self._seed_point[1]),
+                   30, (127,255, 127), -1)
+
+        return(self._applied_mask)
 
     def return_stats(self):
         # return(self.mean,self.stddev,self.min,self.max)

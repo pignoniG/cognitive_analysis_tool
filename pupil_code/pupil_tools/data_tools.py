@@ -11,6 +11,7 @@ import os
 from bisect import bisect_left
 from os.path import join, normpath
 import csv
+import json
 
 # dependencies
 import numpy as np
@@ -21,13 +22,21 @@ from pupil_code.pupil_tools.signal_tools import interpnan
 
 
 ### Functions & Procedures
-def readInfo(data_source):
+def readInfoOld(data_source):
     # read the recording info.csv file
     info = {}
     with open(join(data_source, "info.csv")) as csvDataFile:
         for index, row in enumerate(csv.reader(csvDataFile)):
             if index > 0:
                 info[row[0]] = row[1]
+    return info
+
+def readInfo(data_source):
+    # read the recording info.player.json file
+    info = {}
+    with open(join(data_source, "info.player.json")) as jsonDataFile:
+        info= json.load(jsonDataFile)
+    
     return info
 
 def readPupil(export_source):
@@ -197,7 +206,7 @@ def upsampleLux(luxTimeStamps, luxValues, recTimeStamps, recordingInfo, shift):
     for sample in range(0, len(recTimeStamps)):
         timeStamp = float(recTimeStamps[sample])
         if shift:
-            unixTimeStamp = float(recordingInfo["Start Time (System)"]) + (timeStamp - float(recordingInfo["Start Time (Synced)"]))
+            unixTimeStamp = float(recordingInfo["start_time_system_s"]) + (timeStamp - float(recordingInfo["start_time_synced_s"]))
         else:
             unixTimeStamp = timeStamp
 

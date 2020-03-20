@@ -79,11 +79,12 @@ You can flash your Microcontroller with the Arduino IDE and the respective Ardui
 The Adalogger FeatherWing code requires the Adafruit_Sensor and Adafruit_TSL2591 libraries for the sensor and uses the RTC_PCF8523 RTC.
 
 See the Adafruit documentation to get started:
-[Feather M4](https://learn.adafruit.com/adafruit-feather-m4-express-atsamd51/setup), how to use it with the Arduino IDE.
-[Adaloggher RTC](https://learn.adafruit.com/adafruit-adalogger-featherwing/adafruit2-rtc-with-arduino)
+- [Feather M4](https://learn.adafruit.com/adafruit-feather-m4-express-atsamd51/setup), how to use it with the Arduino IDE.
+
+- [Adaloggher RTC](https://learn.adafruit.com/adafruit-adalogger-featherwing/adafruit2-rtc-with-arduino)
 Remember to set the time with one of the examples.
 
-[tsl2591](https://learn.adafruit.com/adafruit-tsl2591/wiring-and-test), wiring of the sensor and libraries.
+- [tsl2591](https://learn.adafruit.com/adafruit-tsl2591/wiring-and-test), wiring of the sensor and libraries.
 
 The Nano Data Logging Shield code requires the Adafruit_Sensor and Adafruit_TSL2591 libraries for the sensor and uses the DS1307RTC RTC.
 
@@ -127,22 +128,23 @@ brew install opencv
 Measurements, calculations and plots are made with the following tools:
 
 ```
-python3.x -m pip install matplotlib
-python3.x -m pip install Pillow
-python3.x -m pip install numpy
-python3.x -m pip install adjustText
-python3.x -m pip install scipy
-python3.x -m pip install DateTime
-python3.x -m pip install pyserial
+python3 -m pip install matplotlib
+python3 -m pip install Pillow
+python3 -m pip install numpy
+python3 -m pip install adjustText
+python3 -m pip install scipy
+python3 -m pip install DateTime
+python3 -m pip install pyserial
+python3 -m pip install multitasking
 ```
 
 This project uses pyObjC and vanilla for the user interface on macOS.
 You can install them with the following commands:
 
 ```
-python3.x -m pip install pyobjc
-python3.x -m pip git+https://github.com/typesupply/vanilla
-python3.x -m pip git+https://github.com/typesupply/defconAppKit
+python3 -m pip install pyobjc
+python3 -m pip install git+https://github.com/typesupply/vanilla
+python3 -m pip install git+https://github.com/typesupply/defconAppKit
 ```
 
 #### Running the application
