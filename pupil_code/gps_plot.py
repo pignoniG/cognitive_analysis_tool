@@ -17,8 +17,6 @@ import xml.dom.minidom as mnd
 import io
 from os.path import join
 
-import pynmea2
-import csv
 
 # dependencies
 import matplotlib.cm as cm
@@ -60,8 +58,6 @@ def plotGpsCW(self):
 
     data_source = self.settingsDict['recordingFolder']
 
-    gpx = False
-
     recording_name = data_source.split("/")[-1]
 
     # export inside the recording
@@ -72,13 +68,12 @@ def plotGpsCW(self):
     data = open(join(data_source, 'gps_track.gpx'))
 
     # READ GPX FILE
-    if gpx:
 
-        xmldoc = mnd.parse(data)
-        track = xmldoc.getElementsByTagName('trkpt')
-        elevation = xmldoc.getElementsByTagName('ele')
-        datetime = xmldoc.getElementsByTagName('time')
-        n_track = len(track)
+    xmldoc = mnd.parse(data)
+    track = xmldoc.getElementsByTagName('trkpt')
+    elevation = xmldoc.getElementsByTagName('ele')
+    datetime = xmldoc.getElementsByTagName('time')
+    n_track = len(track)
 
     first_row = True
     # Read distance
@@ -106,90 +101,35 @@ def plotGpsCW(self):
 
         distanceVal.append(val)
         distanceTime.append(time_r)
-    if gpx:
-   
+
     # PARSING GPX ELEMENT
-        lon_list = []
-        lat_list = []
-        h_list = []
-        time_list = []
-        epoch_list = []
-    
-        for s in range(n_track):
-            lon, lat = track[s].attributes['lon'].value, track[s].attributes['lat'].value
-            elev = elevation[s].firstChild.nodeValue
-            lon_list.append(float(lon))
-            lat_list.append(float(lat))
-            h_list.append(float(elev))
-            # PARSING TIME ELEMENT
-            dt = datetime[s].firstChild.nodeValue
-    
-            time_split = dt.split('T')
-            hms_split = time_split[1].split(':')
-            time_hour = int(hms_split[0])
-            time_minute = int(hms_split[1])
-            time_second = int(hms_split[2].split('Z')[0])
-            # 'Jul 9, 2009 @ 20:02:58 UTC'
-            time_secondEph = calendar.timegm(tm.strptime(dt, '%Y-%m-%dT%H:%M:%SZ'))
-    
-            total_second = time_hour*3600+time_minute*60+time_second
-            time_list.append(total_second)
-            epoch_list.append(int(time_secondEph))
+    lon_list = []
+    lat_list = []
+    h_list = []
+    time_list = []
+    epoch_list = []
 
-    else:
-        print("Nemea")
-        n_track = 0
+    for s in range(n_track):
+        lon, lat = track[s].attributes['lon'].value, track[s].attributes['lat'].value
+        elev = elevation[s].firstChild.nodeValue
+        lon_list.append(float(lon))
+        lat_list.append(float(lat))
+        h_list.append(float(elev))
+        # PARSING TIME ELEMENT
+        dt = datetime[s].firstChild.nodeValue
+        print (dt)
 
+        time_split = dt.split('T')
+        hms_split = time_split[1].split(':')
+        time_hour = int(hms_split[0])
+        time_minute = int(hms_split[1])
+        time_second = float(hms_split[2].split('Z')[0])
+        # 'Jul 9, 2009 @ 20:02:58 UTC'
+        time_secondEph = calendar.timegm(tm.strptime(dt, '%Y-%m-%dT%H:%M:%S.%fZ'))
 
-        lon_list = []
-        lat_list = []
-        h_list = []
-        time_list = []
-        epoch_list = []
-
-        last_GPZDA = None 
-        with open('/Users/giovannipignoni/p_environments/cognitive_analysis_tool/pupil_code/nemea.txt', newline='') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',', quotechar='|')
-            for row in reader:
-        
-                if row[0]=="$GPZDA":
-                    last_GPZDA = pynmea2.parse(','.join(row))
-        
-        
-                elif row[0]=="$GPGGA" and last_GPZDA :
-                    msg = pynmea2.parse(','.join(row))
-                    lat_list.append(float(msg.latitude))
-                    lon_list.append(float(msg.longitude))
-
-                    print(float(msg.latitude),float(msg.longitude))
-        
-                    h_list.append(float(msg.altitude))
-                    
-                    complete_date=[ last_GPZDA.year
-                                            , last_GPZDA.month
-                                            , last_GPZDA.day
-                                            , msg.timestamp.hour
-                                            , msg.timestamp.minute
-                                            , msg.timestamp.second + msg.timestamp.microsecond]
-        
-                    time_secondEph = calendar.timegm(complete_date)
-                    total_second = msg.timestamp.hour * 3600 + msg.timestamp.minute * 60 + msg.timestamp.second + msg.timestamp.microsecond
-        
-                    time_list.append(total_second)
-                    epoch_list.append(int(time_secondEph))
-
-        
-        
-                    ++ n_track
-            
-        
-        
-
-
-
-
-
-
+        total_second = time_hour*3600+time_minute*60+time_second
+        time_list.append(total_second)
+        epoch_list.append(int(time_secondEph))
 
     
 # POPULATE DISTANCE AND SPEED LIST
@@ -225,7 +165,6 @@ def plotGpsCW(self):
     latMax = max(lat_list)
     latMin = min(lat_list)
     latDelta = latMax-latMin
-
 
     a, lat_max, lon_min, lat_min, lon_max = getImageCluster(latMin, lonMin, latDelta, lonDelta)
     # fig = track.figure()
