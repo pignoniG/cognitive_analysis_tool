@@ -85,8 +85,11 @@ class MyInterface(BaseWindowController):
                              'partAge': 25,
                              'useCamera': False,
                              'timelag': 0,
+                             'timevsWl': 1,
+                             'distancevsWl': 1,
                              'showPlot': True,
                              'exportData': True,
+                             'exportDataFromgps': True,
                              'pupilFiltering': 1,
                              'exportFolder': False,
                              'luxFolder': False}
@@ -97,7 +100,7 @@ class MyInterface(BaseWindowController):
                 self.settingsDict = pickle.load(s)
 
         self.plot = plt
-        self.w = Window((600, 850), 'Cognitive Worklaod Pupil Analisis')
+        self.w = Window((600, 900), 'Cognitive Worklaod Pupil Analisis')
         self.buildWindow()
         self.updateInterface()
 
@@ -259,6 +262,29 @@ class MyInterface(BaseWindowController):
         self.w.gpsCaption = TextBox((220+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']),
                                   'Place "gps_track.gpx" inside the recording folder')
 
+        ## timevsWl
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.timevsWlEditText = EditText((MARGIN, jumpingY, 50, 22), "1",
+                                          callback=self.timevsWlEditTextCallback)
+
+        self.w.timevsWlTextBox = TextBox((50+MARGIN*2, jumpingY, -10, 17),
+                                        "Export csv of workload over time every n° seconds")
+
+          ## distancevsWl
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.distancevsWlEditText = EditText((MARGIN, jumpingY, 50, 22), "1",
+                                          callback=self.distancevsWlEditTextCallback)
+
+        self.w.distancevsWlTextBox = TextBox((50+MARGIN*2, jumpingY, -10, 17),
+                                        "Export csv of workload over distance every n° meters")
+
+         ## export csv 2
+        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
+        self.w.exportDatasheetFromgps = CheckBox((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
+                                          'Export to CSV',
+                                          callback=self.exportDatasheetFromgpsCallback)
+
+
 
     def updateInterface(self):
         if self.settingsDict['recordingFolder']:
@@ -293,9 +319,15 @@ class MyInterface(BaseWindowController):
 
         self.w.exportDatasheet.set(self.settingsDict['exportData'])
 
+        self.w.exportDatasheetFromgps.set(self.settingsDict['exportDataFromgps'])
+        
         self.w.agePopUp.set(self.settingsDict['partAge'])
 
         self.w.timeLagEditText.set(self.settingsDict['timelag'])
+
+        self.w.distancevsWlEditText.set(self.settingsDict['distancevsWl'])
+
+        self.w.timevsWlEditText.set(self.settingsDict['timevsWl'])
 
         self.w.pupilFilteringEditText.set(self.settingsDict['pupilFiltering'])
 
@@ -370,9 +402,24 @@ class MyInterface(BaseWindowController):
         sys.stdout.flush()
 
 
+    def distancevsWlEditTextCallback(self, sender):
+            self.settingsDict['distancevsWl'] = float(sender.get())
+            sys.stdout.flush()
+    
+    def timevsWlEditTextCallback(self, sender):
+        self.settingsDict['timevsWl'] = float(sender.get())
+        sys.stdout.flush()
+
+
     def exportDatasheetCallback(self, sender):
         self.settingsDict['exportData'] = sender.get()
         sys.stdout.flush()
+
+    def exportDatasheetFromgpsCallback(self, sender):
+        self.settingsDict['exportDataFromgps'] = sender.get()
+        sys.stdout.flush()
+
+        
 
     def pupilSizeButtonCallback(self, sender):
         try:

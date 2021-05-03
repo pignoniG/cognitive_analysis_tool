@@ -67,6 +67,10 @@ def plotGpsCW(self):
     export_source_alt = self.settingsDict['exportFolder']
     data = open(join(data_source, 'gps_track.gpx'))
 
+    exportfromgps = self.settingsDict['exportDataFromgps']
+    timevsWl = self.settingsDict['timevsWl']
+    distancevsWl = self.settingsDict['distancevsWl']
+
     # READ GPX FILE
 
     xmldoc = mnd.parse(data)
@@ -211,11 +215,14 @@ def plotGpsCW(self):
         track.plot(lon_closestValue, lat_closestValue, marker='o',
                    markersize=8, mfc=(1, 1, 1, 1), mec=(1, 1, 1, 0.0))
     
-    
+   
     for i in range(len(distanceTime)-1):
         lon_closestValue = findClosestsAndIterpolate(distanceTime[i], epoch_list, lon_list)
         lat_closestValue = findClosestsAndIterpolate(distanceTime[i], epoch_list, lat_list)
+        
         curr_distanceVal = distanceVal[i]
+      
+
         c = (curr_distanceVal + distanceVal_std*1.5) / ((distanceVal_std*1.5)*2)
         # c = (distanceVal[i] - distanceVal_min) /(distanceVal_var)
 
@@ -235,7 +242,137 @@ def plotGpsCW(self):
         
     texts = []
 
+#export wl vs time start
+    if exportfromgps:
+ 
+        prevDist = 0
+        prevTime = 0
+
+        time_s_list=[]
+        time_m_list=[]
+        recording_names=[]
+        lon_closestValue_list=[]
+        lat_closestValue_list=[]
+        distance_closestValue_list=[]
+        speed_closestValue_list=[]
+        wl_closestValue_list=[]
+
+    
+        for i in range(int((distanceTime[-1]-distanceTime[0]))):
+            time = int(distanceTime[0])+i
+            time_s = i
+            time_m = time_s /60
+
+            if time_s - prevTime >= timevsWl:
+
+                lon_closestValue = findIntervalAndAverage(time - timevsWl, time, epoch_list, lon_list)
+                lat_closestValue = findIntervalAndAverage(time - timevsWl, time, epoch_list, lat_list)
+                distance_closestValue = findIntervalAndAverage(time - timevsWl, time, epoch_list, d_list)
+                speed_closestValue = findIntervalAndAverage(time - timevsWl, time, epoch_list, speed_list)
+                wl_closestValue = findIntervalAndAverage(time - timevsWl, time, distanceTime, distanceVal)
+
+                time_s_list.append(time_s)
+                recording_names.append(recording_name)
+                time_m_list.append(round(time_m, 2))
+                lon_closestValue_list.append(lon_closestValue)
+                lat_closestValue_list.append(lat_closestValue)
+                distance_closestValue_list.append(round(distance_closestValue, 2))
+                speed_closestValue_list.append(round(speed_closestValue, 2))
+                wl_closestValue_list.append(round( wl_closestValue, 5))
+        
+                prevTime = time_s
+
+
+    
+        csv_header = ["recording_name","time_s","time_m","lon","lat","distance","speed","Wl"]
+
+        csv_rows = [recording_names,
+                    time_s_list,
+                    time_m_list,
+                    lon_closestValue_list,
+                    lat_closestValue_list,
+                    distance_closestValue_list,
+                    speed_closestValue_list,
+                    wl_closestValue_list]
+
+        saveCsv(export_source_alt, recording_name+"_pupilOutputVsTime.csv", csv_header, csv_rows)
+    
+
+#export wl vs time end
+
+
+#export wl vs distance start
+    if exportfromgps:
+ 
+        prevDist = 0
+        prevTime = 0
+
+        time_s_list=[]
+        time_m_list=[]
+        recording_names=[]
+        lon_closestValue_list=[]
+        lat_closestValue_list=[]
+        distance_closestValue_list=[]
+        speed_closestValue_list=[]
+        wl_closestValue_list=[]
+
+    
+        for i in range(int((distanceTime[-1]-distanceTime[0])*100)):
+            time = int(distanceTime[0])+i/100
+            time_s = i/100
+            time_m = time_s /60
+    
+
+            distance_closestValue = findClosestsAndIterpolate(time, epoch_list, d_list)
+            
+           
+
+          
+    
+    
+            if distance_closestValue - prevDist >= distancevsWl:
+                prevDist = distance_closestValue
+                prevTime = time
+
+                lon_closestValue = findIntervalAndAverage(prevTime , time, epoch_list, lon_list)
+                lat_closestValue = findIntervalAndAverage(prevTime , time, epoch_list, lat_list)
+                speed_closestValue = findIntervalAndAverage(prevTime , time, epoch_list, speed_list)
+                wl_closestValue = findIntervalAndAverage(prevTime , time, distanceTime, distanceVal)
+
+                recording_names.append(recording_name)
+
+                time_s_list.append(time_s)
+                time_m_list.append(round(time_m, 2))
+                lon_closestValue_list.append(lon_closestValue)
+                lat_closestValue_list.append(lat_closestValue)
+                distance_closestValue_list.append(round(distance_closestValue, 2))
+                speed_closestValue_list.append(round(speed_closestValue, 2))
+                wl_closestValue_list.append(round( wl_closestValue, 5))
+        
+                
+
+
+    
+        csv_header = ["recording_name","time_s","time_m","lon","lat","distance","speed","Wl"]
+
+        csv_rows = [recording_names,
+                    time_s_list,
+                    time_m_list,
+                    lon_closestValue_list,
+                    lat_closestValue_list,
+                    distance_closestValue_list,
+                    speed_closestValue_list,
+                    wl_closestValue_list]
+
+        saveCsv(export_source_alt, recording_name+"_pupilOutputVsDistance.csv", csv_header, csv_rows)
+    
+
+#export wl vs distance end
+
+
+    texts = []
     prevDist = 0
+
     for i in range(int((distanceTime[-1]-distanceTime[0])/60)):
         time = int(distanceTime[0])+i*60
         time_s = i
@@ -244,7 +381,8 @@ def plotGpsCW(self):
         lat_closestValue = findClosestsAndIterpolate(time, epoch_list, lat_list)
         distance_closestValue = findClosestsAndIterpolate(time, epoch_list, d_list)
 
-        if distance_closestValue - prevDist > 200:
+
+        if distance_closestValue - prevDist >= 200:
             prevDist = distance_closestValue
             track.plot(lon_closestValue,
                        lat_closestValue,
