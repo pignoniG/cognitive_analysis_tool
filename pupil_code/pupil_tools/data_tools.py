@@ -323,3 +323,33 @@ def findClosestsAndIterpolate(currVal, valList, toInterpList):
     interp = ((currVal - beforeTime)/timeSpan) * afterInterp + ((afterTime - currVal)/timeSpan) * beforeInterp
 
     return interp
+
+
+def findIntervalAndAverage(minVal,maxVal, valList, toInterpList):
+
+    pos_a = bisect_left(valList, minVal)
+    if pos_a == 0:
+        return toInterpList[0]
+
+    if pos_a == len(valList):
+        return toInterpList[-1]
+
+    pos_b = bisect_left(valList, maxVal)
+    if pos_b == 0:
+        return toInterpList[0]
+
+    if pos_b == len(valList):
+        return toInterpList[-1]
+
+    total = 0
+    n = 0
+
+    for eachAdress in range(pos_a , pos_b+1,1):
+        n = n+1
+        total = total + toInterpList[eachAdress]
+
+
+    average = total/n
+
+
+    return average
