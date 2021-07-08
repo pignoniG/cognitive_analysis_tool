@@ -325,13 +325,9 @@ def plotGpsCW(self):
 
             distance_closestValue = findClosestsAndIterpolate(time, epoch_list, d_list)
             
-           
-
-          
-    
     
             if distance_closestValue - prevDist >= distancevsWl:
-                prevDist = distance_closestValue
+                prevDist = round(distance_closestValue/distancevsWl, 0)*distancevsWl
                 prevTime = time
 
                 lon_closestValue = findIntervalAndAverage(prevTime , time, epoch_list, lon_list)
@@ -345,7 +341,7 @@ def plotGpsCW(self):
                 time_m_list.append(round(time_m, 2))
                 lon_closestValue_list.append(lon_closestValue)
                 lat_closestValue_list.append(lat_closestValue)
-                distance_closestValue_list.append(round(distance_closestValue, 2))
+                distance_closestValue_list.append(round(distance_closestValue/distancevsWl, 0)*distancevsWl)
                 speed_closestValue_list.append(round(speed_closestValue, 2))
                 wl_closestValue_list.append(round( wl_closestValue, 5))
         
