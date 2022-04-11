@@ -129,6 +129,7 @@ Measurements, calculations and plots are made with the following tools:
 
 ```
 python3 -m pip install matplotlib
+python3 -m pip install opencv-python
 python3 -m pip install Pillow
 python3 -m pip install numpy
 python3 -m pip install adjustText
