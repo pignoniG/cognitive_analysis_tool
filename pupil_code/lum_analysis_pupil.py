@@ -14,15 +14,14 @@ from collections import OrderedDict
 # dependencies
 import scipy.signal as signal
 import numpy as np
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
+
 # custom
-from pupil_code.pupil_tools.data_tools import readInfoTobiiG3, readPupilTobiiG3, processPupilTobiiG3
+from pupil_code.pupil_tools.data_tools import readInfo, readPupil, processPupil
 from pupil_code.pupil_tools.data_tools import readLux, graphPlot, upsampleLux
 from pupil_code.pupil_tools.data_tools import readCamera, drawDistance, saveCsv
 from pupil_code.pupil_tools.signal_tools import interpnan, interpzero
 from pupil_code.pupil_tools.colour_tools import calcPupil
-
 
 
 ### Functions & Procedures
@@ -31,13 +30,12 @@ def lumAnalysis(self):
     data_source = self.settingsDict['recordingFolder']
     lux_data_source = self.settingsDict['luxFolder']
     print(lux_data_source)
-
     recording_name = data_source.split("/")[-1]
 
     recording_source = os.path.dirname(data_source)
-    export_source= recording_source
 
-
+    # export inside the recording
+    export_source = join(data_source, "exports", "000")
     # export all in a separate folder
     export_source_alt = self.settingsDict['exportFolder']
 
@@ -51,10 +49,11 @@ def lumAnalysis(self):
     nOfEye = 2
     fieldAngle = 167
 
-    eye ="right"
-
     ##### unified pupil size #####
     useCamera = self.settingsDict['useCamera']
+
+    confidence_treshold = 0.6
+    filterForConf = True
 
     ##### end cofig #####
     timelag = self.settingsDict['timelag']
@@ -70,64 +69,54 @@ def lumAnalysis(self):
     showPlot = self.settingsDict['showPlot']
 
     ##### read recond info #####
+    pupil_coulmn = 6      # 13 in mm 6 in px
     pupil_offset = 0
 
-    pupilData = readPupilTobiiG3(data_source)
-    recordingInfo = readInfoTobiiG3(data_source)
+    pupilData = readPupil(export_source)
+    recordingInfo = readInfo(data_source)
 
-    
     # get Time from the info file
-    recStartTime = datetime.fromisoformat(recordingInfo["created"][:-1])
-    recStartTime = recStartTime.replace(tzinfo=ZoneInfo('UTC'))
-    recStartTime = recStartTime.astimezone(ZoneInfo(recordingInfo["timezone"]))
-
-    recDuration = float(recordingInfo["duration"])
+    recStartTime = datetime.fromtimestamp(float(recordingInfo["start_time_system_s"]))
+    recStartTimeAlt = float(recordingInfo["start_time_synced_s"])
+    bootTime = datetime.fromtimestamp(float(recordingInfo["start_time_system_s"])-recStartTimeAlt)
+    timeFromBoot = recStartTime-bootTime
+    recDuration = recordingInfo["duration_s"]
     recDurationSeconds = timedelta(seconds=float(recDuration))
     recEndTime = recStartTime + recDurationSeconds
 
     print("Reconding started at :", recStartTime)
-
+    print("Computer booted  at :", bootTime)
+    print("It was on for :", timeFromBoot)
     print("The recording lasted :", recDuration)
 
-    pupilValues = processPupilTobiiG3(pupilData)
- 
-    recPupilValues_l, recPupilValues_r, recSimpleTimeStamps = pupilValues
+    pupilValues = processPupil(pupilData,
+                               pupil_coulmn,
+                               recStartTimeAlt,
+                               filterForConf,
+                               confidence_treshold)
+    recPupilValues, recTimeStamps, recFrames, recSimpleTimeStamps, recConfidence = pupilValues
 
-    recEpochStartTime = recStartTime.timestamp()
-    recEpochTimeStamps = [x + recEpochStartTime for x in recSimpleTimeStamps]
+    # remove nan form the pupil arrary
+    recPupilValues = interpnan(recPupilValues)
 
-     # remove nan form the pupil arrary
-    recPupilValues_l = interpnan(recPupilValues_l)
-    recPupilValues_r = interpnan(recPupilValues_r)
+    recPupilValues_filter = signal.savgol_filter(recPupilValues, 1*sampleFreq+1, 2)
 
-    recPupilValues_filter_r = signal.savgol_filter(recPupilValues_r, 1*sampleFreq+1, 2)
-    recPupilValues_filter_l = signal.savgol_filter(recPupilValues_l, 1*sampleFreq+1, 2)
-
-    recPupilValues_r = signal.savgol_filter(recPupilValues_r, int(sampleFreq/10)+1, 6)
-    recPupilValues_l = signal.savgol_filter(recPupilValues_l, int(sampleFreq/10)+1, 6)
+    recPupilValues = signal.savgol_filter(recPupilValues, int(sampleFreq/10)+1, 6)
+    recConfidence = signal.savgol_filter(recConfidence, int(sampleFreq/10)+1, 6)
 
     luxTimeStamps, luxValues = readLux(lux_data_source,
                                        data_source,
                                        recStartTime,
                                        recEndTime)
-
     luxTimeStamps = [x - timelag for x in luxTimeStamps]
     # filtered set of lux (10fps)
     luxValues = signal.savgol_filter(interpnan(luxValues), 10+1, 6)
 
     luxValues = upsampleLux(luxTimeStamps,
                             luxValues,
-                            recEpochTimeStamps,
+                            recTimeStamps,
                             recordingInfo,
-                            False)
-
-
-    if eye =="right":
-        recPupilValues_filter = recPupilValues_filter_r
-        recPupilValues = recPupilValues_r
-    else:
-        recPupilValues_filter = recPupilValues_filter_l
-        recPupilValues = recPupilValues_l
+                            True)
 
     pupilValue = calcPupil(luxValues, age, referenceAge, nOfEye, fieldAngle)
     luxPupilValues = interpnan(pupilValue)
@@ -168,30 +157,23 @@ def lumAnalysis(self):
                   "Smoothed EyeTracker Pupil")
 
     if useCamera:
-        indexLum, timeStampsLum, avgLum, spotLum, fieldDiameters = readCamera(data_source)
-        
-        fieldDiameters = upsampleLux(timeStampsLum, fieldDiameters, recTimeStamps, recordingInfo, False)
+        indexLum, timeStampsLum, avgLum, spotLum = readCamera(data_source)
 
-        avgLum = upsampleLux(timeStampsLum, avgLum, recEpochTimeStamps, recordingInfo, False)
-        spotLum = upsampleLux(timeStampsLum, spotLum, recEpochTimeStamps, recordingInfo, False)
+        avgLum = upsampleLux(timeStampsLum, avgLum, recTimeStamps, recordingInfo, False)
+        spotLum = upsampleLux(timeStampsLum, spotLum, recTimeStamps, recordingInfo, False)
 
         scaledSpotLum = []
-        for i in range(0, len(recEpochTimeStamps)):
+        for i in range(0, len(recTimeStamps)):
 
             sensorLux = luxValues[i]
             cameraALum = avgLum[i]
             cameraSLum = spotLum[i]
 
-            #fieldDiameter = fieldDiameters[i] #unused
-            #fieldAngle = 2*math.atan(fieldDiameter/2*180) #unused
-            fieldAngle = 160
-            
-
-            cameraLum_min = 0
-            cameraLum_max = sensorLux/cameraALum
+            cameraLum_min = sensorLux / (cameraALum * 10+1)
+            cameraLum_max = cameraLum_min * 11
 
             # linear interpolation method
-            scaledSpot = (cameraLum_max * cameraSLum) + (cameraLum_min * (1 - cameraSLum))
+            scaledSpot = ((cameraLum_max * cameraSLum)+ (cameraLum_min * (1-cameraSLum)) )/2
             scaledSpotLum.append(scaledSpot)
 
         scaledSpotLum = signal.savgol_filter(interpnan(interpzero(scaledSpotLum)), sampleFreq*3+1, 1)
@@ -256,14 +238,18 @@ def lumAnalysis(self):
     if export:
         csv_header = ["timestamp_unix",
                       "timestamp_relative",
+                      "frame_n",
+                      "confidence",
                       "mm_pupil_diameter_scaled",
                       "mm_pupil_diameter_calc_lux",
                       "px_pupil_diameter_raw",
                       "recording_name",
                       "age"]
 
-        csv_rows = [recEpochTimeStamps,
+        csv_rows = [recTimeStamps,
                     recSimpleTimeStamps,
+                    recFrames,
+                    recConfidence,
                     recPupilValues_filter_scaled,
                     luxPupilValues,
                     recPupilValues,
@@ -278,7 +264,7 @@ def lumAnalysis(self):
         saveCsv(export_source_alt, f"{recording_name}_pupilOutput.csv", csv_header, csv_rows)
 
         csv_header = ["drelative_wl", "timestamp_relative", "recording_name", "age", "timestamp_unix"]
-        distanceTimeEpoch = [x + float(recEpochStartTime) for x in distanceTime]
+        distanceTimeEpoch = [x + float(recordingInfo["start_time_system_s"]) for x in distanceTime]
         csv_rows = [distanceVal, distanceTime, recording_name, age, distanceTimeEpoch]
 
         saveCsv(export_source_alt, f"{recording_name}_pupilOutputDistance.csv", csv_header, csv_rows)
