@@ -139,9 +139,14 @@ def lumAnalysis(self):
     stdRec = np.nanstd(recPupilValues_filter)
 
     pupil_coeff = meanLux / meanRec
+    pupil_coeff = 1
+    pupil_coeff_alt = meanRec / meanLux
+
 
     # pupil_coeff = ( meanLux-stdLux )/ (meanRec - stdRec )
     print(f"calculated pupil_coeff={pupil_coeff}")
+
+    luxPupilValues = [x * pupil_coeff_alt for x in luxPupilValues]
 
     recPupilValues_scaled = [x * pupil_coeff for x in recPupilValues]
     recPupilValues_filter_scaled = [x * pupil_coeff for x in recPupilValues_filter]
@@ -170,7 +175,7 @@ def lumAnalysis(self):
     if useCamera:
         indexLum, timeStampsLum, avgLum, spotLum, fieldDiameters = readCamera(data_source)
         
-        fieldDiameters = upsampleLux(timeStampsLum, fieldDiameters, recTimeStamps, recordingInfo, False)
+        fieldDiameters = upsampleLux(timeStampsLum, fieldDiameters, recEpochTimeStamps, recordingInfo, False)
 
         avgLum = upsampleLux(timeStampsLum, avgLum, recEpochTimeStamps, recordingInfo, False)
         spotLum = upsampleLux(timeStampsLum, spotLum, recEpochTimeStamps, recordingInfo, False)
@@ -204,7 +209,11 @@ def lumAnalysis(self):
         stdLum = np.nanstd(spotPupilValues)
         stdRec = np.nanstd(recPupilValues_filter)
 
-        pupilLum_coeff = meanLum/meanRec
+        pupilLum_coeff= meanLum/meanRec
+        pupilLum_coeff = 1
+        pupilLum_coeff_alt = meanRec/meanLum
+
+        spotPupilValues  = [x * pupilLum_coeff_alt for x in spotPupilValues ]
 
         print(f"pupilLum_coeff={pupilLum_coeff}")
 
