@@ -6,10 +6,11 @@ import numpy as np
 import multitasking
 import time as t
 import math
-import scipy.signal as signal
+
 from pupil_code.pupil_tools.magicwand import magicSelection
 from pupil_code.pupil_tools.colour_tools import relativeLuminanceClac
-from pupil_code.pupil_tools.data_tools import readInfoTobiiG3, readGazeTobiiG3
+from pupil_code.pupil_tools.data_tools import readInfo, readGaze
+
 multitasking.set_max_threads(multitasking.config["CPU_CORES"] * 20)
     
 #####
@@ -61,21 +62,21 @@ def frameGrabber(g_id,src,frame_str,frame_n,gaze_pos,output_list,last_sel,showVi
 
 #@multitasking.task
 def subFrameAsinc(frame_n,frame,x,y,t,lum,avgStd,output_list,last_sel,showVideo,g_id):
-   
+
     sel = magicSelection(frame,x,y, avgStd*1.5,connectivity=8)
     
     if showVideo:
         #save the selection output for visualisation
         last_sel [g_id]= sel.export();
 
-    (R_pixval , G_pixval , B_pixval),stim_diameter = sel.return_stats()    # read the mean rgb of the selection
+    R_pixval , G_pixval , B_pixval = sel.return_stats()    # read the mean rgb of the selection
     
     pixval = relativeLuminanceClac(R_pixval, G_pixval, B_pixval)   # mean relative luminance of the selection
  
     if output_list[frame_n] is None :
         output_list[frame_n]=[]
 
-    output_list[frame_n].append([frame_n, t, lum, pixval,stim_diameter])
+    output_list[frame_n].append([frame_n, t, lum, pixval])
 
 
 #@multitasking.task
@@ -99,8 +100,6 @@ def frameAsinc(frame_n,frame, gaze_pos, output_list,last_sel,showVideo,g_id):
 
 def magicAnalysis(self):
 
-    eye ="right"
-
     print("Your cpu has ",multitasking.config["CPU_CORES"]," cores" )
 
     cv2.ocl.setUseOpenCL(True)
@@ -110,7 +109,6 @@ def magicAnalysis(self):
     self.w.analyzeVideoBar.show(True)
 
     # read initial parameters from the interface
-
 
     data_source = self.settingsDict['recordingFolder']
     showVideo = self.settingsDict['showVideoAnalysis']
@@ -123,11 +121,11 @@ def magicAnalysis(self):
         #cv_threads = int(multitasking.config["CPU_CORES"]);
 
     # The video resolution is automatically read from the info.csv file if available
-    video_w = 1920
-    video_h = 1200
+    video_w = 1280
+    video_h = 720
 
     # Start the video capture from file
-    video_source = join(data_source, "scenevideo.mp4")
+    video_source = join(data_source, "world.mp4")
     #video_source = "/Users/giovannipignoni/Downloads/file_example_MP4_1920_18MG.mp4"
 
     if os.path.isfile(video_source) is False:
@@ -136,48 +134,31 @@ def magicAnalysis(self):
 
     #count the frames in the video
     cap = cv2.VideoCapture(video_source)
-
-    (major_ver, minor_ver, subminor_ver) = (cv2.__version__).split('.')
-
-
-    if int(major_ver)  < 3 :
-        fps = cap.get(cv2.cv.CV_CAP_PROP_FPS)
-        print("Frames per second using cap.get(cv2.cv.CV_CAP_PROP_FPS): {0}".format(fps))
-    else :
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        print("Frames per second using cap.get(cv2.CAP_PROP_FPS) : {0}".format(fps))
-
-
     frames_n= int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    video_w  = int( cap.get(cv2.CAP_PROP_FRAME_WIDTH))   # float
-    video_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))  # float
-    print("The video resolution is={}x{}".format(video_w,video_h))
-    
     print("frames_n=",frames_n)
     cap.release()
 
     ##### read record info.csv #####
-    info = readInfoTobiiG3(data_source)
+    info = readInfo(data_source)
 
+    try:
+        # this data is not always available
+        video = info["World Camera Resolution"].split("x")
+        video_w, video_h = int(video[0]), int(video[1])
+        print("The video resolution is={}x{}".format(video_w,video_h))
+
+    except Exception as ee:
+        print("Unable to automatically read the video resolution.")
+        print(ee)
 
    ##### read pupil_positions.csv #####
     # Unpacking the gaze data
-    gaze_positions, gaze_pos_l_x, gaze_pos_r_x, gaze_pos_l_y, gaze_pos_r_y, frame_list= readGazeTobiiG3(data_source,fps)
+    gaze_positions, gaze_positions_x, gaze_positions_y = readGaze(export_source)
 
-    if eye =="right":
-        gaze_positions_x, gaze_positions_y = gaze_pos_r_x , gaze_pos_r_y
-    else:
-        gaze_positions_x, gaze_positions_y = gaze_pos_l_x , gaze_pos_l_y
-
- 
     prev_frame_index = 0
 
-    gaze_positions_x = signal.savgol_filter(gaze_positions_x,61, 1)
-    gaze_positions_y = signal.savgol_filter(gaze_positions_y, 61, 1)
-
-    gaze_list_max_frame= int(frame_list[-1][0])
-    gaze_list_min_frame= int(frame_list[0][0])
+    gaze_list_max_frame= int(gaze_positions[-1][1])
+    gaze_list_min_frame= int(gaze_positions[0][1])
 
     gaze_pix_size = frames_n
 
@@ -190,16 +171,18 @@ def magicAnalysis(self):
     gaze_frame_list_x = []
     gaze_frame_list_y = []
     gaze_frame_list_time = []
+
+    prev_frame_x = 0
+    prev_frame_y = 0
     
     index = 0
 
-
     # Reading all the gaze sample
 
-    for frame_sample in frame_list:
+    for gaze_sample in gaze_positions:
 
-        frame_index = int(frame_sample[0])
-        frame_time = float(frame_sample[1])
+        frame_index = int(gaze_sample[1])
+        frame_time = float(gaze_sample[0])
 
         if frame_index != prev_frame_index:
 
@@ -213,11 +196,19 @@ def magicAnalysis(self):
             gaze_frame_list_y = []
             gaze_frame_list_time = []
 
-       
-        # scaling it to a pixel value from the normalized coordinates (0-1)
-        gaze_frame_list_x.append(int(float(gaze_positions_x[index]) * video_w))
-        gaze_frame_list_y.append(int((1-float(gaze_positions_y[index])) * video_h))
+        if float(gaze_sample[2]) > 0.6:   # making sure the sample is good enough
 
+            # scaling it to a pixel value from the normalized coordinates (0-1)
+            gaze_frame_list_x.append(int(float(gaze_positions_x[index]) * video_w))
+            gaze_frame_list_y.append(int((1-float(gaze_positions_y[index])) * video_h))
+
+            # storing the previous frame to be used to replace low confidence values
+            prev_frame_x = int(float(gaze_sample[3]) * video_w)
+            prev_frame_i = int((1-float(gaze_sample[4])) * video_h)
+
+        else:     # replace low confidence values
+            gaze_frame_list_x.append(prev_frame_x)
+            gaze_frame_list_y.append(prev_frame_y)
 
         gaze_frame_list_time.append(float(frame_time))
         prev_frame_index = frame_index
@@ -330,16 +321,17 @@ def magicAnalysis(self):
 
             except Exception as ee:
                 print("No frames to show so far")
-        
-        else:
-            t.sleep(1)
+                   
+            
+           
+        t.sleep(1)
 
     t.sleep(2)
     print("Final analisis time is",int(t.time() - start), "s")
     print("saving to CSV...")
     
     first_row = True
-    row = ["frame_index", "time", "AVGlum", "SpotLum","StimDiameter_px"]
+    row = ["frame_index", "time", "AVGlum", "SpotLum"]
 
     with open(join(data_source, 'outputFromVideo.csv'), 'w') as csvFile:
         writer = csv.writer(csvFile)
