@@ -59,8 +59,8 @@ def lumAnalysis(self):
     ##### end cofig #####
     timelag = self.settingsDict['timelag']
 
-    sampleFreq = 120
-    distSampleLenght = 1*sampleFreq    # eye_frames 120fps
+    sampleFreq = 60
+    distSampleLenght = sampleFreq/5    # eye_frames 120fps
 
     pupilFiltering = int(self.settingsDict['pupilFiltering'])*2
 
@@ -100,8 +100,8 @@ def lumAnalysis(self):
     recPupilValues_l = interpnan(recPupilValues_l)
     recPupilValues_r = interpnan(recPupilValues_r)
 
-    recPupilValues_filter_r = signal.savgol_filter(recPupilValues_r, 1*sampleFreq+1, 2)
-    recPupilValues_filter_l = signal.savgol_filter(recPupilValues_l, 1*sampleFreq+1, 2)
+    recPupilValues_filter_r = signal.savgol_filter(recPupilValues_r, int(sampleFreq/5)+1, 2)
+    recPupilValues_filter_l = signal.savgol_filter(recPupilValues_l, int(sampleFreq/5)+1, 2)
 
     recPupilValues_r = signal.savgol_filter(recPupilValues_r, int(sampleFreq/10)+1, 6)
     recPupilValues_l = signal.savgol_filter(recPupilValues_l, int(sampleFreq/10)+1, 6)
@@ -194,7 +194,7 @@ def lumAnalysis(self):
             scaledSpot = (cameraLum_max * cameraSLum) + (cameraLum_min * (1 - cameraSLum))
             scaledSpotLum.append(scaledSpot)
 
-        scaledSpotLum = signal.savgol_filter(interpnan(interpzero(scaledSpotLum)), sampleFreq*3+1, 1)
+        scaledSpotLum = signal.savgol_filter(interpnan(interpzero(scaledSpotLum)), int(sampleFreq/5)+1, 1)
 
         spotPupilValues = calcPupil(scaledSpotLum, age, referenceAge, nOfEye, fieldAngle)
 
