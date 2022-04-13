@@ -11,6 +11,7 @@ import os
 from bisect import bisect_left
 from os.path import join, normpath
 import csv
+import gzip
 import json
 
 # dependencies
@@ -38,6 +39,23 @@ def readInfo(data_source):
         info= json.load(jsonDataFile)
     
     return info
+
+def readInfoTobiiG3(data_source):
+    # read the recording info.player.json file
+    info = {}
+    with open(join(data_source, "recording.g3")) as jsonDataFile:
+        info= json.load(jsonDataFile)
+    
+    return info
+
+def readPupilTobiiG3(data_source):
+    """read gazedata.gz"""
+    pupil_positions = []
+    with gzip.open(join(data_source, "gazedata.gz"), 'r') as jsonDataFile:
+        for jsonObj in jsonDataFile:
+            pupil_positions.append(json.loads(jsonObj))
+
+    return pupil_positions
 
 def readPupil(export_source):
     """read pupil_positions.csv"""
@@ -127,6 +145,68 @@ def readGaze(export_source):
     #gaze_pos_y = savgol_filter(gaze_pos_y, 120*1+1, 2)
 
     return gaze_pos, gaze_pos_x, gaze_pos_y
+
+
+def readGazeTobiiG3(data_source,fps):
+
+    gaze_positions = []
+    gaze_pos = []
+    gaze_pos_l_x = []
+    gaze_pos_r_x = []
+    gaze_pos_l_y = []
+    gaze_pos_r_y = []
+    frame_list = []
+
+
+    """read gazedata.gz"""
+   
+    with gzip.open(join(data_source, "gazedata.gz"), 'r') as jsonDataFile:
+        for jsonObj in jsonDataFile:
+            gaze_positions.append(json.loads(jsonObj))
+
+
+
+
+    for gaze_position in gaze_positions:
+        if ( "eyeleft" in gaze_position["data"] and "eyeright" in gaze_position["data"]):
+            if ( "pupildiameter" in gaze_position["data"]["eyeleft"] and "pupildiameter" in gaze_position["data"]["eyeright"]):
+                gaze_pos.append(gaze_positions)
+                gaze_pos_l_x.append(float(gaze_position["data"]["gaze2d"][0]))
+                gaze_pos_r_x.append(float(gaze_position["data"]["gaze2d"][0]))
+                gaze_pos_l_y.append(float(gaze_position["data"]["gaze2d"][1]))
+                gaze_pos_r_y.append(float(gaze_position["data"]["gaze2d"][1]))
+                frame_n= int( float(gaze_position["timestamp"])/(1/fps)) 
+                frame_list.append((frame_n,float(gaze_position["timestamp"])))
+                print(frame_n,float(gaze_position["timestamp"]))
+    
+    return gaze_pos, gaze_pos_l_x, gaze_pos_r_x, gaze_pos_l_y, gaze_pos_r_y, frame_list
+
+
+def processPupilTobiiG3(pupil_positions):
+    """extract the pupil data from the eye traker to get standar deviation,
+    mean, and filter the dataset"""
+
+    diameter_l = []
+    diameter_r = []
+
+    simpleTimeStamps = []
+
+
+    for pupil_position in pupil_positions:
+ 
+
+        if ( "eyeleft" in pupil_position["data"] and "eyeright" in pupil_position["data"]):
+  
+            if ( "pupildiameter" in pupil_position["data"]["eyeleft"] and "pupildiameter" in pupil_position["data"]["eyeright"]):
+                simpleTimeStamps.append(float(pupil_position["timestamp"]))
+
+                diameter_l.append(float(pupil_position["data"]["eyeleft"]["pupildiameter"]))
+                diameter_r.append(float(pupil_position["data"]["eyeright"]["pupildiameter"]))
+        
+
+    return diameter_l,diameter_r, simpleTimeStamps
+
+
 
 def processPupil(pupil_positions, pupil_coulmn,
                  recStartTimeAlt, filterForConf,
