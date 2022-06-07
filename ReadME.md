@@ -1,4 +1,9 @@
-# Cognitive workload tool for the Pupil eye tracker
+# Cognitive workload tool for the tobii pro glasses 3
+
+
+This branch is dedicated to a new verson of the software, modified to work with the tobii pro 3 glasses, the software works, but the documentation and part of the interface are not updated completely.
+
+## The following has not been updated
 
 This script/application is part of my master's thesis project in MIXD developed at NTNU Gjøvik in the fall 2018 and spring 2019 semesters.
 The project aimed to experiment on the processing of eye tracking data, using an affordable eye tracker form
