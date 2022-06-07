@@ -1,5 +1,10 @@
 # Cognitive workload tool for the Pupil eye tracker
 
+## Notes on the branches
+
+The develope branch is the most up to date version for pupil labs glasses, if you are interested in using the software with tobii glasses 3 see the relative branch, which has been modified to work with the tobii pro 3 glasses, the software works as well as the other versions, but the documentation and part of the interface are not updated completely.
+
+
 This script/application is part of my master's thesis project in MIXD developed at NTNU Gjøvik in the fall 2018 and spring 2019 semesters.
 The project aimed to experiment on the processing of eye tracking data, using an affordable eye tracker form
 [Pupil Labs](https://pupil-labs.com ), for the measure of [cognitive workload](https://en.wikipedia.org/wiki/Cognitive_load).
