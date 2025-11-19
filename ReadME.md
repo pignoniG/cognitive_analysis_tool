@@ -1,7 +1,7 @@
-# Cognitive workload tool for the tobii pro glasses 3
+# Cognitive workload tool for the varjo xr-4
 
 
-This branch is dedicated to a new verson of the software, modified to work with the tobii pro 3 glasses, the software works, but the documentation and part of the interface are not updated completely.
+This branch is dedicated to a new verson of the software, modified to work with the varjo xr-4 headset, the software DOES NOT work, and the documentation and part of the interface are not updated completely.
 
 ## The following has not been updated
 
