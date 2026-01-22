@@ -21,6 +21,12 @@ from scipy.signal import savgol_filter
 # custom code
 from pupil_code.pupil_tools.signal_tools import interpnan
 
+def find(name, path):
+    for root, dirs, files in os.walk(path):
+
+        for file in files:
+            if name in file:
+                return os.path.join(root, file)
 
 ### Functions & Procedures
 def readInfoOld(data_source):
@@ -57,6 +63,17 @@ def readPupilTobiiG3(data_source):
 
     return pupil_positions
 
+def readPupilVarjo(export_source):
+    """read pupil_positions.csv"""
+    pupil_positions = []
+    with open(find("varjo_gaze_output_", export_source)) as csvDataFile:
+        csvReader = csv.reader(csvDataFile)
+        for index, row in enumerate(csvReader):
+            if index > 0:
+                pupil_positions.append(row)
+    return pupil_positions
+
+
 def readPupil(export_source):
     """read pupil_positions.csv"""
     pupil_positions = []
@@ -76,6 +93,8 @@ def readCamera(data_source):
     spotLum = []   # "relative lumiance" on the spot
     fieldDiameter = []   # "relative lumiance" on the spot
     frame = 0
+    Epoch= []
+    EstimLux= []
 
     with open(join(data_source, 'outputFromVideo.csv')) as csvDataFile:
         for index, row in enumerate(csv.reader(csvDataFile)):
@@ -86,8 +105,49 @@ def readCamera(data_source):
                 avgLum.append(float(row[2]))
                 spotLum.append(float(row[3]))
                 fieldDiameter.append(float(row[4]))
+                Epoch.append(float(row[5]))
+                EstimLux.append(float(row[6]))
                 frame = frame+1
-    return indexLum, timeStampsLum, avgLum, spotLum ,fieldDiameter
+
+    return indexLum, timeStampsLum, avgLum, spotLum ,fieldDiameter,Epoch,EstimLux
+
+
+
+
+
+def readCdm2Varjo( data_source,cameraLum_min,cameraLum_max):
+       # read the camera data from the pupilCV.py script
+
+    indexLum = []
+    avgLum = []   # average "relative lumiance" of the sine
+    timeStampsLum = []
+    spotLum = []   # "relative lumiance" on the spot
+    fieldDiameter = []   # "relative lumiance" on the spot
+    frame = 0
+    Epoch= []
+    EstimLux= []
+
+    print (cameraLum_min,cameraLum_max," cameraLum_min,cameraLum_max")
+
+    with open(join(data_source, 'outputFromVideo.csv')) as csvDataFile:
+        for index, row in enumerate(csv.reader(csvDataFile)):
+            if index > 0:
+                # indexLum,timeStampsLum,avgLum,spotLum
+                indexLum.append(float(row[0]))
+                timeStampsLum.append(float(row[1]))
+                avgLum.append(float(row[5]))
+                pixval= float(row[6])
+                spotLum.append(pixval)
+                fieldDiameter.append(float(row[7]))
+                Epoch.append(float(row[8]))
+                EstimLux.append((cameraLum_max * pixval) + (cameraLum_min * (1 - pixval)))
+                frame = frame+1
+
+
+
+    return Epoch,EstimLux
+
+
 
 def readLux(lux_data_source, data_source, recStartTime, recEndTime):
     
@@ -125,7 +185,7 @@ def graphPlot(plotElem, x, y, color, tckness, label):
                   markerfacecolor=color,
                   markersize=0,
                   color=color,
-                  linewidth=tckness,
+                  linewidth=0.1,
                   label=label)
 
 def readGaze(export_source):
@@ -146,6 +206,32 @@ def readGaze(export_source):
 
     return gaze_pos, gaze_pos_x, gaze_pos_y
 
+def readGazeVarjo(data_source,fps):
+    """read varjo_gaze_output_"""
+    gaze_positions = []
+    gaze_pos = []
+    gaze_pos_l_x = []
+    gaze_pos_r_x = []
+    gaze_pos_l_y = []
+    gaze_pos_r_y = []
+    frame_list = []
+
+    with open( find("varjo_gaze_output_", data_source)) as csvDataFile:
+        csvReader = csv.reader(csvDataFile)
+        for index, gaze_positions in enumerate(csvReader):
+            if index > 0 and int(gaze_positions[6]) > 1 and int(gaze_positions[24]) > 1 and int(gaze_positions[34]) > 1:
+
+                gaze_pos.append(gaze_positions)
+                gaze_pos_l_x.append((float(gaze_positions[25])+1)/2) 
+                gaze_pos_r_x.append((float(gaze_positions[35])+1)/2) #right_projected_x
+                gaze_pos_l_y.append((float(gaze_positions[26])+1)/2) 
+                gaze_pos_r_y.append((float(gaze_positions[36])+1)/2) #right_projected_y
+                timeStamp= float(gaze_positions[2])/10**9
+                epochTimeStamp= float(gaze_positions[1])/10**9
+                frame_n= int(timeStamp/(1/fps)) 
+                frame_list.append((frame_n,timeStamp,epochTimeStamp))
+    
+    return gaze_pos, gaze_pos_l_x, gaze_pos_r_x, gaze_pos_l_y, gaze_pos_r_y, frame_list
 
 def readGazeTobiiG3(data_source,fps):
 
@@ -205,6 +291,30 @@ def processPupilTobiiG3(pupil_positions):
         
 
     return diameter_l,diameter_r, simpleTimeStamps
+
+def processPupilVarjo(pupil_positions):
+    """extract the pupil data from the eye traker to get standar deviation,
+    mean, and filter the dataset"""
+
+    diameter_l = []
+    diameter_r = []
+    simpleTimeStamps = []
+    timeStamps = []
+
+
+    for pupil_position in pupil_positions:
+
+          if int(pupil_position[6]) > 1 and int(pupil_position[24]) > 1 and int(pupil_position[34]) > 1 and float(pupil_position[39])>1 and float(pupil_position[39])<9:
+
+                diameter_l.append(float(pupil_position[39])) #left_pupil_diameter_in_mm
+                diameter_r.append(float(pupil_position[43])) #right_pupil_diameter_in_mm
+
+                simpleTimeStamps.append(float(pupil_position[2])/10**9) #videotimestamp
+        
+                timeStamps.append(float(pupil_position[1])/10**9) #ephoctime stamp
+        
+
+    return diameter_l,diameter_r, simpleTimeStamps,timeStamps
 
 
 
@@ -282,15 +392,12 @@ def saveCsv(where, file_name, header, rows):
 
     print("saveCsv done", file_name)
 
-def upsampleLux(luxTimeStamps, luxValues, recTimeStamps, recordingInfo, shift):
+def upsampleLux(luxTimeStamps, luxValues, recTimeStamps):
 
     upLuxValues = []
     for sample in range(0, len(recTimeStamps)):
-        timeStamp = float(recTimeStamps[sample])
-        if shift:
-            unixTimeStamp = float(recordingInfo["start_time_system_s"]) + (timeStamp - float(recordingInfo["start_time_synced_s"]))
-        else:
-            unixTimeStamp = timeStamp
+        unixTimeStamp = float(recTimeStamps[sample])
+    
 
         luxVal = findClosestLuxValIterpolate(unixTimeStamp, luxTimeStamps, luxValues)
         upLuxValues.append(luxVal)

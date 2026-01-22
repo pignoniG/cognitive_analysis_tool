@@ -21,75 +21,67 @@ class magicSelection:
     """adapted from Alexander Reynolds work https://github.com/alkasm/magicwand
        A Python+OpenCV implementation similar to Adobe Photoshop's magic wand selection tool."""
 
-    def __init__(self, image, xI, yI, tolerance, connectivity=4):
+    def __init__(self, image,maskVideo,useGaze,maskSize,X,Y):
+
         # general params
         self.name = "window"
-        self._seed_point = Point(xI, yI)
-    
+
+        self._useGaze = useGaze
+
+        self._maskSize = maskSize
         self._image = image
+        self._maskVideo = maskVideo
+        self._seed_point = Point(int(X), int(Y))
+
         self._h, self._w = image.shape[:2]
         if len(image.shape) == 3:
             self._channels = 3
         else:
             self._channels = 1
         self._selection = image.copy()
+    
         self._mask = 255*np.ones((self._h, self._w), dtype=np.uint8)
-
-        # parameters for floodfill
-        self.connectivity = connectivity
-        self._tolerance = (tolerance,)*3
+        #self._seed_point = Point(int((self._h+2)/2), int((self._w+2)/2))
 
         self._flood_mask = np.zeros((self._h+2, self._w+2), dtype=np.uint8)
 
-        
-
-
-     
         self._magicwand()
 
     def _magicwand(self):
         self._flood_mask[:] = 0
-        flags = self.connectivity | 255 << 8   # bit shift
-        flags |= cv2.FLOODFILL_FIXED_RANGE | cv2.FLOODFILL_MASK_ONLY
 
+        #Apply a circular mask to vr video if needed
+        if self._maskVideo:
+            mask_x= int((self._w+2)/2)
+            mask_y= int((self._h+2)/2)
 
-        flood_image = self._image.copy()
+            if self._useGaze:
+                mask_x= self._seed_point[0]
+                mask_y= self._seed_point[1]
 
-            
-        cv2.floodFill(flood_image, self._flood_mask, self._seed_point, 0,
-                      self._tolerance, self._tolerance, flags)
+            cv2.circle( self._flood_mask, (mask_x,mask_y),int(((self._h+2)/2*self._maskSize) ),255, -1)
   
-
-        self._mask = self._flood_mask[1:-1, 1:-1].copy()
+            self._mask = self._flood_mask[1:-1, 1:-1].copy()
 
         stddev, mean = 0, 0
 
         mean = cv2.meanStdDev(self._image, mean, stddev, self._mask)[0]
         stddev = cv2.meanStdDev(self._image, mean, stddev, self._mask)[1]
-        
-        self._mask_exteded = cv2.inRange(self._image, mean-stddev*1.2, mean+stddev*1.2)
-
-        self._mask = self._mask | self._mask_exteded
-
 
         self._mask_size = cv2.countNonZero(self._mask)
-     
         self._stim_diameter = math.sqrt(self._mask_size/math.pi)*2
         
-
 
         # self._mask=cv2.GaussianBlur( self._mask,(11,11),cv2.BORDER_DEFAULT)
 
     def show(self):
+
         self._applied_mask = cv2.bitwise_and(
             self._image, self._image, mask=self._mask)
 
-        cv2.circle(self._applied_mask,
-                   (self._seed_point[0], self._seed_point[1]),
-                   10, (127, 127, 127), -1)
+
 
         cv2.imshow(self.name, self._applied_mask)
-    
     
     def export(self):
         self._applied_mask = cv2.bitwise_and(
@@ -97,22 +89,13 @@ class magicSelection:
 
         cv2.circle(self._applied_mask,
                    (self._seed_point[0], self._seed_point[1]),
-                   40, self.mean, -1)
+                   5, (127, 127, 127), -1)
 
         cv2.circle(self._applied_mask,
                    (self._seed_point[0], self._seed_point[1]),
-                   40, (255,255,255), 2)
+                   5, (255,255,255), 2)
 
-        cv2.circle(self._applied_mask,
-                   (self._seed_point[0], self._seed_point[1]),
-                  5, (0,0,255), -1)
-    
 
-        cv2.circle(self._applied_mask,
-                   (self._seed_point[0], self._seed_point[1]),
-                   int(self._stim_diameter/2), (127, 127, 127), 5)
-
-        
         return(self._applied_mask)
 
     def return_stats(self):

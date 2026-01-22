@@ -82,26 +82,27 @@ def parabolicRelation(x, x1, y1, x2, y2, x3, y3):
     yEq = m * x**2 + n*x + o
     return yEq
 
-def relativeLuminanceClac(R, G, B):
+def relativeLuminanceClac(R, G, B,gamma):
     # First converts the gamma-compressed RGB values to linear RGB
     # and then applies the luminosity function
     # Y=0.2126R+0.7152G+0.0722B
     # to obtain the "Relative luminance" 0 - 1 from rgb values 0-255
     # formula ported from WCAG specifications https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
-    gamma = 2.4
+
+
     R = R/255
     G = G/255
     B = B/255
-    if (R <= 0.03928):
+    if (R <= 0.04045):
         R = R / 12.92
     else:
         R = ((R + 0.055)/1.055)**gamma
-    if (G <= 0.03928):
+    if (G <= 0.04045):
         G = G / 12.92
     else:
         G = ((G + 0.055)/1.055)**gamma
 
-    if (B <= 0.03928):
+    if (B <= 0.04045):
         B = B / 12.92
     else:
         B = ((B + 0.055)/1.055)**gamma
@@ -110,7 +111,7 @@ def relativeLuminanceClac(R, G, B):
 
 def inverserelativeLuminanceClac(L):
     # inverse of the luminosity function
-    # from "Relative luminance" 0 - 1 to gray-scale 0-255ì
+    # from "Relative luminance" 0 - 1 to gray-scale 0-255
     gamma = 2.4
     X = L
     if (X <= 0.11784/12.92):

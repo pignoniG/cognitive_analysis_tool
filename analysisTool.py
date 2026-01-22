@@ -23,7 +23,7 @@ from defconAppKit.windows.baseWindow import BaseWindowController
 import matplotlib.pyplot as plt
 
 # custom code
-from pupil_code.openCV_magic import magicAnalysis
+from pupil_code.vid_analysis import magicAnalysis
 from pupil_code.lum_analysis import lumAnalysis
 from pupil_code.gps_plot import plotGpsCW
 from pupil_code.lux_log import logLux
@@ -82,9 +82,12 @@ class MyInterface(BaseWindowController):
         # standard settings
         self.settingsDict = {'recordingFolder': False,
                              'showVideoAnalysis': False,
+                             'maskVideoAnalysis': False,
                              'partAge': 25,
-                             'useCamera': False,
+                             'pupilDynamics': False,
                              'timelag': 0,
+                             'cameraLum_min': 0.02,
+                             'cameraLum_max': 200,
                              'timevsWl': 1,
                              'distancevsWl': 1,
                              'showPlot': True,
@@ -92,8 +95,9 @@ class MyInterface(BaseWindowController):
                              'exportDataFromgps': True,
                              'pupilFiltering': 1,
                              'exportFolder': False,
-                             'luxFolder': False}
-
+                             'luxFolder': False,
+                             'maskSize': 0.5, 
+                             'useGaze': False}
         # load settings
         if os.path.isfile("settings.pkl"):
             with open('settings.pkl', 'rb') as s:
@@ -110,37 +114,9 @@ class MyInterface(BaseWindowController):
     def buildWindow(self):
         jumpingY = MARGIN
 
-        # lux button
-        self.w.aCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
-                                                '(a) Log the luminace data or open saved luminace data.')
-
-        jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
-        
-        self.w.luxButton = Button((MARGIN, jumpingY, 160, CTRL_SIZES['CheckBoxRegularHeight']),
-                                      'log the luminance',
-                                      callback=self.luxButtonCallback)
-
-        
-
-        self.w.luxButtonCaption = TextBox((176+MARGIN*3, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Connect the external sensor first!')
-
-
-
-
-        jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
-
-        # sensor data folder
-        self.w.luxFolderButton = Button((MARGIN, jumpingY, 160, CTRL_SIZES['ButtonRegularHeight']),
-                                        'Luminance Folder',
-                                        callback=self.luxFolderButtonCallback)
-
-        self.w.luxFolderCaption = TextBox((160+MARGIN*2, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']), 'Select where to save/read the lumiance sensor data')
-       
-        jumpingY += CTRL_SIZES['CheckBoxRegularHeight']*2 + MARGIN
-
         
         self.w.bCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
-                                                '(b) Select a recording.')
+                                                '(a) Select a recording.')
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
         # recording folder
@@ -163,7 +139,7 @@ class MyInterface(BaseWindowController):
         jumpingY += CTRL_SIZES['ButtonRegularHeight']*2 + MARGIN
 
         self.w.cCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
-                                                '(c) Select were to save the output (csv and pdf).')
+                                                '(b) Select were to save the output (csv and pdf).')
 
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
         self.w.exportFolderButton = Button((MARGIN, jumpingY, 120, CTRL_SIZES['ButtonRegularHeight']),
@@ -175,7 +151,7 @@ class MyInterface(BaseWindowController):
         jumpingY += CTRL_SIZES['ButtonRegularHeight']*2 + MARGIN
 
         self.w.dCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
-                                                '(d) Analyze the video data to compute the lumince on the gaze area (optional).')
+                                                '(c) Analyze the video data to compute the lumince in the Headset.')
 
         # analyze video
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
@@ -185,6 +161,29 @@ class MyInterface(BaseWindowController):
                                            callback=self.analyzeVideoButtonCallback)
         self.w.analyzeVideoCaption = TextBox((140+MARGIN*2, jumpingY+1, 600, CTRL_SIZES['TextBoxRegularHeight']),
                                              'Process the world camera video.')
+
+
+         ## show analyze video
+        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
+        self.w.maskVideoCheck = CheckBox((MARGIN, jumpingY, 600, CTRL_SIZES['CheckBoxRegularHeight']),
+                                           'Circular Mask on Video',
+                                           callback=self.maskVideoCallback)
+        ## use gaze 
+        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
+        self.w.useGazeCheck = CheckBox((MARGIN, jumpingY, 600, CTRL_SIZES['CheckBoxRegularHeight']),
+                                           'Use gaze to center mask',  callback=self.useGazeCallback)
+        
+
+
+        ## mask size 
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.maskSizeEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.maskSizeEditTextCallback)
+
+        self.w.maskSizeTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "mask size in proportion to video height 0-1")
+
+
 
         ## show analyze video
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
@@ -200,7 +199,7 @@ class MyInterface(BaseWindowController):
         jumpingY += CTRL_SIZES['ButtonRegularHeight']*1 + MARGIN
 
         self.w.eCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
-                                                '(e) Calculate the expected pupil size and workload.')
+                                                '(d) Calculate the expected pupil size and workload.')
         
         # # proceed button
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
@@ -217,9 +216,9 @@ class MyInterface(BaseWindowController):
         # options
         jumpingY += CTRL_SIZES['PopUpButtonRegularHeight'] + MARGIN
         ## use camera
-        self.w.useCameraCheck = CheckBox((MARGIN, jumpingY, 320, CTRL_SIZES['CheckBoxRegularHeight']),
-                                         'Use world video camera data',
-                                         callback=self.useCameraCheckCallback)
+        self.w.pupilDynamicsCheck = CheckBox((MARGIN, jumpingY, 320, CTRL_SIZES['CheckBoxRegularHeight']),
+                                         'Attempt to replicate pupil ballistics',
+                                         callback=self.pupilDynamicsCheckCallback)
 
         ## timelag
         jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
@@ -228,6 +227,26 @@ class MyInterface(BaseWindowController):
 
         self.w.timeLagTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
                                         "Time delta (s) to sicronize sensor data with eye data")
+
+
+
+        ## cameraLum_min
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.cameraLum_minEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.cameraLum_minEditTextCallback)
+
+        self.w.cameraLum_minTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "Minimum Luminace in VR(Black Level)")
+
+
+        ## cameraLum_max
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.cameraLum_maxEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.cameraLum_maxEditTextCallback)
+
+        self.w.cameraLum_maxTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "Maximum Luminace in VR(White Level)")
+
 
         ## pupilFiltering
         jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
@@ -294,16 +313,8 @@ class MyInterface(BaseWindowController):
                 self.w.analyzedVideoCaption.set("OK - World video already analyzed.")
             else:
                 self.w.analyzedVideoCaption.set('! - World video data not found, analyze the video!')
-                self.settingsDict['useCamera']=False
 
             self.w.recordingFolderCaption.set(self.settingsDict['recordingFolder'])
-
-            pupilCsvPath = join(self.settingsDict['recordingFolder'], 'exports', '000', 'pupil_positions.csv')
-            gazeCsvPath = join(self.settingsDict['recordingFolder'], 'exports', '000', 'gaze_positions.csv')
-            if os.path.isfile(pupilCsvPath) and os.path.isfile(gazeCsvPath):
-                self.w.recordingFoundCaption .set("OK - Valid recording found.")
-            else:
-                self.w.recordingFoundCaption .set('! - Not a valid recording, remember to export form PupilPlayer!')
 
         if self.settingsDict['exportFolder']:
             self.w.exportFolderCaption.set(self.settingsDict['exportFolder'])
@@ -311,11 +322,15 @@ class MyInterface(BaseWindowController):
         if self.settingsDict['luxFolder']:
             self.w.luxFolderCaption.set(self.settingsDict['luxFolder'])
 
+        self.w.maskVideoCheck.set(self.settingsDict['maskVideoAnalysis'])
+
+        self.w.useGazeCheck.set(self.settingsDict['useGaze'])
+
         self.w.showAnalizeCheck.set(self.settingsDict['showVideoAnalysis'])
 
         self.w.showPlotCheck.set(self.settingsDict['showPlot'])
 
-        self.w.useCameraCheck.set(self.settingsDict['useCamera'])
+        self.w.pupilDynamicsCheck.set(self.settingsDict['pupilDynamics'])
 
         self.w.exportDatasheet.set(self.settingsDict['exportData'])
 
@@ -324,6 +339,16 @@ class MyInterface(BaseWindowController):
         self.w.agePopUp.set(self.settingsDict['partAge'])
 
         self.w.timeLagEditText.set(self.settingsDict['timelag'])
+
+
+        self.w.maskSizeEditText.set(self.settingsDict['maskSize'])
+
+
+        self.w.cameraLum_minEditText.set(self.settingsDict['cameraLum_min'])
+
+        self.w.cameraLum_maxEditText.set(self.settingsDict['cameraLum_max'])
+
+        
 
         self.w.distancevsWlEditText.set(self.settingsDict['distancevsWl'])
 
@@ -380,9 +405,39 @@ class MyInterface(BaseWindowController):
         self.updateInterface()
         sys.stdout.flush()
 
+    def maskVideoCallback(self, sender):
+        self.settingsDict['maskVideoAnalysis'] = sender.get()
+        self.updateInterface()
+        sys.stdout.flush()
+
+    def useGazeCallback(self, sender):
+        self.settingsDict['useGaze'] = sender.get()
+        self.updateInterface()
+        sys.stdout.flush()
+
+    def maskSizeEditTextCallback(self, sender):
+        self.settingsDict['maskSize'] = float(sender.get())
+        sys.stdout.flush()
+
+    def maskSizeEditTextCallback(self, sender):
+        self.settingsDict['maskSize'] = float(sender.get())
+        sys.stdout.flush()
+
+
     def timeLagEditTextCallback(self, sender):
         self.settingsDict['timelag'] = float(sender.get())
         sys.stdout.flush()
+
+    def cameraLum_minEditTextCallback(self, sender):
+        self.settingsDict['cameraLum_min'] = float(sender.get())
+        sys.stdout.flush()
+
+
+
+    def cameraLum_maxEditTextCallback(self, sender):
+        self.settingsDict['cameraLum_max'] = float(sender.get())
+        sys.stdout.flush()
+
 
     def pupilFilteringEditTextCallback(self, sender):
         self.settingsDict['pupilFiltering'] = float(sender.get())
@@ -393,8 +448,8 @@ class MyInterface(BaseWindowController):
         print('agePopUpCallback')
         sys.stdout.flush()
 
-    def useCameraCheckCallback(self, sender):
-        self.settingsDict['useCamera'] = sender.get()
+    def pupilDynamicsCheckCallback(self, sender):
+        self.settingsDict['pupilDynamics'] = sender.get()
         sys.stdout.flush()
 
     def showPlotCheckCallback(self, sender):
@@ -451,7 +506,7 @@ class MyInterface(BaseWindowController):
         saveSettings(self.settingsDict)
         sys.stdout.flush()
 
-        
+
 
     def luxButtonCallback(self, sender):
         try:
