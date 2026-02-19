@@ -8,7 +8,7 @@ import time as t
 import math
 import scipy.signal as signal
 from pupil_code.pupil_tools.magicwand import magicSelection
-from pupil_code.pupil_tools.colour_tools import relativeLuminanceClac
+from pupil_code.pupil_tools.colour_tools import linearLuminanceClac
 from pupil_code.pupil_tools.data_tools import find, readGazeVarjo
 multitasking.set_max_threads(multitasking.config["CPU_CORES"] * 20)
     
@@ -77,16 +77,24 @@ def frameGrabber(g_id,src,frame_str,frame_n,gaze_pos,output_list,last_sel,showVi
 #@multitasking.task
 def subFrameAsinc(frame_n,frame,x,y,t,lum,avgStd,output_list,last_sel,showVideo,maskVideo,g_id,epoch,scale_ratio,useGaze,maskSize):
    
-    sel = magicSelection(frame,maskVideo,useGaze,maskSize,x*scale_ratio,y*scale_ratio)
+    sel = magicSelection(frame,maskVideo,useGaze,maskSize,x*scale_ratio,y*scale_ratio,showVideo)
 
     
     if showVideo:
         #save the selection output for visualisation
         last_sel [g_id]= sel.export();
 
-    (R_pixval,G_pixval,B_pixval),stim_diameter = sel.return_stats()    # read the mean rgb of the selection
+    (B_pixval,R_pixval,G_pixval),(B_pixval_small,R_pixval_small,G_pixval_small),stim_diameter = sel.return_stats()    # read the mean rgb of the selection
     
-    pixval = relativeLuminanceClac(R_pixval, G_pixval, B_pixval,2.4)   # mean relative luminance of the selection
+
+    #apply weight between entire field of view "diffuse field"and center of gaze "attention"
+    coeff = 0.65
+    B_pixval = B_pixval_small*coeff + B_pixval*(1-coeff)
+    R_pixval = R_pixval_small*coeff + R_pixval*(1-coeff)
+    G_pixval = G_pixval_small*coeff + G_pixval*(1-coeff)
+
+
+    pixval = linearLuminanceClac(R_pixval, G_pixval, B_pixval,2.4)   # mean relative luminance of the selection
  
     if output_list[frame_n] is None :
         output_list[frame_n]=[]
@@ -99,7 +107,7 @@ def subFrameAsinc(frame_n,frame,x,y,t,lum,avgStd,output_list,last_sel,showVideo,
 def frameAsinc(frame_n,frame, gaze_pos, output_list,last_sel,showVideo,maskVideo,g_id,scale_ratio,useGaze,maskSize):
 
     lumMean, lumStddev = cv2.meanStdDev(frame)
-    lum = float(relativeLuminanceClac(lumMean[0], lumMean[1], lumMean[2], 2.4))           # mean relative luminance
+    lum = float(linearLuminanceClac( lumMean[1], lumMean[2],lumMean[0], 2.4))           # mean relative luminance
     avgStd = (float(lumStddev[0])+float(lumStddev[1])+float(lumStddev[2])) / 3  # mean sd across rgb           
 
 
@@ -141,11 +149,11 @@ def magicAnalysis(self):
     
     maskSize = self.settingsDict['maskSize'] 
 
-    cv_threads = int(multitasking.config["CPU_CORES"]) * 2;
+    cv_threads = int(multitasking.config["CPU_CORES"]/2 );
     
 
-    #if showVideo:
-        #cv_threads = int(multitasking.config["CPU_CORES"]);
+    if showVideo:
+        cv_threads = 4;
 
     
     video_w = 1920

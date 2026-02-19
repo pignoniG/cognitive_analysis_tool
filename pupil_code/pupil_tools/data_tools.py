@@ -20,6 +20,7 @@ from scipy.signal import savgol_filter
 
 # custom code
 from pupil_code.pupil_tools.signal_tools import interpnan
+from pupil_code.pupil_tools.colour_tools import linearLuminanceClac
 
 def find(name, path):
     for root, dirs, files in os.walk(path):
@@ -126,8 +127,9 @@ def readCdm2Varjo( data_source,cameraLum_min,cameraLum_max):
     frame = 0
     Epoch= []
     EstimLux= []
-
-    print (cameraLum_min,cameraLum_max," cameraLum_min,cameraLum_max")
+    R= []
+    G= []
+    B= []
 
     with open(join(data_source, 'outputFromVideo.csv')) as csvDataFile:
         for index, row in enumerate(csv.reader(csvDataFile)):
@@ -135,11 +137,22 @@ def readCdm2Varjo( data_source,cameraLum_min,cameraLum_max):
                 # indexLum,timeStampsLum,avgLum,spotLum
                 indexLum.append(float(row[0]))
                 timeStampsLum.append(float(row[1]))
+                R.append(float(row[3]))
+                G.append(float(row[4]))
+                B.append(float(row[2]))
+
+
+                pixval= linearLuminanceClac(G[-1],R[-1], B[-1],2.2)
+
                 avgLum.append(float(row[5]))
-                pixval= float(row[6])
+                #pixval= float(row[6])
                 spotLum.append(pixval)
                 fieldDiameter.append(float(row[7]))
                 Epoch.append(float(row[8]))
+
+                
+
+
                 EstimLux.append((cameraLum_max * pixval) + (cameraLum_min * (1 - pixval)))
                 frame = frame+1
 

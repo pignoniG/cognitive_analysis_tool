@@ -14,6 +14,7 @@ from collections import OrderedDict
 # dependencies
 import scipy.signal as signal
 import numpy as np
+import math
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 # custom
@@ -22,6 +23,8 @@ from pupil_code.pupil_tools.data_tools import readLux, graphPlot, upsampleLux
 from pupil_code.pupil_tools.data_tools import readCamera, drawDistance, saveCsv
 from pupil_code.pupil_tools.signal_tools import interpnan, interpzero
 from pupil_code.pupil_tools.colour_tools import calcPupil
+
+
 
 
 
@@ -49,7 +52,7 @@ def lumAnalysis(self):
     nOfEye = 2
     fieldAngle = 160
 
-    eye ="right"
+    eye ="both"#"right"#"both"
 
 
 
@@ -72,6 +75,9 @@ def lumAnalysis(self):
 
     cameraLum_max= self.settingsDict['cameraLum_max']
     pupilDynamics=  self.settingsDict['pupilDynamics']
+
+    pupilCoeff=  self.settingsDict['pupilCoeff']
+
 
 
     ##### read recond info #####
@@ -131,44 +137,64 @@ def lumAnalysis(self):
                             recEpochTimeStamps)
 
 
+    recPupilValues_filter_r = interpnan(recPupilValues_filter_r)
+    recPupilValues_filter_l = interpnan(recPupilValues_filter_l)
+
+    recPupilValues_r = interpnan(recPupilValues_r)
+    recPupilValues_l = interpnan(recPupilValues_l)
+
+
     if eye =="right":
         recPupilValues_filter = recPupilValues_filter_r
         recPupilValues = recPupilValues_r
+
+    elif eye =="both":
+        recPupilValues_filter = []
+
+        for i in range(len(recPupilValues_filter_r)):
+            recPupilValues_filter.append((recPupilValues_filter_r[i]+recPupilValues_filter_l[i])/2)
+        recPupilValues = []
+        for i in range(len(recPupilValues_r)):
+            recPupilValues.append((recPupilValues_r[i]+recPupilValues_l[i])/2)
+
     else:
         recPupilValues_filter = recPupilValues_filter_l
         recPupilValues = recPupilValues_l
 
+
+
     pupilValue = calcPupil(luxValues, age, referenceAge, nOfEye, fieldAngle)
+
+   
     
     luxPupilValues = interpnan(pupilValue)
+    luxPupilValues = [x for x in luxPupilValues]
+
     Lmin = np.min(luxPupilValues)
-    luxPupilValues = [x - Lmin for x in luxPupilValues]
     Lmax = np.max(luxPupilValues)
-    luxPupilValues = [x /Lmax for x in luxPupilValues]    
+
+    luxPupilValues = [(x- Lmin) /Lmax  for x in luxPupilValues]  
+
 
 
     fs = sampleFreq
 
 
-
-  
+    #Pupil ballistic correction parameters
+    delay=0.5 #s
+    
+    first_item= luxPupilValues[0]
+    for x in range(int(delay*sampleFreq)):
+        luxPupilValues.insert(0, first_item)
+        luxPupilValues.pop(-1)
+    
     if pupilDynamics:
 
-
-        #Pupil ballistic correction parameters
-        delay=0.5 #s
-    
-        first_item= luxPupilValues[0]
-        for x in range(int(delay*sampleFreq)):
-            luxPupilValues.insert(0, first_item)
-            luxPupilValues.pop(-1)
-    
-    
         
         # Attack (how fast it follows when increasing)
-        attack_time = 1  # 2 ms – rise
+        attack_time = 6  # 2 ms – rise
         # Release (how fast it follows when decreasing)
-        release_time = 0.6  # 200 ms –decay
+        release_time = 0.5  # 200 ms –decay
     
         
         alpha_a = np.exp(-1/(fs*attack_time))
@@ -189,37 +215,32 @@ def lumAnalysis(self):
         luxPupilValues  = y
 
 
+    luxPupilValues = [x * Lmax + Lmin for x in luxPupilValues]  
+ 
+    
+    # scale pupil size 
+    # Example
+
+    #temporary fix as varjo is outputting radius instead of dyameter
+    recPupilValues = [x * (1 + pupilCoeff)   for x in  recPupilValues]
+    recPupilValues_filter = [x * (1 + pupilCoeff)  for x in recPupilValues_filter]
+
+
+
+    meanRec = np.nanmean(recPupilValues, axis=0)
+    meanLux = np.nanmean(luxPupilValues, axis=0)
+    recPupilValues_scaled = [x + (meanLux - meanRec)   for x in  recPupilValues]
+    recPupilValues_filter_scaled = [x + (meanLux - meanRec)  for x in recPupilValues_filter]
+
+   
+    #luxPupilValues = [x - meanLux# for x in luxPupilValues]
+
+
+
+  
     
 
 
-
-    luxPupilValues = [x * Lmax for x in luxPupilValues]  
-
-   
-    luxPupilValues = [x + Lmin for x in luxPupilValues]
-
-
-    meanLux = np.nanmean(luxPupilValues, axis=0)
-    meanRec = np.nanmean(recPupilValues_filter, axis=0)
-
-    stdLux = np.nanstd(luxPupilValues)
-    stdRec = np.nanstd(recPupilValues_filter)
-
-    #pupil_coeff = meanLux / meanRec
-    pupil_coeff = 1
-    pupil_coeff_alt = meanRec*pupil_coeff - meanLux
-    #pupil_coeff_alt = 0
-
-
-
-
-    # pupil_coeff = ( meanLux-stdLux )/ (meanRec - stdRec )
-    print(f"calculated pupil_coeff={pupil_coeff}")
-
-    luxPupilValues = [x + pupil_coeff_alt for x in luxPupilValues]
-
-    recPupilValues_scaled = [x * pupil_coeff for x in recPupilValues]
-    recPupilValues_filter_scaled = [x * pupil_coeff for x in recPupilValues_filter]
 
     graphPlot(self.plot,
               recSimpleTimeStamps,
@@ -248,6 +269,16 @@ def lumAnalysis(self):
                                                  recSimpleTimeStamps,
                                                  distSampleLenght,
                                                  pupilFiltering)
+    meanDistance = np.nanmean(distanceVal, axis=0)
+    ms = 0
+
+    for i in distanceVal:
+        ms = ms + (i-meanDistance)**2
+    ms = ms / len(distanceVal)
+    rms = math.sqrt(ms)
+
+    print ("RMS Cognitive Workload is ",rms)
+
 
     handles, labels = self.plot.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
@@ -258,8 +289,7 @@ def lumAnalysis(self):
     self.plot.ylabel('Pupil diameter mm')
     self.plot.title(f"CW{recording_name}")
     if showPlot:
-        self.plot.savefig(join(export_source, f'plot{recording_name}.pdf'),
-                          bbox_inches='tight')
+        #self.plot.savefig(join(export_source, f'plot{recording_name}.pdf'), bbox_inches='tight')
         self.plot.savefig(join(export_source_alt, f'plot_{recording_name}.pdf'),
                           bbox_inches='tight')
 
@@ -281,7 +311,7 @@ def lumAnalysis(self):
                     age]
 
 
-        saveCsv(export_source, "pupilOutput.csv", csv_header, csv_rows)
+       # saveCsv(export_source, "pupilOutput.csv", csv_header, csv_rows)
         saveCsv(export_source_alt, f"{recording_name}_pupilOutput.csv", csv_header, csv_rows)
 
         csv_header = ["drelative_wl", "timestamp_relative", "recording_name", "age", "timestamp_unix"]
@@ -289,7 +319,7 @@ def lumAnalysis(self):
         csv_rows = [distanceVal, distanceTime, recording_name, age, distanceTimeEpoch]
 
         saveCsv(export_source_alt, f"{recording_name}_pupilOutputDistance.csv", csv_header, csv_rows)
-        saveCsv(export_source, "pupilOutputDistance.csv", csv_header, csv_rows)
+       # saveCsv(export_source, "pupilOutputDistance.csv", csv_header, csv_rows)
 
     if showPlot:
         self.plot.show(block=False)

@@ -96,6 +96,7 @@ class MyInterface(BaseWindowController):
                              'pupilFiltering': 1,
                              'exportFolder': False,
                              'luxFolder': False,
+                             'pupilCoeff': 1,
                              'maskSize': 0.5, 
                              'useGaze': False}
         # load settings
@@ -256,6 +257,14 @@ class MyInterface(BaseWindowController):
         self.w.pupilFilteringTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
                                                "Temporal resolution of the CW data (smoothing, min 1s )")
 
+        ## pupilScaling
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.pupilCoeffEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                                 callback=self.pupilCoeffEditTextCallback)
+
+        self.w.pupilCoeffTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                               "Scaling of pupil size (default 1)")
+
         ## plot output
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.showPlotCheck = CheckBox((MARGIN, jumpingY, 180, CTRL_SIZES['CheckBoxRegularHeight']),
@@ -356,6 +365,8 @@ class MyInterface(BaseWindowController):
 
         self.w.pupilFilteringEditText.set(self.settingsDict['pupilFiltering'])
 
+        self.w.pupilCoeffEditText.set(self.settingsDict['pupilCoeff'])
+
     # Callbacks
     def recFolderButtonCallback(self, sender):
 
@@ -443,9 +454,12 @@ class MyInterface(BaseWindowController):
         self.settingsDict['pupilFiltering'] = float(sender.get())
         sys.stdout.flush()
 
+    def pupilCoeffEditTextCallback(self, sender):
+        self.settingsDict['pupilCoeff'] = float(sender.get())
+        sys.stdout.flush()
+
     def agePopUpCallback(self, sender):
         self.settingsDict['partAge'] = sender.get()
-        print('agePopUpCallback')
         sys.stdout.flush()
 
     def pupilDynamicsCheckCallback(self, sender):

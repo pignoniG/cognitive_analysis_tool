@@ -16,12 +16,13 @@ import math
 ### Constants
 Point = namedtuple('Point', 'x, y')
 
+
 ### Functions & Procedures
 class magicSelection:
     """adapted from Alexander Reynolds work https://github.com/alkasm/magicwand
        A Python+OpenCV implementation similar to Adobe Photoshop's magic wand selection tool."""
 
-    def __init__(self, image,maskVideo,useGaze,maskSize,X,Y):
+    def __init__(self, image,maskVideo,useGaze,maskSize,X,Y,showVideo):
 
         # general params
         self.name = "window"
@@ -29,6 +30,8 @@ class magicSelection:
         self._useGaze = useGaze
 
         self._maskSize = maskSize
+        self._showVideo = showVideo
+        
         self._image = image
         self._maskVideo = maskVideo
         self._seed_point = Point(int(X), int(Y))
@@ -44,35 +47,41 @@ class magicSelection:
         #self._seed_point = Point(int((self._h+2)/2), int((self._w+2)/2))
 
         self._flood_mask = np.zeros((self._h+2, self._w+2), dtype=np.uint8)
+        self._flood_mask_small = np.zeros((self._h+2, self._w+2), dtype=np.uint8)
 
         self._magicwand()
 
     def _magicwand(self):
         self._flood_mask[:] = 0
+        self._flood_mask_small[:] = 0
 
         #Apply a circular mask to vr video if needed
         if self._maskVideo:
             mask_x= int((self._w+2)/2)
             mask_y= int((self._h+2)/2)
 
-            if self._useGaze:
-                mask_x= self._seed_point[0]
-                mask_y= self._seed_point[1]
+            
 
             cv2.circle( self._flood_mask, (mask_x,mask_y),int(((self._h+2)/2*self._maskSize) ),255, -1)
   
             self._mask = self._flood_mask[1:-1, 1:-1].copy()
 
-        stddev, mean = 0, 0
+            if self._useGaze:
+                mask_x= self._seed_point[0]
+                mask_y= self._seed_point[1]
+                
+                cv2.circle( self._flood_mask_small, (mask_x,mask_y),int(((self._h+2)/2*self._maskSize/8) ),255, -1)
+                self._masks_small = self._flood_mask_small[1:-1, 1:-1].copy()
+            
+            else:
+                self._masks_small =  self._mask
 
-        mean = cv2.meanStdDev(self._image, mean, stddev, self._mask)[0]
-        stddev = cv2.meanStdDev(self._image, mean, stddev, self._mask)[1]
 
         self._mask_size = cv2.countNonZero(self._mask)
         self._stim_diameter = math.sqrt(self._mask_size/math.pi)*2
         
 
-        # self._mask=cv2.GaussianBlur( self._mask,(11,11),cv2.BORDER_DEFAULT)
+        
 
     def show(self):
 
@@ -80,20 +89,30 @@ class magicSelection:
             self._image, self._image, mask=self._mask)
 
 
-
         cv2.imshow(self.name, self._applied_mask)
     
     def export(self):
         self._applied_mask = cv2.bitwise_and(
             self._image, self._image, mask=self._mask)
+        if self._showVideo:
+    
+            cv2.circle(self._applied_mask,
+                       (self._seed_point[0], self._seed_point[1]),
+                       5, (127, 127, 127), -1)
+    
+            cv2.circle(self._applied_mask,
+                       (self._seed_point[0], self._seed_point[1]),
+                       5, (255,255,255), 2)
+    
+            if self._useGaze:
+                cv2.circle(self._applied_mask,
+                    (self._seed_point[0], self._seed_point[1]),
+                    int(((self._h+2)/2*self._maskSize/8)), (255,255,255), 2)
+    
+        
 
-        cv2.circle(self._applied_mask,
-                   (self._seed_point[0], self._seed_point[1]),
-                   5, (127, 127, 127), -1)
 
-        cv2.circle(self._applied_mask,
-                   (self._seed_point[0], self._seed_point[1]),
-                   5, (255,255,255), 2)
+
 
 
         return(self._applied_mask)
@@ -101,7 +120,7 @@ class magicSelection:
     def return_stats(self):
         # return(self.mean,self.stddev,self.min,self.max)
 
-        return(self.mean,self._stim_diameter)
+        return(self.mean,self.meanSmall,self._stim_diameter)
 
     @property
     def mask(self):
@@ -131,7 +150,21 @@ class magicSelection:
     @property
     def mean(self):
         stddev, mean = 0, 0
+        
+      
+
         mean = cv2.meanStdDev(self._image, mean, stddev, self._mask)[0]
+
+        if self._channels == 1:
+            return mean[0, 0]
+        return mean[:, 0]
+
+    @property
+    def meanSmall(self):
+        stddev, mean = 0, 0
+        
+        mean = cv2.meanStdDev(self._image, mean, stddev, self._masks_small)[0]
+        
         if self._channels == 1:
             return mean[0, 0]
         return mean[:, 0]
