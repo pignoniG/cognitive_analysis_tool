@@ -110,6 +110,42 @@ def relativeLuminanceClac(R, G, B,gamma):
     
     return L
 
+def manualRGBtoLuminanceClac(R, G, B,gamma,rCoeff,gCoeff,bCoeff):
+    # First converts the gamma-compressed RGB values to linear RGB
+    # and then applies the luminosity function
+    # Y=0.2126R+0.7152G+0.0722B
+    # to obtain the "Relative luminance" 0 - 1 from rgb values 0-255
+    # formula ported from WCAG specifications https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+
+    R = R/255
+    G = G/255 
+    B = B/255 
+    if (R <= 0.04045):
+        R = R / 12.92
+    else:
+        R = ((R + 0.055)/1.055)**(gamma)
+    if (G <= 0.04045):
+        G = G / 12.92
+    else:
+        G = ((G + 0.055)/1.055)**(gamma)
+
+    if (B <= 0.04045):
+        B = B / 12.92
+    else:
+        B = ((B + 0.055)/1.055)**(gamma)
+
+
+    rC =rCoeff - bCoeff/2 - gCoeff/2
+    gC =gCoeff - bCoeff/2 - rCoeff/2
+    bC =bCoeff - rCoeff/2 - gCoeff/2
+
+    L = (0.2126+rC)  * R + (0.7152+gC) *G + (0.0722+bC)  * B
+    
+
+
+   
+    return L
+
 def linearLuminanceClac(R, G, B,gamma):
     # First converts the gamma-compressed RGB values to linear RGB
     # assumes equal contribution of each channel to pupil size

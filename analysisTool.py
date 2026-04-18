@@ -92,6 +92,7 @@ class MyInterface(BaseWindowController):
                              'distancevsWl': 1,
                              'showPlot': True,
                              'exportData': True,
+                             'exportWithEvents': False,
                              'exportDataFromgps': True,
                              'pupilFiltering': 1,
                              'exportFolder': False,
@@ -105,7 +106,7 @@ class MyInterface(BaseWindowController):
                 self.settingsDict = pickle.load(s)
 
         self.plot = plt
-        self.w = Window((600, 900), 'Cognitive Worklaod Pupil Analisis')
+        self.w = Window((600, 1200), 'Cognitive Worklaod Pupil Analisis')
         self.buildWindow()
         self.updateInterface()
 
@@ -116,7 +117,7 @@ class MyInterface(BaseWindowController):
         jumpingY = MARGIN
 
         
-        self.w.bCaption = TextBox((MARGIN, jumpingY+1, 1200, CTRL_SIZES['TextBoxRegularHeight']),
+        self.w.bCaption = TextBox((MARGIN, jumpingY+1, 1000, CTRL_SIZES['TextBoxRegularHeight']),
                                                 '(a) Select a recording.')
         jumpingY += CTRL_SIZES['ButtonRegularHeight'] + MARGIN
 
@@ -276,6 +277,14 @@ class MyInterface(BaseWindowController):
         self.w.exportDatasheet = CheckBox((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
                                           'Export to CSV',
                                           callback=self.exportDatasheetCallback)
+        
+        ## use event file
+        jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
+        self.w.exportWithEvents = CheckBox((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
+                                          'Export using events file',
+                                          callback=self.exportWithEventsCallback)
+
+
 
         jumpingY += CTRL_SIZES['ButtonRegularHeight']*2 + MARGIN
 
@@ -306,11 +315,13 @@ class MyInterface(BaseWindowController):
         self.w.distancevsWlTextBox = TextBox((50+MARGIN*2, jumpingY, -10, 17),
                                         "Export csv of workload over distance every n° meters")
 
-         ## export csv 2
+        ## export csv 2
         jumpingY += CTRL_SIZES['CheckBoxRegularHeight'] + MARGIN
         self.w.exportDatasheetFromgps = CheckBox((MARGIN, jumpingY, 120, CTRL_SIZES['CheckBoxRegularHeight']),
                                           'Export to CSV',
                                           callback=self.exportDatasheetFromgpsCallback)
+
+
 
 
 
@@ -342,6 +353,10 @@ class MyInterface(BaseWindowController):
         self.w.pupilDynamicsCheck.set(self.settingsDict['pupilDynamics'])
 
         self.w.exportDatasheet.set(self.settingsDict['exportData'])
+
+        self.w.exportWithEvents.set(self.settingsDict['exportWithEvents'])
+
+        
 
         self.w.exportDatasheetFromgps.set(self.settingsDict['exportDataFromgps'])
         
@@ -483,6 +498,12 @@ class MyInterface(BaseWindowController):
     def exportDatasheetCallback(self, sender):
         self.settingsDict['exportData'] = sender.get()
         sys.stdout.flush()
+
+    def exportWithEventsCallback(self, sender):
+        self.settingsDict['exportWithEvents'] = sender.get()
+        sys.stdout.flush()
+
+        
 
     def exportDatasheetFromgpsCallback(self, sender):
         self.settingsDict['exportDataFromgps'] = sender.get()

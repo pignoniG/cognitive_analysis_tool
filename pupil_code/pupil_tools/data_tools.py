@@ -14,13 +14,15 @@ import csv
 import gzip
 import json
 
+from dateutil.parser import parse
+
 # dependencies
 import numpy as np
 from scipy.signal import savgol_filter
 
 # custom code
 from pupil_code.pupil_tools.signal_tools import interpnan
-from pupil_code.pupil_tools.colour_tools import linearLuminanceClac
+from pupil_code.pupil_tools.colour_tools import linearLuminanceClac,relativeLuminanceClac ,manualRGBtoLuminanceClac
 
 def find(name, path):
     for root, dirs, files in os.walk(path):
@@ -28,6 +30,57 @@ def find(name, path):
         for file in files:
             if name in file:
                 return os.path.join(root, file)
+        return False
+
+def appendRowCsv(folder, file_name, header,rowToAdd, reorder):
+    file = find( file_name,folder)
+
+    if not file:
+        print(file_name,"is missing, will be created now")
+        with open(join(folder, file_name), 'w') as csvFile:
+            writer = csv.writer(csvFile)
+            writer.writerow(header)
+            writer.writerow(rowToAdd)
+
+    else:
+
+        with open(file, newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            header = next(reader)  # Remove this line if your CSV has no header
+            
+            unsorted_rows = []
+            for row in reader:
+                unsorted_rows.append(row)
+
+
+            i=0
+            rowWasThere=False
+    
+            for onerow in unsorted_rows:
+                if onerow[0]==rowToAdd[0]:
+                    unsorted_rows[i]=rowToAdd
+                    rowWasThere=True
+    
+                i=i+1
+    
+            if not rowWasThere:
+                unsorted_rows.append(rowToAdd)
+    
+            if reorder:
+                sorted_rows = sorted(unsorted_rows, key=lambda row: row[0])
+            else:
+                sorted_rows = unsorted_rows
+
+
+
+        
+        with open(file, "w", newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(header) # Remove this line if no header
+            writer.writerows(sorted_rows)
+        
+        
+            
 
 ### Functions & Procedures
 def readInfoOld(data_source):
@@ -63,6 +116,34 @@ def readPupilTobiiG3(data_source):
             pupil_positions.append(json.loads(jsonObj))
 
     return pupil_positions
+
+def readEvents(data_source,recording_start):
+
+    eventfile=find("event_log", data_source)
+    info =[]
+    tStamp=0
+    with open(eventfile) as csvDataFile:
+        for index, row in enumerate(csv.reader(csvDataFile)):
+
+
+            if index > 0:
+                #find offset from recording start
+                if index == 1:
+                    startTime = row[1] 
+                    epochStartTime =  parse(startTime).timestamp()
+                    tStamp= epochStartTime-recording_start
+                    print(epochStartTime,recording_start,tStamp)
+
+
+                start = tStamp
+                end = tStamp = tStamp+float(row[3])
+
+                # id , duration , start, end, 
+                info.append((row[0],float(row[3]),start,end))
+            
+
+
+    return info
 
 def readPupilVarjo(export_source):
     """read pupil_positions.csv"""
@@ -138,11 +219,15 @@ def readCdm2Varjo( data_source,cameraLum_min,cameraLum_max):
                 indexLum.append(float(row[0]))
                 timeStampsLum.append(float(row[1]))
                 R.append(float(row[3]))
-                G.append(float(row[4]))
-                B.append(float(row[2]))
+                G.append(float(row[2]))
+                B.append(float(row[4]))
+                rCoeff=0.4
+                gCoeff=0
+                bCoeff=0.2
 
 
-                pixval= linearLuminanceClac(G[-1],R[-1], B[-1],2.2)
+                pixval= manualRGBtoLuminanceClac(R[-1],G[-1], B[-1],2.2,rCoeff,gCoeff,bCoeff)
+                
 
                 avgLum.append(float(row[5]))
                 #pixval= float(row[6])
@@ -523,6 +608,8 @@ def findClosestsAndIterpolate(currVal, valList, toInterpList):
     interp = ((currVal - beforeTime)/timeSpan) * afterInterp + ((afterTime - currVal)/timeSpan) * beforeInterp
 
     return interp
+
+
 
 
 def findIntervalAndAverage(minVal,maxVal, valList, toInterpList):

@@ -15,10 +15,11 @@ from collections import OrderedDict
 import scipy.signal as signal
 import numpy as np
 import math
+
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 # custom
-from pupil_code.pupil_tools.data_tools import readPupilVarjo, processPupilVarjo,readCdm2Varjo
+from pupil_code.pupil_tools.data_tools import readPupilVarjo, processPupilVarjo,readCdm2Varjo,readEvents,findIntervalAndAverage,appendRowCsv
 from pupil_code.pupil_tools.data_tools import readLux, graphPlot, upsampleLux
 from pupil_code.pupil_tools.data_tools import readCamera, drawDistance, saveCsv
 from pupil_code.pupil_tools.signal_tools import interpnan, interpzero
@@ -73,10 +74,16 @@ def lumAnalysis(self):
 
     cameraLum_min= self.settingsDict['cameraLum_min']
 
-    cameraLum_max= self.settingsDict['cameraLum_max']
-    pupilDynamics=  self.settingsDict['pupilDynamics']
+    cameraLum_max = self.settingsDict['cameraLum_max']
 
-    pupilCoeff=  self.settingsDict['pupilCoeff']
+    pupilDynamics =  self.settingsDict['pupilDynamics']
+
+    pupilCoeff =  self.settingsDict['pupilCoeff']
+
+    
+
+
+    exportWithEvents =  self.settingsDict['exportWithEvents']
 
 
 
@@ -229,8 +236,11 @@ def lumAnalysis(self):
 
     meanRec = np.nanmean(recPupilValues, axis=0)
     meanLux = np.nanmean(luxPupilValues, axis=0)
-    recPupilValues_scaled = [x + (meanLux - meanRec)   for x in  recPupilValues]
-    recPupilValues_filter_scaled = [x + (meanLux - meanRec)  for x in recPupilValues_filter]
+    coeff= meanLux - meanRec
+    
+
+    recPupilValues_scaled = [x + (coeff)   for x in  recPupilValues]
+    recPupilValues_filter_scaled = [x + (coeff)  for x in recPupilValues_filter]
 
    
     #luxPupilValues = [x - meanLux# for x in luxPupilValues]
@@ -238,7 +248,11 @@ def lumAnalysis(self):
 
 
   
-    
+    if exportWithEvents :
+        eventData = readEvents(data_source,recEpochStartTime)
+        #print (eventData)
+
+
 
 
 
@@ -288,6 +302,78 @@ def lumAnalysis(self):
     self.plot.xlabel('Time s')
     self.plot.ylabel('Pupil diameter mm')
     self.plot.title(f"CW{recording_name}")
+
+
+    if exportWithEvents :
+
+        eventAverageList=[]
+
+        i=0
+  
+        for event in eventData:
+            facecolor='white'
+        
+            preBuffer = 0 #dicard aprt of data toa cocunt for adaptation
+            postBuffer = 0
+            linewidth=0
+            saveSection= False
+
+            #if i==0 or i== len(eventData)-1:
+            if event [0] in ("Riposo"):
+                facecolor='teal'
+                preBuffer = 10 #discard aprt of data toa cocunt for adaptation
+                postBuffer = 10
+                linewidth=1
+                saveSection=True
+
+            elif event [0] in ("CountB_7","Fibonacci","10_Nomi","CountB_13"):
+
+                preBuffer = 1 #discard aprt of data toa cocunt for adaptation
+                postBuffer = 1
+                facecolor='darkorange'
+                linewidth=1
+                saveSection=True
+
+            elif event [0] in ("Notte", "Alba", "Nuvolo"):
+                facecolor='magenta'
+                preBuffer = 40 #discard aprt of data toa cocunt for adaptation
+                postBuffer = 0
+                linewidth=1
+                saveSection=True
+
+                
+            elif event [0] in ("Briefing"):
+                facecolor='white'
+                
+
+            start= event [2]+preBuffer
+            end = event [3]-postBuffer
+    
+            
+            self.plot.axvspan(start, end,facecolor=facecolor, alpha=0.2)
+            self.plot.axvspan(event [2], event [3],facecolor=facecolor, alpha=0.05)
+
+            averageSection=findIntervalAndAverage(start,end, distanceTime,distanceVal)
+
+            if saveSection:
+                eventAverageList.append(averageSection)
+            
+
+            self.plot.plot([start,end], [averageSection,averageSection] ,
+                marker='o',
+                markerfacecolor="black",
+                markersize=0,
+                linestyle='-',
+                color="black",
+                linewidth=linewidth)
+
+
+            i=i+1
+
+
+   
+
+
     if showPlot:
         #self.plot.savefig(join(export_source, f'plot{recording_name}.pdf'), bbox_inches='tight')
         self.plot.savefig(join(export_source_alt, f'plot_{recording_name}.pdf'),
@@ -320,6 +406,14 @@ def lumAnalysis(self):
 
         saveCsv(export_source_alt, f"{recording_name}_pupilOutputDistance.csv", csv_header, csv_rows)
        # saveCsv(export_source, "pupilOutputDistance.csv", csv_header, csv_rows)
+
+
+    if exportWithEvents:
+        csv_header = ["ID","R1","CountB_7","R2","Notte","Fibonacci","R3","Alba","10_Nomi","R4","Nuvolo","CountB_13","R5"]
+
+        eventAverageList.insert(0, recording_name)
+
+        appendRowCsv(export_source_alt, "eventsOutput.csv", csv_header, eventAverageList ,True)
 
     if showPlot:
         self.plot.show(block=False)
