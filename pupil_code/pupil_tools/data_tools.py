@@ -197,7 +197,7 @@ def readCamera(data_source):
 
 
 
-def readCdm2Varjo( data_source,cameraLum_min,cameraLum_max):
+def readCdm2Varjo( data_source,cameraLum_min,cameraLum_max, rCoeff=0.4, gCoeff=0.0, bCoeff=0.2, gamma=2.2):
        # read the camera data from the pupilCV.py script
 
     indexLum = []
@@ -221,12 +221,7 @@ def readCdm2Varjo( data_source,cameraLum_min,cameraLum_max):
                 R.append(float(row[3]))
                 G.append(float(row[2]))
                 B.append(float(row[4]))
-                rCoeff=0.4
-                gCoeff=0
-                bCoeff=0.2
-
-
-                pixval= manualRGBtoLuminanceClac(R[-1],G[-1], B[-1],2.2,rCoeff,gCoeff,bCoeff)
+                pixval= manualRGBtoLuminanceClac(R[-1],G[-1], B[-1],gamma,rCoeff,gCoeff,bCoeff)
                 
 
                 avgLum.append(float(row[5]))

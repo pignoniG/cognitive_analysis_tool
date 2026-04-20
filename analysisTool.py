@@ -98,12 +98,21 @@ class MyInterface(BaseWindowController):
                              'exportFolder': False,
                              'luxFolder': False,
                              'pupilCoeff': 1,
-                             'maskSize': 0.5, 
-                             'useGaze': False}
+                             'maskSize': 0.5,
+                             'useGaze': False,
+                             'cameraRCoeff': 0.4,
+                             'cameraGCoeff': 0.0,
+                             'cameraBCoeff': 0.2,
+                             'cameraGamma': 2.2,
+                             'fieldAngle': 160}
         # load settings
         if os.path.isfile("settings.pkl"):
             with open('settings.pkl', 'rb') as s:
-                self.settingsDict = pickle.load(s)
+                loaded = pickle.load(s)
+            for k, v in self.settingsDict.items():
+                if k not in loaded:
+                    loaded[k] = v
+            self.settingsDict = loaded
 
         self.plot = plt
         self.w = Window((600, 1200), 'Cognitive Worklaod Pupil Analisis')
@@ -222,6 +231,13 @@ class MyInterface(BaseWindowController):
                                          'Attempt to replicate pupil ballistics',
                                          callback=self.pupilDynamicsCheckCallback)
 
+        ## fieldAngle
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.fieldAngleEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.fieldAngleEditTextCallback)
+        self.w.fieldAngleTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "Visual field angle in degrees (HMD field of view, default 160)")
+
         ## timelag
         jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
         self.w.timeLagEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
@@ -249,6 +265,33 @@ class MyInterface(BaseWindowController):
         self.w.cameraLum_maxTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
                                         "Maximum Luminace in VR(White Level)")
 
+        ## cameraRCoeff
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.cameraRCoeffEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.cameraRCoeffEditTextCallback)
+        self.w.cameraRCoeffTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "Red channel weight for luminance (colour calibration)")
+
+        ## cameraGCoeff
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.cameraGCoeffEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.cameraGCoeffEditTextCallback)
+        self.w.cameraGCoeffTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "Green channel weight for luminance (colour calibration)")
+
+        ## cameraBCoeff
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.cameraBCoeffEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.cameraBCoeffEditTextCallback)
+        self.w.cameraBCoeffTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "Blue channel weight for luminance (colour calibration)")
+
+        ## cameraGamma
+        jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
+        self.w.cameraGammaEditText = EditText((MARGIN, jumpingY, 100, 22), "0",
+                                          callback=self.cameraGammaEditTextCallback)
+        self.w.cameraGammaTextBox = TextBox((100+MARGIN*2, jumpingY, -10, 17),
+                                        "Display gamma / transfer function (default 2.2)")
 
         ## pupilFiltering
         jumpingY += CTRL_SIZES['EditTextRegularHeight'] + MARGIN
@@ -382,6 +425,12 @@ class MyInterface(BaseWindowController):
 
         self.w.pupilCoeffEditText.set(self.settingsDict['pupilCoeff'])
 
+        self.w.cameraRCoeffEditText.set(self.settingsDict['cameraRCoeff'])
+        self.w.cameraGCoeffEditText.set(self.settingsDict['cameraGCoeff'])
+        self.w.cameraBCoeffEditText.set(self.settingsDict['cameraBCoeff'])
+        self.w.cameraGammaEditText.set(self.settingsDict['cameraGamma'])
+        self.w.fieldAngleEditText.set(self.settingsDict['fieldAngle'])
+
     # Callbacks
     def recFolderButtonCallback(self, sender):
 
@@ -510,6 +559,26 @@ class MyInterface(BaseWindowController):
         sys.stdout.flush()
 
         
+
+    def cameraRCoeffEditTextCallback(self, sender):
+        self.settingsDict['cameraRCoeff'] = float(sender.get())
+        sys.stdout.flush()
+
+    def cameraGCoeffEditTextCallback(self, sender):
+        self.settingsDict['cameraGCoeff'] = float(sender.get())
+        sys.stdout.flush()
+
+    def cameraBCoeffEditTextCallback(self, sender):
+        self.settingsDict['cameraBCoeff'] = float(sender.get())
+        sys.stdout.flush()
+
+    def cameraGammaEditTextCallback(self, sender):
+        self.settingsDict['cameraGamma'] = float(sender.get())
+        sys.stdout.flush()
+
+    def fieldAngleEditTextCallback(self, sender):
+        self.settingsDict['fieldAngle'] = float(sender.get())
+        sys.stdout.flush()
 
     def pupilSizeButtonCallback(self, sender):
         try:
