@@ -51,7 +51,7 @@ def lumAnalysis(self):
     age = self.settingsDict['partAge']
     referenceAge = 28.58
     nOfEye = 2
-    fieldAngle = 160
+    fieldAngle = self.settingsDict['fieldAngle']
 
     eye ="both"#"right"#"both"
 
@@ -130,7 +130,11 @@ def lumAnalysis(self):
     recPupilValues_r = signal.savgol_filter(recPupilValues_r, int(sampleFreq/4)+1, 6)
     recPupilValues_l = signal.savgol_filter(recPupilValues_l, int(sampleFreq/4)+1, 6)
 
-    luxTimeStamps, luxValues = readCdm2Varjo( data_source,cameraLum_min,cameraLum_max)
+    luxTimeStamps, luxValues = readCdm2Varjo(data_source, cameraLum_min, cameraLum_max,
+                                              rCoeff=self.settingsDict['cameraRCoeff'],
+                                              gCoeff=self.settingsDict['cameraGCoeff'],
+                                              bCoeff=self.settingsDict['cameraBCoeff'],
+                                              gamma=self.settingsDict['cameraGamma'])
 
 
 
