@@ -46,7 +46,13 @@ them rather than describing the headset or the participant.
 - **Proposal:** decide whether it is part of the method. If yes, document it in the paper and consider
   fitting the offset on the calibration sequence (per participant) instead of on each recording.
   If no, default to off.
-- **Status:** kept, open.
+- **Context (G. Pignoni):** no better matching method was found so far; previous publications compared recordings
+  in units of ± one standard deviation of ΔPD.
+- **2.0:** `alignment` chooses how the offset is found: "recording" (median over the whole recording, the 1.x
+  behaviour but with the median), "baseline" (median over named events, e.g. rest periods), "fixed" (an offset
+  fitted on the participant's calibration sequence and reused for their other recordings, which keeps ΔPD's
+  absolute level) or "none". ΔPD is exported both in mm and in SD units.
+- **Status:** fixed in 2.0.
 
 ### 3. The 0.5 s delay is applied even when dynamics are off
 - **Where:** `lum_analysis.py` (delay loop sits outside `if pupilDynamics`); 2.0 `Parameters.delay = 0.5`, always applied.
@@ -54,7 +60,13 @@ them rather than describing the headset or the participant.
   200–500 ms as the physiological range. The code always delays by 500 ms.
 - **Proposal:** decide whether the delay is part of the optional correction. Either way, expose it as a
   parameter (2.0 already does) and consider 0.3 s as a default within the literature range.
-- **Status:** kept, open.
+- **Context (G. Pignoni):** 0.5 s is a good approximation of the eye's response delay; the optional dynamics
+  are known to be imperfect.
+- **2.0:** the delay stays a separate parameter (default 0.5 s, always applied). The calibration fit
+  (`cwtool.fit`, "Fit latency, scale and offset" in the GUI) estimates each participant's latency, dilation and
+  constriction time constants, pupil scale correction and offset from the 20 steps of the sequence, given the
+  operator's photometric calibration. Latency and constriction speed trade off, so they are fitted jointly.
+- **Status:** fixed in 2.0 (to be validated on the pilot recordings).
 
 ### 4. Field size used as a diameter instead of an area
 - **Where:** `colour_tools.effectiveCornealFluxDensity` (`L * a * M(e)`), `fieldAngle = 160`; 2.0 `Parameters.field`.

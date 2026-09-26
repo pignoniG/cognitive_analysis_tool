@@ -6,7 +6,7 @@ from dataclasses import fields, replace
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox,
-                               QSpinBox, QVBoxLayout, QWidget)
+                               QLineEdit, QSpinBox, QVBoxLayout, QWidget)
 
 from cwtool.params import Parameters, VideoSettings
 
@@ -21,6 +21,7 @@ NUMBERS = {
     "gain_b": ("Blue gain", 0, 100, 0.1, 2, "Relative gain of the blue channel"),
     "gamma": ("Gamma", 0.5, 5, 0.1, 2, "sRGB decoding exponent"),
     "fixation_weight": ("Fixation weight", 0, 1, 0.05, 2, "Weight of the gaze area; the background gets the rest"),
+    "pupil_offset": ("Pupil offset (mm)", -10, 10, 0.01, 3, "Offset used by alignment 'fixed' (set by the calibration fit)"),
     "pupil_correction": ("Pupil scale correction", 0.1, 10, 0.01, 3,
                          "Participant multiplier on the device's pupil scale (1 = device default)"),
     "timelag": ("Time lag (s)", -60, 60, 0.05, 2, "Shift of the luminance signal"),
@@ -38,19 +39,23 @@ INTS = {
     "analysis_width": ("Analysis width (px)", 100, 4000, "Frames are downscaled to this width"),
 }
 BOOLS = {
-    "align_mean": "Align measured mean to expected",
     "dynamics": "Pupil dynamics (attack/release)",
     "background_excludes_fixation": "Background excludes gaze area",
 }
 CHOICES = {
     "eye": ("Pupil", ["both", "left", "right"]),
     "eyes": ("Eyes viewing", [2, 1]),
+    "alignment": ("Alignment", ["recording", "baseline", "fixed", "none"]),
+}
+TEXTS = {
+    "baseline_events": ("Baseline events", "Comma-separated event labels used by alignment 'baseline'"),
 }
 
 GROUPS = [
     ("Participant", ["age", "reference_age", "eyes", "eye"]),
     ("Photometric calibration", ["l_min", "l_max", "gain_r", "gain_g", "gain_b", "gamma", "fixation_weight"]),
-    ("Pupil signal", ["pupil_correction", "align_mean", "timelag", "analysis_rate", "max_gap"]),
+    ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
+                      "timelag", "analysis_rate", "max_gap"]),
     ("Dynamics", ["delay", "dynamics", "attack", "release"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]
@@ -101,6 +106,12 @@ class _Form(QWidget):
             w.setToolTip(tip)
             w.valueChanged.connect(self.changed)
             return w, label
+        if name in TEXTS:
+            label, tip = TEXTS[name]
+            w = QLineEdit()
+            w.setToolTip(tip)
+            w.editingFinished.connect(self.changed)
+            return w, label
         if name in BOOLS:
             w = QCheckBox(BOOLS[name])
             w.toggled.connect(self.changed)
@@ -117,7 +128,9 @@ class _Form(QWidget):
         for name, w in self._editors.items():
             v = getattr(value, name)
             w.blockSignals(True)
-            if isinstance(w, QCheckBox):
+            if isinstance(w, QLineEdit):
+                w.setText(str(v))
+            elif isinstance(w, QCheckBox):
                 w.setChecked(bool(v))
             elif isinstance(w, QComboBox):
                 w.setCurrentIndex(max(w.findData(v), 0))
@@ -128,7 +141,9 @@ class _Form(QWidget):
     def value(self):
         updates = {}
         for name, w in self._editors.items():
-            if isinstance(w, QCheckBox):
+            if isinstance(w, QLineEdit):
+                updates[name] = w.text()
+            elif isinstance(w, QCheckBox):
                 updates[name] = w.isChecked()
             elif isinstance(w, QComboBox):
                 updates[name] = w.currentData()

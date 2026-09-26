@@ -26,6 +26,15 @@ The video pass (fixation circle vs background, per gaze sample) is cached next t
 in `cwtool_video.csv`, so changing photometric parameters or the fixation weight does not re-read the video.
 Participant parameters (Lmin, Lmax, channel gains, gamma, weights, dynamics) are saved as JSON.
 
+**Calibration fit.** After setting the photometric calibration (Lmin, Lmax, gains, gamma) on the
+sequence, "Fit latency, scale and offset" estimates the participant's response latency, dilation and
+constriction time constants, pupil scale correction and offset. Applying it sets alignment to "fixed", so
+saving the parameters carries these values over to the participant's other recordings.
+
+Parameters are device-independent: each device reader supplies its pupil unit and scale, field of view
+(used as the Watson & Yellott field area) and sampling rate, so Lmin/Lmax are real luminances. Parameter
+files from earlier versions are converted when loaded.
+
 The **video preview** dock shows the scene frame at the cursor (click or drag on the plots): the scene
 circle used as background on Varjo videos, the gaze circle, and the values measured there. It uses the
 current video settings, so circle sizes can be checked before re-running the analysis.

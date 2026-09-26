@@ -51,7 +51,14 @@ class Parameters:
 
     # Pupil signal
     pupil_correction: float = 1.0        # participant multiplier on the device's pupil scale
-    align_mean: bool = True              # shift measured PD so its mean matches the expected PD
+    # How the measured PD is offset onto the expected PD:
+    #   "recording": median difference over the whole recording (1.x behaviour, ΔPD centred on zero)
+    #   "baseline":  median difference over the events named in baseline_events
+    #   "fixed":     pupil_offset, e.g. fitted on the participant's calibration sequence
+    #   "none":      no offset
+    alignment: str = "recording"
+    baseline_events: str = "Riposo, Rest, Baseline"
+    pupil_offset: float = 0.0            # mm, used by alignment "fixed"
     timelag: float = 0.0                 # s, subtracted from luminance timestamps
 
     # Dynamics
@@ -88,6 +95,8 @@ class Parameters:
         the recording's DeviceProfile (default: Varjo, the only device with version 1 files).
         """
         data = dict(data)
+        if "align_mean" in data:  # replaced by alignment
+            data.setdefault("alignment", "recording" if data.pop("align_mean") else "none")
         if data.get("version", 1) < 2:
             if profile is None:
                 from cwtool.devices.varjo import PROFILE as profile

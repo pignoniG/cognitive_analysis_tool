@@ -69,3 +69,19 @@ def test_video_preview_follows_cursor(app, varjo_folder):
     assert "frame 16" in w.preview.time_label.text()
     assert w.plots.cursors[0].value() == pytest.approx(1.65)
     w.close()
+
+
+def test_fit_button_applies_fitted_parameters(app, varjo_folder, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.Apply)
+    w = MainWindow()
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None)
+    assert not w.fit_button.isEnabled()          # needs the sequence overlay
+    w.sequence_check.setChecked(True)
+    w.sequence_start.setValue(0)
+    assert w.fit_button.isEnabled()
+    w.fit_dynamics_check.setChecked(False)
+    w.fit_button.click()
+    assert wait_for(app, lambda: w.params_panel.params().alignment == "fixed")
+    w.close()

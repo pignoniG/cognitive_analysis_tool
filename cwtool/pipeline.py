@@ -6,6 +6,7 @@ import csv
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from scipy.signal import savgol_filter
@@ -129,43 +130,88 @@ def residual_rms(x: np.ndarray) -> float:
     return float(np.sqrt(np.mean(x ** 2))) if len(x) else float("nan")
 
 
-def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
+@dataclass
+class Prepared:
+    """Signals on the uniform grid before alignment; shared by :func:`run` and the calibration fit."""
+
+    time: np.ndarray
+    fs: float
+    pupil: np.ndarray           # device units, smoothed, NaN in long gaps
+    pupil_fast: np.ndarray      # device units, lightly smoothed, NaN in long gaps
+    valid: np.ndarray           # False inside gaps longer than max_gap
+    luminance: np.ndarray       # cd/m²
+    scale: Optional[float]      # device units to mm, None for pixel data (fitted per recording)
+
+
+def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
     if rec.luminance_source != "display":
         raise NotImplementedError("Lux-sensor recordings (Pupil Core / Neon) are not supported yet")
     if len(video.time) < 2:
         raise ValueError("Video analysis has too few samples")
-
     profile = rec.profile
-    notes = []
     fs = params.analysis_rate or profile.native_rate
     raw = select_pupil(rec, params.eye)
+    scale = None
     if profile.pupil_scale is not None:
         scale = profile.pupil_scale * params.pupil_correction
         with np.errstate(invalid="ignore"):
             outside = (raw * scale < PUPIL_RANGE_MM[0]) | (raw * scale > PUPIL_RANGE_MM[1])
         raw = np.where(outside, np.nan, raw)
     time, pupil, valid = resample(rec.time, raw, fs, params.max_gap)
-    measured = savgol_filter(pupil, _odd(fs / 2 + 1), 2)
-    measured_raw = savgol_filter(pupil, _odd(fs / 4 + 1, 9), 6)
-    measured[~valid] = np.nan
-    measured_raw[~valid] = np.nan
+    smooth = savgol_filter(pupil, _odd(fs / 2 + 1), 2)
+    fast = savgol_filter(pupil, _odd(fs / 4 + 1, 9), 6)
+    smooth[~valid] = np.nan
+    fast[~valid] = np.nan
 
     order = np.argsort(video.time)
     lum_video = scene_luminance(video, params)[order]
     lum = np.interp(time, video.time[order] - params.timelag, lum_video)
+    return Prepared(time, fs, smooth, fast, valid, lum, scale)
 
-    expected = expected_pupil(lum, fs, params, profile.field_area)
 
-    if profile.pupil_scale is None:
+def event_mask(time: np.ndarray, events, labels: str) -> np.ndarray:
+    """Samples inside events whose label is in the comma-separated ``labels`` (case-insensitive)."""
+    wanted = {x.strip().lower() for x in labels.split(",") if x.strip()}
+    mask = np.zeros(len(time), bool)
+    for e in events:
+        if e.label.strip().lower() in wanted:
+            mask |= (time >= e.start) & (time <= e.end)
+    return mask
+
+
+def alignment_offset(expected, measured, valid, params: Parameters, time, events, notes) -> float:
+    """Offset (mm) added to the scaled measured PD, according to ``params.alignment``."""
+    mode = params.alignment
+    if mode == "none":
+        return 0.0
+    if mode == "fixed":
+        return params.pupil_offset
+    use = valid & np.isfinite(measured)
+    if mode == "baseline":
+        base = use & event_mask(time, events, params.baseline_events)
+        if base.any():
+            return float(np.median(expected[base] - measured[base]))
+        notes.append(f"No events labelled '{params.baseline_events}': aligned on the whole recording instead.")
+    return float(np.median(expected[use] - measured[use]))
+
+
+def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
+    prep = prepare(rec, video, params)
+    profile, fs, time, valid = rec.profile, prep.fs, prep.time, prep.valid
+    notes = []
+    expected = expected_pupil(prep.luminance, fs, params, profile.field_area)
+
+    scale = prep.scale
+    if scale is None:
         # Pixel units: scale so the mean measured PD equals the mean expected PD (2021 method).
-        scale = float(np.nanmean(expected[valid]) / np.nanmean(measured)) * params.pupil_correction
-    measured = measured * scale
-    measured_raw = measured_raw * scale
+        scale = float(np.nanmean(expected[valid]) / np.nanmean(prep.pupil)) * params.pupil_correction
+    measured = prep.pupil * scale
+    measured_raw = prep.pupil_fast * scale
     median = float(np.nanmedian(measured))
     if not PLAUSIBLE_MM[0] <= median <= PLAUSIBLE_MM[1]:
         notes.append(f"Median measured pupil is {median:.2f} mm, outside {PLAUSIBLE_MM[0]:g}–"
                      f"{PLAUSIBLE_MM[1]:g} mm: check the pupil scale correction.")
-    offset = float(np.nanmean(expected[valid]) - np.nanmean(measured)) if params.align_mean else 0.0
+    offset = alignment_offset(expected, measured, valid, params, time, rec.events, notes)
     measured += offset
     measured_raw += offset
 
@@ -179,7 +225,7 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
     ends = model.watson_yellott(np.array([params.l_min, params.l_max]), params.age, profile.field_area,
                                 params.eyes, params.reference_age)
 
-    return Result(time=time, luminance=lum, measured_raw=measured_raw, measured=measured,
+    return Result(time=time, luminance=prep.luminance, measured_raw=measured_raw, measured=measured,
                   expected=expected, cw_time=cw_time, cw=cw, cw_rms=residual_rms(cw),
                   cw_sd=float(np.nanstd(cw)) if good.any() else float("nan"),
                   expected_black=float(ends[0]), expected_white=float(ends[1]), offset=offset,
@@ -188,7 +234,7 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
 
 
 def event_means(result: Result, events) -> list[tuple[str, float, float, float]]:
-    """Mean ΔPD within each event: (label, start, end, mean)."""
+    """Mean ΔPD (mm) within each event: (label, start, end, mean)."""
     out = []
     for e in events:
         sel = (result.cw_time >= e.start) & (result.cw_time <= e.end)
@@ -216,18 +262,18 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path) ->
     p = out_dir / f"{rec.name}_cw.csv"
     with open(p, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["timestamp_unix", "timestamp_relative", "delta_pd_mm"])
+        w.writerow(["timestamp_unix", "timestamp_relative", "delta_pd_mm", "delta_pd_sd"])
         for t, v in zip(result.cw_time, result.cw):
-            w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}"])
+            w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}", f"{v / result.cw_sd:.6f}"])
     paths.append(p)
 
     if rec.events:
         p = out_dir / f"{rec.name}_events.csv"
         with open(p, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["event", "start_relative", "end_relative", "mean_delta_pd_mm"])
+            w.writerow(["event", "start_relative", "end_relative", "mean_delta_pd_mm", "mean_delta_pd_sd"])
             for label, s, e, m in event_means(result, rec.events):
-                w.writerow([label, f"{s:.3f}", f"{e:.3f}", f"{m:.6f}"])
+                w.writerow([label, f"{s:.3f}", f"{e:.3f}", f"{m:.6f}", f"{m / result.cw_sd:.6f}"])
         paths.append(p)
 
     p = out_dir / f"{rec.name}_params.json"

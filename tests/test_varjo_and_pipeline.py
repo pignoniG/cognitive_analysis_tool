@@ -48,7 +48,7 @@ def test_pipeline_zero_cw_when_pupil_follows_model(tmp_path):
 
 
 def test_pipeline_detects_added_dilation(tmp_path):
-    params = Parameters(align_mean=False)
+    params = Parameters(alignment="none")
     folder = write_varjo_recording(tmp_path / "rec", [128] * 6,
                                    pupil_mm=lambda t: 2.0 + (0.25 if 2 <= t < 4 else 0.0))
     rec = devices.load(folder)
@@ -102,8 +102,8 @@ def test_pupil_range_and_scale_warning(tmp_path):
                                    pupil_mm=lambda t: 6.0 if 1 <= t < 1.2 else 2.0)  # 12 mm spike
     rec = devices.load(folder)
     video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec))
-    r = pipeline.run(rec, video, Parameters(align_mean=False))
+    r = pipeline.run(rec, video, Parameters(alignment="none"))
     assert r.pupil_scale == 2.0
     assert np.nanmax(r.measured) < 4.5 and not r.warnings
-    r = pipeline.run(rec, video, Parameters(align_mean=False, pupil_correction=0.4))
+    r = pipeline.run(rec, video, Parameters(alignment="none", pupil_correction=0.4))
     assert r.warnings and "pupil scale" in r.warnings[0]

@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QCheckBox, QDockWidget, QDoubleSpinBox, QFileDial
                                QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget)
 
 from cwtool import __version__, calibration, devices, pipeline
+from cwtool.fit import fit_calibration
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
@@ -117,6 +118,14 @@ class MainWindow(QMainWindow):
         cal_layout.addRow(self.sequence_check)
         cal_layout.addRow("Start", self.sequence_start)
         cal_layout.addRow("ΔPD RMS in sequence", self.sequence_rms)
+        self.fit_dynamics_check = QCheckBox("Include dilation/constriction time constants")
+        self.fit_dynamics_check.setChecked(True)
+        self.fit_button = QPushButton("Fit latency, scale and offset")
+        self.fit_button.setToolTip("Fits the pupil parameters on the sequence, given the current photometric "
+                                   "calibration. Adjust Lmin, Lmax, gains and gamma first.")
+        self.fit_button.clicked.connect(self.fit_sequence)
+        cal_layout.addRow(self.fit_dynamics_check)
+        cal_layout.addRow(self.fit_button)
         side_layout.addWidget(cal_box)
 
         self.params_panel = ParameterPanel()
@@ -163,6 +172,7 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(busy)
         self.open_action.setEnabled(not busy)
         self.export_action.setEnabled(self.result is not None)
+        self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
         if self.result is None:
             self.summary_label.setText("Open a recording to start." if not has_rec else "")
         else:
@@ -300,6 +310,30 @@ class MainWindow(QMainWindow):
     def _sequence_changed(self) -> None:
         self.plots.set_sequence(self.sequence_check.isChecked(), self.sequence_start.value())
         self._update_sequence_rms()
+        self._update_state()
+
+    def fit_sequence(self) -> None:
+        rec, video, params = self.recording, self.video, self.params_panel.params()
+        start, dynamics = self.sequence_start.value(), self.fit_dynamics_check.isChecked()
+
+        def work(progress, cancelled):
+            return fit_calibration(rec, video, params, start, fit_dynamics=dynamics, cancelled=cancelled)
+
+        self._start_task(work, self._fit_done, "Fitting on the calibration sequence…")
+
+    def _fit_done(self, fit) -> None:
+        dyn = (f"<br>dilation τ {fit.attack:.2f} s, constriction τ {fit.release:.2f} s"
+               if fit.params.dynamics else "")
+        notes = "".join(f"<br><span style='color:#c00'>⚠ {n}</span>" for n in fit.notes)
+        box = QMessageBox(QMessageBox.Question, "Calibration fit",
+                          f"<b>ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b><br><br>"
+                          f"latency {fit.delay:.2f} s{dyn}<br>"
+                          f"pupil scale correction {fit.pupil_correction:.3f}, offset {fit.pupil_offset:+.3f} mm"
+                          f"{notes}<br><br>Apply? Alignment will be set to 'fixed' so these values carry over "
+                          f"to this participant's other recordings.",
+                          QMessageBox.Apply | QMessageBox.Cancel, self)
+        if box.exec() == QMessageBox.Apply:
+            self.params_panel.set_params(fit.params)
 
     def _sequence_dragged(self, start: float) -> None:
         self.sequence_start.blockSignals(True)
