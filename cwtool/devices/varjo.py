@@ -16,10 +16,20 @@ from pathlib import Path
 
 import numpy as np
 
-from cwtool.recording import Event, Recording
+from cwtool.recording import DeviceProfile, Event, Recording
 
 NAME = "varjo"
-SAMPLE_RATE = 100.0
+
+PROFILE = DeviceProfile(
+    name=NAME,
+    pupil_unit="mm",
+    # Varjo Base reports the pupil radius in its diameter columns (confirmed by Varjo by email).
+    pupil_scale=2.0,
+    luminance_source="display",
+    field_of_view=(120.0, 105.0),  # XR-4 nominal
+    circular_scene=True,
+    native_rate=100.0,
+)
 
 COL_EPOCH_NS = 1
 COL_RELATIVE_NS = 2  # scene video clock
@@ -91,17 +101,14 @@ def load(folder: Path, gaze_eye: str = "left") -> Recording:
 
     return Recording(
         name=folder.name,
-        device=NAME,
+        profile=PROFILE,
         folder=folder,
         time=time,
         epoch_start=epoch_start,
         pupil_left=pupil(COL_LEFT_PUPIL_MM),
         pupil_right=pupil(COL_RIGHT_PUPIL_MM),
         gaze=gaze,
-        sample_rate=SAMPLE_RATE,
-        luminance_source="display",
         scene_video=_find(folder, "varjo_capture_"),
-        circular_scene=True,
         events=read_event_log(folder, epoch_start),
     )
 

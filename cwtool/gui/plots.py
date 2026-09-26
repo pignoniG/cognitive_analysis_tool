@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Signal
 
 from cwtool import calibration
-from cwtool.pipeline import Result
+from cwtool.pipeline import Result, residual_rms
 
 pg.setConfigOptions(background="w", foreground="k", antialias=True)
 
@@ -37,8 +36,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.cw.setLabel("bottom", "Time (s)")
         self.pupil.addLegend(offset=(-10, 10))
 
-        self.raw_curve = self.pupil.plot(pen=pg.mkPen((160, 160, 160), width=1), name="Measured (raw)")
-        self.measured_curve = self.pupil.plot(pen=pg.mkPen("k", width=1.5), name="Measured")
+        self.raw_curve = self.pupil.plot(pen=pg.mkPen((160, 160, 160), width=1), name="Measured (raw)", connect="finite")
+        self.measured_curve = self.pupil.plot(pen=pg.mkPen("k", width=1.5), name="Measured", connect="finite")
         self.expected_curve = self.pupil.plot(pen=pg.mkPen((31, 119, 180), width=1.5), name="Expected")
         dash = pg.mkPen((31, 119, 180), width=1, style=pg.QtCore.Qt.DashLine)
         self.black_line = pg.InfiniteLine(angle=0, pen=dash, label="black point",
@@ -48,7 +47,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.pupil.addItem(self.black_line)
         self.pupil.addItem(self.white_line)
 
-        self.cw_curve = self.cw.plot(pen=pg.mkPen((214, 39, 40), width=1.5))
+        self.cw_curve = self.cw.plot(pen=pg.mkPen((214, 39, 40), width=1.5), connect="finite")
         self.cw.addItem(pg.InfiniteLine(angle=0, pos=0, pen=pg.mkPen((120, 120, 120), width=1)))
 
         self._event_items: list = []
@@ -157,8 +156,6 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
 
 def rms_in(result: Result, start: float, end: float) -> float:
+    """Residual RMS of ΔPD between ``start`` and ``end``."""
     sel = (result.cw_time >= start) & (result.cw_time <= end)
-    if not sel.any():
-        return float("nan")
-    d = result.cw[sel]
-    return float(np.sqrt(np.mean((d - d.mean()) ** 2)))
+    return residual_rms(result.cw[sel])

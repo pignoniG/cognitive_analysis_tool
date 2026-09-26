@@ -12,7 +12,8 @@ from conftest import write_varjo_recording
 def test_varjo_reader(varjo_folder):
     assert devices.detect(varjo_folder) == "varjo"
     rec = devices.load(varjo_folder)
-    assert rec.sample_rate == 100
+    assert rec.profile.native_rate == 100
+    assert rec.measured_rate == pytest.approx(100)
     assert len(rec.time) == 400
     assert rec.time[1] == pytest.approx(0.01)
     assert rec.epoch_start == pytest.approx(1_700_000_000)

@@ -167,10 +167,11 @@ class MainWindow(QMainWindow):
             self.summary_label.setText("Open a recording to start." if not has_rec else "")
         else:
             r = self.result
+            gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
             self.summary_label.setText(
-                f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp;&nbsp; "
+                f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm &nbsp;&nbsp; "
                 f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
-                f"measured offset {r.offset:+.2f} mm")
+                f"offset {r.offset:+.2f} mm &nbsp;&nbsp; {r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}")
         name = self._params_path.name if self._params_path else "unsaved parameters"
         rec = f" — {self.recording.name}" if has_rec else ""
         self.setWindowTitle(f"Cognitive Workload Tool {__version__}{rec} ({name})")
@@ -201,7 +202,8 @@ class MainWindow(QMainWindow):
         duration = rec.time[-1] - rec.time[0] if len(rec.time) else 0
         video = rec.scene_video.name if rec.scene_video else "none"
         self.recording_label.setText(
-            f"<b>{rec.name}</b><br>{rec.device}, {len(rec.time)} samples, {duration:.1f} s"
+            f"<b>{rec.name}</b><br>{rec.device}, {len(rec.time)} samples, {duration:.1f} s, "
+            f"{rec.measured_rate:.0f} Hz"
             f"<br>video: {video}<br>events: {len(rec.events)}")
         self.plots.clear_result()
         self.plots.show_events(rec.events)

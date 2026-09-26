@@ -40,6 +40,10 @@ class Parameters:
     gamma: float = 2.2
     fixation_weight: float = 0.65        # background weight is 1 - fixation_weight
 
+    # Sampling
+    analysis_rate: float = 100.0         # Hz, uniform analysis grid; 0 = device's native rate
+    max_gap: float = 0.5                 # s, longer gaps (not blinks) are left out of ΔPD
+
     # Pupil signal
     pupil_scale: float = 2.0             # measured diameter multiplier
     align_mean: bool = True              # shift measured PD so its mean matches the expected PD

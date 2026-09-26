@@ -38,7 +38,8 @@ def main(argv: list[str] | None = None) -> int:
         video.save(rec.folder, settings, rec.scene_video)
 
     result = pipeline.run(rec, video, params)
-    print(f"ΔPD RMS: {result.cw_rms:.3f} mm")
+    print(f"ΔPD RMS: {result.cw_rms:.3f} mm, SD: {result.cw_sd:.3f} mm "
+          f"({result.measured_rate:.0f} Hz resampled to {result.rate:.0f} Hz, {result.gap_fraction:.1%} in gaps)")
     out = args.out or rec.folder / "cwtool_export"
     for p in pipeline.export(result, rec, params, out):
         print(f"wrote {p}")

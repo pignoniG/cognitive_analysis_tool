@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,17 +18,21 @@ from cwtool.video import VideoResult
 
 @dataclass
 class Result:
-    time: np.ndarray            # s, relative, pupil sample clock
+    time: np.ndarray            # s, relative, uniform analysis grid
     luminance: np.ndarray       # cd/m², weighted fixation/background
-    measured_raw: np.ndarray    # mm, lightly smoothed, scaled and aligned
-    measured: np.ndarray        # mm, smoothed, scaled and aligned
+    measured_raw: np.ndarray    # mm, lightly smoothed, scaled and aligned; NaN in long gaps
+    measured: np.ndarray        # mm, smoothed, scaled and aligned; NaN in long gaps
     expected: np.ndarray        # mm, Watson & Yellott with dynamics
     cw_time: np.ndarray         # s, ΔPD window centres
-    cw: np.ndarray              # mm, ΔPD = measured - expected, smoothed
-    cw_rms: float               # mm, RMS of ΔPD about its mean
+    cw: np.ndarray              # mm, ΔPD = measured - expected, smoothed; NaN in long gaps
+    cw_rms: float               # mm, residual RMS of ΔPD (about zero)
+    cw_sd: float                # mm, standard deviation of ΔPD (unit for normalised ΔPD)
     expected_black: float       # mm, expected PD at the panel black point
     expected_white: float       # mm, expected PD at the panel white point
     offset: float               # mm, shift applied to the measured PD
+    rate: float                 # Hz, analysis rate
+    measured_rate: float        # Hz, rate estimated from the recording's timestamps
+    gap_fraction: float         # share of the grid inside gaps longer than max_gap
 
 
 def _odd(n: int, minimum: int = 3) -> int:
@@ -47,12 +52,37 @@ def interp_nan(x: np.ndarray) -> np.ndarray:
 
 
 def select_pupil(rec: Recording, eye: str) -> np.ndarray:
-    left, right = interp_nan(rec.pupil_left), interp_nan(rec.pupil_right)
+    """Pupil in device units on the recording's own clock; NaN where invalid.
+    "both" averages the eyes, falling back to one eye where the other is missing."""
     if eye == "left":
-        return left
+        return np.asarray(rec.pupil_left, dtype=float)
     if eye == "right":
-        return right
-    return (left + right) / 2
+        return np.asarray(rec.pupil_right, dtype=float)
+    pair = np.vstack([rec.pupil_left, rec.pupil_right]).astype(float)
+    with np.errstate(all="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return np.nanmean(pair, axis=0)
+
+
+def resample(time: np.ndarray, values: np.ndarray, rate: float, max_gap: float):
+    """Put ``values`` on a uniform grid at ``rate`` Hz spanning the valid samples.
+
+    Returns (grid, filled, valid): ``filled`` is linearly interpolated everywhere
+    (so filters can run), ``valid`` is False inside gaps longer than ``max_gap`` s.
+    """
+    ok = np.isfinite(values) & np.isfinite(time)
+    t, v = np.asarray(time)[ok], np.asarray(values)[ok]
+    order = np.argsort(t)
+    t, v = t[order], v[order]
+    if len(t) < 2:
+        raise ValueError("signal has fewer than two valid samples")
+    grid = np.arange(t[0], t[-1] + 0.5 / rate, 1 / rate)
+    filled = np.interp(grid, t, v)
+    nxt = np.clip(np.searchsorted(t, grid), 1, len(t) - 1)
+    span = t[nxt] - t[nxt - 1]
+    exact = np.isclose(grid, t[nxt]) | np.isclose(grid, t[nxt - 1])
+    valid = exact | (span <= max_gap)
+    return grid, filled, valid
 
 
 def scene_luminance(video: VideoResult, params: Parameters) -> np.ndarray:
@@ -73,13 +103,22 @@ def expected_pupil(lum: np.ndarray, fs: float, params: Parameters) -> np.ndarray
 
 
 def windowed_difference(time, a, b, window_n: int):
-    """Mean of (a - b) over consecutive windows of ``window_n`` samples."""
+    """Mean of (a - b) over consecutive windows of ``window_n`` samples, ignoring NaN.
+    Windows without valid samples are NaN."""
     n = len(a) // window_n
     if n == 0:
         return np.empty(0), np.empty(0)
     d = (np.asarray(a) - np.asarray(b))[: n * window_n].reshape(n, window_n)
     t = np.asarray(time)[: n * window_n].reshape(n, window_n)
-    return t.mean(axis=1), np.nanmean(d, axis=1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return t.mean(axis=1), np.nanmean(d, axis=1)
+
+
+def residual_rms(x: np.ndarray) -> float:
+    x = np.asarray(x, dtype=float)
+    x = x[np.isfinite(x)]
+    return float(np.sqrt(np.mean(x ** 2))) if len(x) else float("nan")
 
 
 def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
@@ -88,35 +127,40 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
     if len(video.time) < 2:
         raise ValueError("Video analysis has too few samples")
 
-    fs = rec.sample_rate
-    pupil = select_pupil(rec, params.eye)
+    fs = params.analysis_rate or rec.profile.native_rate
+    time, pupil, valid = resample(rec.time, select_pupil(rec, params.eye), fs, params.max_gap)
     measured = savgol_filter(pupil, _odd(fs / 2 + 1), 2)
     measured_raw = savgol_filter(pupil, _odd(fs / 4 + 1, 9), 6)
+    measured[~valid] = np.nan
+    measured_raw[~valid] = np.nan
 
     order = np.argsort(video.time)
     lum_video = scene_luminance(video, params)[order]
-    lum = np.interp(rec.time, video.time[order] - params.timelag, lum_video)
+    lum = np.interp(time, video.time[order] - params.timelag, lum_video)
 
     expected = expected_pupil(lum, fs, params)
 
     measured = measured * params.pupil_scale
     measured_raw = measured_raw * params.pupil_scale
-    offset = float(np.mean(expected) - np.mean(measured)) if params.align_mean else 0.0
+    offset = float(np.nanmean(expected[valid]) - np.nanmean(measured)) if params.align_mean else 0.0
     measured += offset
     measured_raw += offset
 
     window_n = max(int(round(params.cw_window * fs)), 1)
-    cw_time, cw = windowed_difference(rec.time, measured, expected, window_n)
-    if len(cw) >= 3:
-        cw = savgol_filter(interp_nan(cw), min(_odd(params.cw_smoothing * 2), _odd(len(cw) - 2)), 1)
-    cw_rms = float(np.sqrt(np.mean((cw - cw.mean()) ** 2))) if len(cw) else float("nan")
+    cw_time, cw = windowed_difference(time, measured, expected, window_n)
+    good = np.isfinite(cw)
+    if good.sum() >= 3:
+        smooth = savgol_filter(interp_nan(cw), min(_odd(params.cw_smoothing * 2), _odd(len(cw) - 2)), 1)
+        cw = np.where(good, smooth, np.nan)
 
     ends = model.watson_yellott(np.array([params.l_min, params.l_max]), params.age, params.field,
                                 params.eyes, params.reference_age)
 
-    return Result(time=rec.time, luminance=lum, measured_raw=measured_raw, measured=measured,
-                  expected=expected, cw_time=cw_time, cw=cw, cw_rms=cw_rms,
-                  expected_black=float(ends[0]), expected_white=float(ends[1]), offset=offset)
+    return Result(time=time, luminance=lum, measured_raw=measured_raw, measured=measured,
+                  expected=expected, cw_time=cw_time, cw=cw, cw_rms=residual_rms(cw),
+                  cw_sd=float(np.nanstd(cw)) if good.any() else float("nan"),
+                  expected_black=float(ends[0]), expected_white=float(ends[1]), offset=offset,
+                  rate=fs, measured_rate=rec.measured_rate, gap_fraction=float(1 - valid.mean()))
 
 
 def event_means(result: Result, events) -> list[tuple[str, float, float, float]]:
@@ -124,7 +168,9 @@ def event_means(result: Result, events) -> list[tuple[str, float, float, float]]
     out = []
     for e in events:
         sel = (result.cw_time >= e.start) & (result.cw_time <= e.end)
-        out.append((e.label, e.start, e.end, float(np.mean(result.cw[sel])) if sel.any() else float("nan")))
+        vals = result.cw[sel]
+        vals = vals[np.isfinite(vals)]
+        out.append((e.label, e.start, e.end, float(vals.mean()) if len(vals) else float("nan")))
     return out
 
 

@@ -27,6 +27,8 @@ NUMBERS = {
     "delay": ("Delay (s)", 0, 5, 0.05, 2, "Pupil response latency"),
     "attack": ("Dilation τ (s)", 0.01, 60, 0.5, 2, "Attack time constant"),
     "release": ("Constriction τ (s)", 0.01, 60, 0.1, 2, "Release time constant"),
+    "analysis_rate": ("Analysis rate (Hz)", 0, 1000, 10, 0, "Uniform resampling rate; 0 uses the device's native rate"),
+    "max_gap": ("Max gap (s)", 0, 60, 0.1, 2, "Gaps longer than this are excluded from ΔPD; shorter ones are interpolated"),
     "cw_window": ("ΔPD window (s)", 0.01, 10, 0.05, 2, "Averaging window for ΔPD"),
     "field_radius": ("Scene circle radius", 0.05, 1, 0.05, 2, "Fraction of half the frame height (circular videos)"),
     "fixation_ratio": ("Fixation ratio", 0.01, 1, 0.005, 3, "Gaze circle radius relative to the scene circle"),
@@ -48,7 +50,7 @@ CHOICES = {
 GROUPS = [
     ("Participant", ["age", "reference_age", "field", "eyes", "eye"]),
     ("Photometric calibration", ["l_min", "l_max", "gain_r", "gain_g", "gain_b", "gamma", "fixation_weight"]),
-    ("Pupil signal", ["pupil_scale", "align_mean", "timelag"]),
+    ("Pupil signal", ["pupil_scale", "align_mean", "timelag", "analysis_rate", "max_gap"]),
     ("Dynamics", ["delay", "dynamics", "attack", "release"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]
