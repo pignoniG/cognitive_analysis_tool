@@ -4,6 +4,9 @@ Inconsistencies and suspected errors found while porting the Varjo build (`devel
 `pupil_code/`) to the 2.0 `cwtool` package, and between the code and the paper draft
 ("Toward Reliable Pupillometry in Extended Reality Environments", second draft).
 
+The legacy code has since been removed from `v2.0`; file references such as `lum_analysis.py` or `data_tools.py`
+point to `develop-varjo`.
+
 Each issue says where it is, why it matters, what 2.0 currently does and what is proposed.
 **Status** is one of: *open* (needs a decision), *kept* (2.0 reproduces the legacy behaviour until decided),
 *fixed in 2.0*, *needs data* (needs a sample recording to settle).
@@ -197,16 +200,30 @@ them rather than describing the headset or the participant.
   analysis, so events shift by hours when analysed elsewhere. Events are also assumed to be back-to-back
   (only the first start time is read; the rest are accumulated durations).
 - **Proposal:** store event times with a zone or as unix time, and read each event's own start.
-- **Status:** kept, open.
+- **2.0:** `tools/event_logger.py` now writes times with the UTC offset, which the reader handles. Logs made with
+  the old logger are still read in the local zone, and events are still assumed back-to-back.
+- **Status:** partly fixed.
 
 ### 23. Lux sensor conversion constants are undocumented
 - **Where:** `data_tools.readLux` (`1.706061 * x + 0.66935`, then `/ 2.2`, time × 0.001, one file per local hour).
 - **Problem:** needed for Pupil Core and Neon. The origin of the constants (sensor calibration? lux → cd/m²?)
   is not documented, and hour-named files depend on the logger's local time.
-- **Proposal:** document or re-derive while porting the Pupil readers.
+- **Proposal:** document or re-derive while porting the Pupil readers (the legacy reader is on `develop-varjo`;
+  the logger that writes these files is now `tools/lux_logger.py`).
 - **Status:** needs data.
 
 ---
+
+### 26. Saved legacy settings differ from the code defaults
+- **Where:** the committed `settings.pkl` (last used settings of the legacy app) vs the defaults in `analysisTool.py`.
+- **Values:** scene circle `maskSize` 0.8 (default 0.5), `pupilFiltering` 60 (default 1), `pupilDynamics` on
+  (default off), `cameraLum_min` 0 / `cameraLum_max` 180 (defaults 0.02 / 200), age 33.
+- **Why it matters:** results depend on which set was used, and the paper should report the values.
+  `pupilFiltering` 60 means a ΔPD Savitzky-Golay window of 121 windows of 0.2 s, i.e. about 24 s of smoothing,
+  which limits the time resolution of ΔPD far more than the paper suggests.
+- **2.0:** scene circle default changed to 0.8 (the old 0.5 covered only half of the visible Varjo disc, which the
+  video preview makes obvious). The other defaults are unchanged; `cw_smoothing` is the equivalent of `pupilFiltering`.
+- **Status:** open.
 
 ## D. Paper text
 

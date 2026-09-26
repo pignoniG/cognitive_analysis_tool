@@ -26,8 +26,17 @@ The video pass (fixation circle vs background, per gaze sample) is cached next t
 in `cwtool_video.csv`, so changing photometric parameters or the fixation weight does not re-read the video.
 Participant parameters (Lmin, Lmax, channel gains, gamma, weights, dynamics) are saved as JSON.
 
-The legacy macOS application (`analysisTool.py`, `pupil_code/`) is still in the tree and will be removed
-now that the new GUI replaces it.
+The **video preview** dock shows the scene frame at the cursor (click or drag on the plots): the scene
+circle used as background on Varjo videos, the gaze circle, and the values measured there. It uses the
+current video settings, so circle sizes can be checked before re-running the analysis.
+
+Standalone scripts in `tools/`:
+- `lux_logger.py`: log the lux sensor over USB serial to hourly CSVs (`pip install -e ".[logger]"`).
+- `event_logger.py`: time the phases of an experiment from a protocol file (see `example_protocol.csv`)
+  and write the `event_log` CSV the analysis reads.
+
+The legacy macOS application (`analysisTool.py`, `pupil_code/`) has been removed from this branch;
+it is still on `develop-varjo`.
 
 ## The following has not been updated
 
