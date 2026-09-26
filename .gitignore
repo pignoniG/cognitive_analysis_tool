@@ -121,10 +121,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-# macOS
-.DS_Store
-
-# cwtool analysis caches written next to recordings
-cwtool_video.csv
-cwtool_video.json
