@@ -146,7 +146,7 @@ class VideoPreview(QWidget):
         field_r, fix_r = radii(analysis_h, s)
 
         disp_w = min(DISPLAY_WIDTH, frame_bgr.shape[1])
-        disp = prepare_frame(frame_bgr, replace(s, analysis_width=disp_w))
+        disp = prepare_frame(frame_bgr, replace(s, analysis_width=disp_w), smooth=True)
         h, w = disp.shape[:2]
         k = h / analysis_h
         thick = max(2, w // 300)

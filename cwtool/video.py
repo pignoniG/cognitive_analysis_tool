@@ -28,7 +28,7 @@ from cwtool.params import VideoSettings
 
 CACHE_CSV = "cwtool_video.csv"
 CACHE_JSON = "cwtool_video.json"
-CACHE_FORMAT = 2
+CACHE_FORMAT = 3
 
 GAMMA_GRID = np.round(np.arange(1.4, 3.0001, 0.2), 2)   # γ values the linear means are stored for
 GAMMA_RANGE = (float(GAMMA_GRID[0]), float(GAMMA_GRID[-1]))
@@ -122,11 +122,19 @@ def frame_index(t, fps: float):
     return (np.asarray(t) * fps).astype(int)
 
 
-def prepare_frame(frame_bgr: np.ndarray, settings: VideoSettings) -> np.ndarray:
-    """Downscale a decoded frame to the analysis width and convert to RGB."""
-    scale = settings.analysis_width / frame_bgr.shape[1]
-    size = (settings.analysis_width, max(int(frame_bgr.shape[0] * scale), 1))
-    small = cv2.resize(frame_bgr, size, interpolation=cv2.INTER_AREA)
+def analysis_height(width: int, height: int, analysis_width: int) -> int:
+    return max(int(height * analysis_width / width), 1)
+
+
+def prepare_frame(frame_bgr: np.ndarray, settings: VideoSettings, smooth: bool = False) -> np.ndarray:
+    """Downscale a decoded frame to the analysis width and convert to RGB.
+
+    Analysis uses nearest-neighbour sampling: it keeps real pixel values (blending
+    neighbours would average code values before linearisation) and is much faster.
+    ``smooth`` uses area averaging instead, for display.
+    """
+    size = (settings.analysis_width, analysis_height(frame_bgr.shape[1], frame_bgr.shape[0], settings.analysis_width))
+    small = cv2.resize(frame_bgr, size, interpolation=cv2.INTER_AREA if smooth else cv2.INTER_NEAREST)
     return cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
 
@@ -152,7 +160,7 @@ def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSet
         mask = field_mask((h, w), settings)
     frame_rgb = np.ascontiguousarray(frame_rgb, dtype=np.uint8)
 
-    field_hist = _histograms(frame_rgb[mask > 0])
+    field_hist = np.stack([cv2.calcHist([frame_rgb], [c], mask, [256], [0, 256]).ravel() for c in range(3)])
     bg_rgb_all, bg_lin_all = _means(field_hist)
 
     m = len(gaze_px)
@@ -175,59 +183,109 @@ def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSet
     return fix_rgb, bg_rgb, fix_lin, bg_lin
 
 
-def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: VideoSettings,
-                  progress: Optional[Callable[[float], None]] = None,
-                  cancelled: Optional[Callable[[], bool]] = None) -> VideoResult:
-    """Analyse ``video`` at each gaze sample. ``time`` is on the video clock (s),
-    ``gaze`` is normalised (N, 2) with NaN for invalid samples, which are skipped."""
+def video_info(video: Path) -> tuple[float, int]:
+    """Frame rate and frame count."""
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
         raise IOError(f"Cannot open video {video}")
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps, n = cap.get(cv2.CAP_PROP_FPS), int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
     if fps <= 0:
         raise IOError(f"Video {video} reports no frame rate")
+    return fps, n
 
+
+def _frames_pyav(video: Path, wanted: set, last: int, width: int):
+    """Decode with PyAV (threaded), converting only wanted frames, scaled to ``width``
+    and to RGB in one step by FFmpeg (nearest-neighbour)."""
+    import av
+
+    with av.open(str(video)) as container:
+        stream = container.streams.video[0]
+        stream.thread_type = "AUTO"
+        for n, frame in enumerate(container.decode(stream)):
+            if n > last:
+                break
+            if n in wanted:
+                h = analysis_height(frame.width, frame.height, width)
+                yield n, frame.to_ndarray(width=width, height=h, format="rgb24", interpolation="POINT")
+            else:
+                yield n, None
+
+
+def _frames_opencv(video: Path, wanted: set, last: int, settings: VideoSettings):
+    """Decode with OpenCV, converting only wanted frames."""
+    cap = cv2.VideoCapture(str(video))
+    try:
+        for n in range(last + 1):
+            if not cap.grab():
+                break
+            if n in wanted:
+                ok, frame = cap.retrieve()
+                yield n, prepare_frame(frame, settings) if ok else None
+            else:
+                yield n, None
+    finally:
+        cap.release()
+
+
+def decoder_backend() -> str:
+    try:
+        import av  # noqa: F401
+        return "pyav"
+    except ImportError:
+        return "opencv"
+
+
+def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: VideoSettings,
+                  progress: Optional[Callable[[float], None]] = None,
+                  cancelled: Optional[Callable[[], bool]] = None,
+                  backend: str = "auto") -> VideoResult:
+    """Analyse ``video`` at each gaze sample. ``time`` is on the video clock (s),
+    ``gaze`` is normalised (N, 2) with NaN for invalid samples, which are skipped.
+
+    Every frame is decoded (compressed video needs it), but only frames with gaze samples
+    are converted and analysed. ``backend`` is "pyav" (fast, threaded), "opencv", or
+    "auto" (PyAV when installed).
+    """
+    fps, _ = video_info(video)
     valid = np.isfinite(gaze).all(axis=1) & np.isfinite(time)
     idx = np.flatnonzero(valid)
     frame_of = frame_index(time[idx], fps)
+    keep = frame_of >= 0
+    idx, frame_of = idx[keep], frame_of[keep]
     order = np.argsort(frame_of, kind="stable")
     idx, frame_of = idx[order], frame_of[order]
+    if not len(idx):
+        return VideoResult.empty()
+
+    frames, starts = np.unique(frame_of, return_index=True)
+    ends = np.r_[starts[1:], len(frame_of)]
+    samples_of = {int(f): idx[a:b] for f, a, b in zip(frames, starts, ends)}
+    last = int(frames[-1])
+
+    backend = decoder_backend() if backend == "auto" else backend
+    source = (_frames_pyav(video, samples_of.keys(), last, settings.analysis_width) if backend == "pyav"
+              else _frames_opencv(video, samples_of.keys(), last, settings))
 
     times, fixes, bgs, fix_lins, bg_lins = [], [], [], [], []
     mask = None
-    pos, frame_no = 0, 0
-    last_frame = frame_of[-1] if len(frame_of) else -1
-    while pos < len(idx) and frame_no <= last_frame:
-        ok, frame = cap.read()
-        if not ok:
-            break
-        if frame_of[pos] == frame_no:
-            end = pos
-            while end < len(idx) and frame_of[end] == frame_no:
-                end += 1
-            small = prepare_frame(frame, settings)
+    for n, small in source:
+        if small is not None:
             h, w = small.shape[:2]
             if mask is None:
                 mask = field_mask((h, w), settings)
-            sample = idx[pos:end]
-            gaze_px = gaze[sample] * [w, h]
-            fix, bg, fix_lin, bg_lin = analyse_frame(small, gaze_px, settings, mask)
+            sample = samples_of[n]
+            fix, bg, fix_lin, bg_lin = analyse_frame(small, gaze[sample] * [w, h], settings, mask)
             times.append(time[sample])
             fixes.append(fix)
             bgs.append(bg)
             fix_lins.append(fix_lin)
             bg_lins.append(bg_lin)
-            pos = end
-        # Skip samples pointing at frames already passed (should not happen with sorted input).
-        while pos < len(idx) and frame_of[pos] < frame_no:
-            pos += 1
-        frame_no += 1
-        if progress and n_frames:
-            progress(min(frame_no / max(last_frame + 1, 1), 1.0))
+        if progress:
+            progress(min((n + 1) / (last + 1), 1.0))
         if cancelled and cancelled():
             break
-    cap.release()
 
     if not times:
         return VideoResult.empty()

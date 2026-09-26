@@ -22,7 +22,8 @@ For manual calibration, enable the calibration sequence overlay and drag its sta
 sequence; the panel shows ΔPD RMS within the sequence. Save the parameters per participant and load
 them for that participant's other recordings.
 
-The video pass (fixation circle vs background, per gaze sample) is cached next to the recording
+The video pass (fixation circle vs background, per gaze sample) decodes with PyAV (threaded, scaled
+and converted to RGB by FFmpeg in one step), falling back to OpenCV, and is cached next to the recording
 in `cwtool_video.csv`, so changing photometric parameters or the fixation weight does not re-read the video.
 Participant parameters (Lmin, Lmax, channel gains, gamma, weights, dynamics) are saved as JSON.
 

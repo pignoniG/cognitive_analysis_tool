@@ -14,6 +14,7 @@ dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
     "opencv-python>=4.8",
+    "av>=12",          # fast threaded decoding; OpenCV is used when it is missing
 ]
 
 [project.optional-dependencies]

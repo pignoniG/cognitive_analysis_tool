@@ -127,3 +127,18 @@ def test_background_excludes_gaze_circle_by_default():
     assert s.background_excludes_fixation
     fix, bg, *_ = analyse_frame(frame, np.array([[50, 50]]), s)
     assert fix[0][0] > 100 and bg[0][0] == pytest.approx(0, abs=1)  # the whole patch is inside the disc
+
+
+@pytest.mark.parametrize("backend", ["pyav", "opencv"])
+def test_backends_agree(varjo_folder, backend):
+    if backend == "pyav":
+        pytest.importorskip("av")
+    from cwtool import devices
+    rec = devices.load(varjo_folder)
+    s = VideoSettings().for_recording(rec)
+    ref = analyse_video(rec.scene_video, rec.time, rec.gaze, s, backend="opencv")
+    res = analyse_video(rec.scene_video, rec.time, rec.gaze, s, backend=backend)
+    assert np.array_equal(res.time, ref.time)
+    assert np.allclose(res.fixation_rgb, ref.fixation_rgb, atol=3)   # colour conversion may differ by a code
+    assert np.allclose(res.background_lin, ref.background_lin, atol=0.02)
+
