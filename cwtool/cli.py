@@ -21,8 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--plot", action="store_true", help="save a PDF plot (needs matplotlib)")
     args = ap.parse_args(argv)
 
-    params = Parameters.load(args.params) if args.params else Parameters()
     rec = devices.load(args.recording, args.device)
+    params = Parameters.load(args.params, rec.profile) if args.params else Parameters()
     settings = VideoSettings().for_recording(rec)
     print(f"{rec.device} recording {rec.name}: {len(rec.time)} samples, {rec.time[-1] - rec.time[0]:.1f} s")
 
@@ -40,6 +40,8 @@ def main(argv: list[str] | None = None) -> int:
     result = pipeline.run(rec, video, params)
     print(f"ΔPD RMS: {result.cw_rms:.3f} mm, SD: {result.cw_sd:.3f} mm "
           f"({result.measured_rate:.0f} Hz resampled to {result.rate:.0f} Hz, {result.gap_fraction:.1%} in gaps)")
+    for w in result.warnings:
+        print(f"warning: {w}", file=sys.stderr)
     out = args.out or rec.folder / "cwtool_export"
     for p in pipeline.export(result, rec, params, out):
         print(f"wrote {p}")

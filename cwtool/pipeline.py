@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -30,9 +30,11 @@ class Result:
     expected_black: float       # mm, expected PD at the panel black point
     expected_white: float       # mm, expected PD at the panel white point
     offset: float               # mm, shift applied to the measured PD
+    pupil_scale: float          # device units to mm actually applied (device scale × correction)
     rate: float                 # Hz, analysis rate
     measured_rate: float        # Hz, rate estimated from the recording's timestamps
     gap_fraction: float         # share of the grid inside gaps longer than max_gap
+    warnings: list = field(default_factory=list)
 
 
 def _odd(n: int, minimum: int = 3) -> int:
@@ -94,8 +96,14 @@ def scene_luminance(video: VideoResult, params: Parameters) -> np.ndarray:
     return luminance.absolute_luminance(w * fix + (1 - w) * bg, params.l_min, params.l_max, params.gains)
 
 
-def expected_pupil(lum: np.ndarray, fs: float, params: Parameters) -> np.ndarray:
-    pd = model.watson_yellott(lum, params.age, params.field, params.eyes, params.reference_age)
+# Scaled pupil diameters outside this range (mm) are treated as tracking errors.
+PUPIL_RANGE_MM = (1.0, 9.0)
+# A median diameter outside this range (mm) suggests a wrong pupil scale.
+PLAUSIBLE_MM = (2.0, 8.0)
+
+
+def expected_pupil(lum: np.ndarray, fs: float, params: Parameters, field_area: float) -> np.ndarray:
+    pd = model.watson_yellott(lum, params.age, field_area, params.eyes, params.reference_age)
     pd = model.delay(pd, fs, params.delay)
     if params.dynamics:
         pd = model.attack_release(pd, fs, params.attack, params.release)
@@ -127,8 +135,16 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
     if len(video.time) < 2:
         raise ValueError("Video analysis has too few samples")
 
-    fs = params.analysis_rate or rec.profile.native_rate
-    time, pupil, valid = resample(rec.time, select_pupil(rec, params.eye), fs, params.max_gap)
+    profile = rec.profile
+    notes = []
+    fs = params.analysis_rate or profile.native_rate
+    raw = select_pupil(rec, params.eye)
+    if profile.pupil_scale is not None:
+        scale = profile.pupil_scale * params.pupil_correction
+        with np.errstate(invalid="ignore"):
+            outside = (raw * scale < PUPIL_RANGE_MM[0]) | (raw * scale > PUPIL_RANGE_MM[1])
+        raw = np.where(outside, np.nan, raw)
+    time, pupil, valid = resample(rec.time, raw, fs, params.max_gap)
     measured = savgol_filter(pupil, _odd(fs / 2 + 1), 2)
     measured_raw = savgol_filter(pupil, _odd(fs / 4 + 1, 9), 6)
     measured[~valid] = np.nan
@@ -138,10 +154,17 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
     lum_video = scene_luminance(video, params)[order]
     lum = np.interp(time, video.time[order] - params.timelag, lum_video)
 
-    expected = expected_pupil(lum, fs, params)
+    expected = expected_pupil(lum, fs, params, profile.field_area)
 
-    measured = measured * params.pupil_scale
-    measured_raw = measured_raw * params.pupil_scale
+    if profile.pupil_scale is None:
+        # Pixel units: scale so the mean measured PD equals the mean expected PD (2021 method).
+        scale = float(np.nanmean(expected[valid]) / np.nanmean(measured)) * params.pupil_correction
+    measured = measured * scale
+    measured_raw = measured_raw * scale
+    median = float(np.nanmedian(measured))
+    if not PLAUSIBLE_MM[0] <= median <= PLAUSIBLE_MM[1]:
+        notes.append(f"Median measured pupil is {median:.2f} mm, outside {PLAUSIBLE_MM[0]:g}–"
+                     f"{PLAUSIBLE_MM[1]:g} mm: check the pupil scale correction.")
     offset = float(np.nanmean(expected[valid]) - np.nanmean(measured)) if params.align_mean else 0.0
     measured += offset
     measured_raw += offset
@@ -153,14 +176,15 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         smooth = savgol_filter(interp_nan(cw), min(_odd(params.cw_smoothing * 2), _odd(len(cw) - 2)), 1)
         cw = np.where(good, smooth, np.nan)
 
-    ends = model.watson_yellott(np.array([params.l_min, params.l_max]), params.age, params.field,
+    ends = model.watson_yellott(np.array([params.l_min, params.l_max]), params.age, profile.field_area,
                                 params.eyes, params.reference_age)
 
     return Result(time=time, luminance=lum, measured_raw=measured_raw, measured=measured,
                   expected=expected, cw_time=cw_time, cw=cw, cw_rms=residual_rms(cw),
                   cw_sd=float(np.nanstd(cw)) if good.any() else float("nan"),
                   expected_black=float(ends[0]), expected_white=float(ends[1]), offset=offset,
-                  rate=fs, measured_rate=rec.measured_rate, gap_fraction=float(1 - valid.mean()))
+                  pupil_scale=scale, rate=fs, measured_rate=rec.measured_rate,
+                  gap_fraction=float(1 - valid.mean()), warnings=notes)
 
 
 def event_means(result: Result, events) -> list[tuple[str, float, float, float]]:

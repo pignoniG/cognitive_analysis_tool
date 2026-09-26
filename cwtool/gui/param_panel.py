@@ -14,7 +14,6 @@ from cwtool.params import Parameters, VideoSettings
 NUMBERS = {
     "age": ("Age (years)", 1, 120, 1, 0, "Participant age"),
     "reference_age": ("Reference age", 1, 120, 0.1, 2, "Watson & Yellott reference age"),
-    "field": ("Field", 0.1, 100000, 10, 1, "Adapting field term of the corneal flux density (see open issue 4)"),
     "l_min": ("Lmin (cd/m²)", 0, 1000, 0.1, 3, "Panel black point"),
     "l_max": ("Lmax (cd/m²)", 0.1, 100000, 50, 1, "Panel white point"),
     "gain_r": ("Red gain", 0, 100, 0.1, 2, "Relative gain of the red channel"),
@@ -22,7 +21,8 @@ NUMBERS = {
     "gain_b": ("Blue gain", 0, 100, 0.1, 2, "Relative gain of the blue channel"),
     "gamma": ("Gamma", 0.5, 5, 0.1, 2, "sRGB decoding exponent"),
     "fixation_weight": ("Fixation weight", 0, 1, 0.05, 2, "Weight of the gaze area; the background gets the rest"),
-    "pupil_scale": ("Pupil scale", 0.1, 10, 0.1, 2, "Multiplier on the measured diameter (see open issue 1)"),
+    "pupil_correction": ("Pupil scale correction", 0.1, 10, 0.01, 3,
+                         "Participant multiplier on the device's pupil scale (1 = device default)"),
     "timelag": ("Time lag (s)", -60, 60, 0.05, 2, "Shift of the luminance signal"),
     "delay": ("Delay (s)", 0, 5, 0.05, 2, "Pupil response latency"),
     "attack": ("Dilation τ (s)", 0.01, 60, 0.5, 2, "Attack time constant"),
@@ -48,9 +48,9 @@ CHOICES = {
 }
 
 GROUPS = [
-    ("Participant", ["age", "reference_age", "field", "eyes", "eye"]),
+    ("Participant", ["age", "reference_age", "eyes", "eye"]),
     ("Photometric calibration", ["l_min", "l_max", "gain_r", "gain_g", "gain_b", "gamma", "fixation_weight"]),
-    ("Pupil signal", ["pupil_scale", "align_mean", "timelag", "analysis_rate", "max_gap"]),
+    ("Pupil signal", ["pupil_correction", "align_mean", "timelag", "analysis_rate", "max_gap"]),
     ("Dynamics", ["delay", "dynamics", "attack", "release"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]
@@ -153,7 +153,7 @@ class ParameterPanel(QWidget):
         layout.addWidget(self._video)
         layout.addStretch(1)
         covered = {n for _, names in GROUPS for n in names}
-        missing = {f.name for f in fields(Parameters)} - covered
+        missing = {f.name for f in fields(Parameters)} - covered - {"version"}
         assert not missing, f"Parameters without an editor: {missing}"
 
     def params(self) -> Parameters:

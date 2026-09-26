@@ -9,8 +9,9 @@ from cwtool.devices import varjo
 
 
 def write_varjo_recording(folder: Path, grays, seconds_per_level=1.0, fps=10, size=(64, 48),
-                          gaze=(0.0, 0.0), pupil_mm=4.0, rate=100):
-    """Synthetic Varjo recording: a full-frame gray level or RGB colour per step and a constant gaze."""
+                          gaze=(0.0, 0.0), pupil_mm=2.0, rate=100):
+    """Synthetic Varjo recording: a full-frame gray level or RGB colour per step and a constant gaze.
+    ``pupil_mm`` is the value written to the CSV, which Varjo reports as a radius (×2 = diameter)."""
     folder.mkdir(parents=True, exist_ok=True)
     w, h = size
     writer = cv2.VideoWriter(str(folder / "varjo_capture_test.avi"), cv2.VideoWriter_fourcc(*"MJPG"), fps, (w, h))

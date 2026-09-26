@@ -168,10 +168,12 @@ class MainWindow(QMainWindow):
         else:
             r = self.result
             gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
+            warn = "".join(f"<br><span style='color:#c00'>⚠ {w}</span>" for w in r.warnings)
             self.summary_label.setText(
                 f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm &nbsp;&nbsp; "
                 f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
-                f"offset {r.offset:+.2f} mm &nbsp;&nbsp; {r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}")
+                f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
+                f"{r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}{warn}")
         name = self._params_path.name if self._params_path else "unsaved parameters"
         rec = f" — {self.recording.name}" if has_rec else ""
         self.setWindowTitle(f"Cognitive Workload Tool {__version__}{rec} ({name})")
@@ -201,9 +203,12 @@ class MainWindow(QMainWindow):
         self.recording, self.video, self.result = rec, None, None
         duration = rec.time[-1] - rec.time[0] if len(rec.time) else 0
         video = rec.scene_video.name if rec.scene_video else "none"
+        prof = rec.profile
+        scale = f"×{prof.pupil_scale:g}" if prof.pupil_scale else "scale fitted"
         self.recording_label.setText(
             f"<b>{rec.name}</b><br>{rec.device}, {len(rec.time)} samples, {duration:.1f} s, "
-            f"{rec.measured_rate:.0f} Hz"
+            f"{rec.measured_rate:.0f} Hz<br>field of view {prof.field_of_view[0]:g}° × "
+            f"{prof.field_of_view[1]:g}° ({prof.field_area:,.0f} deg²), pupil {prof.pupil_unit} {scale}"
             f"<br>video: {video}<br>events: {len(rec.events)}")
         self.plots.clear_result()
         self.plots.show_events(rec.events)
@@ -313,7 +318,8 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Load parameters", self._params_dir(), "Parameters (*.json)")
         if path:
             try:
-                self.params_panel.set_params(Parameters.load(path))
+                profile = self.recording.profile if self.recording is not None else None
+                self.params_panel.set_params(Parameters.load(path, profile))
             except Exception as e:
                 self._error("Cannot load parameters", str(e))
                 return

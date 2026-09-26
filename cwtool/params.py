@@ -7,6 +7,9 @@ from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 
 
+PARAMS_VERSION = 2
+
+
 @dataclass
 class VideoSettings:
     """Geometry of the two-area estimate. Changing these requires re-running
@@ -27,13 +30,15 @@ class Parameters:
     # Participant / Watson & Yellott
     age: float = 25.0
     reference_age: float = 28.58
-    field: float = 160.0
     eyes: int = 2
     eye: str = "both"                    # pupil used: "left", "right" or "both"
 
     # Photometric calibration
+    # Real luminances: the adapting field area comes from the device's field of view.
+    # Default l_max is the mean of the Varjo pilot calibrations (4250 cd/m² at field 160),
+    # converted to the XR-4 field area.
     l_min: float = 0.02                  # cd/m², panel black point
-    l_max: float = 200.0                 # cd/m², panel white point
+    l_max: float = 70.0                  # cd/m², panel white point
     gain_r: float = 1.0
     gain_g: float = 1.0
     gain_b: float = 1.0
@@ -45,7 +50,7 @@ class Parameters:
     max_gap: float = 0.5                 # s, longer gaps (not blinks) are left out of ΔPD
 
     # Pupil signal
-    pupil_scale: float = 2.0             # measured diameter multiplier
+    pupil_correction: float = 1.0        # participant multiplier on the device's pupil scale
     align_mean: bool = True              # shift measured PD so its mean matches the expected PD
     timelag: float = 0.0                 # s, subtracted from luminance timestamps
 
@@ -59,6 +64,8 @@ class Parameters:
     cw_window: float = 0.2               # s, averaging window
     cw_smoothing: int = 1                # Savitzky-Golay half-window, in windows
 
+    version: int = PARAMS_VERSION
+
     @property
     def gains(self) -> tuple[float, float, float]:
         return (self.gain_r, self.gain_g, self.gain_b)
@@ -67,7 +74,29 @@ class Parameters:
         Path(path).write_text(json.dumps(asdict(self), indent=2))
 
     @classmethod
-    def load(cls, path: str | Path) -> "Parameters":
-        data = json.loads(Path(path).read_text())
+    def load(cls, path: str | Path, profile=None) -> "Parameters":
+        return cls.from_dict(json.loads(Path(path).read_text()), profile)
+
+    @classmethod
+    def from_dict(cls, data: dict, profile=None) -> "Parameters":
+        """Build parameters, converting files written before version 2.
+
+        Version 1 files carry ``field`` (used directly as the flux-density area) and an
+        absolute ``pupil_scale``. The expected pupil depends only on luminance × field, so
+        l_min/l_max are rescaled to the device's field area, which gives identical results;
+        ``pupil_scale`` becomes a correction relative to the device's scale. ``profile`` is
+        the recording's DeviceProfile (default: Varjo, the only device with version 1 files).
+        """
+        data = dict(data)
+        if data.get("version", 1) < 2:
+            if profile is None:
+                from cwtool.devices.varjo import PROFILE as profile
+            factor = float(data.pop("field", 160.0)) / profile.field_area
+            for key in ("l_min", "l_max"):
+                if key in data:
+                    data[key] = data[key] * factor
+            if "pupil_scale" in data and profile.pupil_scale:
+                data["pupil_correction"] = data.pop("pupil_scale") / profile.pupil_scale
+            data["version"] = PARAMS_VERSION
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in data.items() if k in known})

@@ -28,7 +28,14 @@ them rather than describing the headset or the participant.
 - **Proposal:** check against Varjo's documentation and a sample (typical adult diameters are 2–8 mm).
   If it is a diameter, set the default to 1.0 and keep the scale as a per-participant calibration term
   (the paper already discusses glasses biasing the mm conversion).
-- **Status:** kept, needs data.
+- **Context (G. Pignoni):** Varjo confirmed by email that its output is the radius. The scaling from eye-camera
+  pixels to mm also seems inconsistent between sessions, so a correction is sometimes needed; this is one reason
+  for recording calibration data.
+- **2.0:** each device profile declares its pupil unit and default scale (Varjo mm ×2; Pupil Core 3D mm ×1;
+  pixel data has no default and is scaled by the 2021 ratio method). Participants get a `pupil_correction`
+  multiplier (fitted from the calibration sequence in the next step). The 1–9 mm validity range is applied after
+  scaling, and a warning is shown when the median diameter is outside 2–8 mm.
+- **Status:** fixed in 2.0 (correction fit pending, see issue 2/3 work).
 
 ### 2. Measured pupil is shifted to match the expected mean
 - **Where:** `lum_analysis.py` (`coeff = meanLux - meanRec`); 2.0 `Parameters.align_mean = True`.
@@ -59,7 +66,15 @@ them rather than describing the headset or the participant.
 - **Proposal:** decide whether to treat the parameter as an area (and convert from the headset's FOV),
   or keep it as an empirical "field" constant and say so in the paper. Changing it will change every
   calibrated Lmax.
-- **Status:** kept, open.
+- **Note:** the 2021 paper (eq. 1) also describes *a* as "field diameter (degrees of view)".
+- **Key point:** the formula uses luminance and field only through their product, so the two cannot be
+  separated by calibration; any error in the field is absorbed into Lmax.
+- **2.0:** the field is the device's visible field area in deg² (from its field of view, e.g. XR-4
+  120° × 105° ≈ 9 900 deg²), and Lmin/Lmax are real luminances. Version 1 parameter files are converted exactly
+  (Lmin/Lmax × 160 / area). The pilot Lmax values 1500–6500 cd/m² become about 24–105 cd/m²; the default
+  Lmax is 70 cd/m² (mean pilot value, converted). A luminance-meter reading of a full-white frame on the XR-4
+  would validate the approach.
+- **Status:** fixed in 2.0 (needs validation with a luminance meter).
 
 ### 5. CW RMS is an RMS about the mean
 - **Where:** `lum_analysis.py` (`rms` computed around `meanDistance`); 2.0 `Result.cw_rms`.
@@ -67,14 +82,19 @@ them rather than describing the headset or the participant.
   (a standard deviation). The two are the same only because of the mean alignment in issue 2.
 - **Proposal:** define it once. If mean alignment is turned off, plain RMS of ΔPD is the more natural
   calibration error.
-- **Status:** kept, open.
+- **2.0:** two figures are reported: residual RMS (√mean ΔPD², the calibration error) and ΔPD SD (the unit
+  for normalised ΔPD).
+- **Status:** fixed in 2.0.
 
 ### 6. Pupil sampling rate is hardcoded to 100 Hz
 - **Where:** `lum_analysis.py` (`sampleFreq = 100`); 2.0 `varjo.SAMPLE_RATE = 100`.
 - **Problem:** filters, the delay and the ΔPD window are all defined in samples at 100 Hz. The XR-4 can
   also track at 200 Hz, and dropped samples (blinks, invalid rows) make the real rate irregular.
 - **Proposal:** estimate the rate from the timestamps, and resample to a uniform grid before filtering.
-- **Status:** open.
+- **2.0:** the measured rate is estimated from the timestamps; pupil data is resampled onto a uniform grid
+  (`analysis_rate`, default 100 Hz), gaps up to `max_gap` (0.5 s) are interpolated and longer ones are left out
+  of ΔPD and the RMS. Filters and windows are defined in seconds.
+- **Status:** fixed in 2.0.
 
 ### 7. Attack/release filter started from 0
 - **Where:** `lum_analysis.py` (`y = np.zeros_like(...)`, loop from n = 1).

@@ -45,8 +45,6 @@ COL_RIGHT_PUPIL_MM = 43
 
 # Tracking statuses above this are valid.
 MIN_STATUS = 1
-# Pupil diameters outside this range (mm) are treated as tracking errors.
-PUPIL_RANGE = (1.0, 9.0)
 
 
 def _find(folder: Path, name: str) -> Path | None:
@@ -85,7 +83,7 @@ def load(folder: Path, gaze_eye: str = "left") -> Recording:
 
     def pupil(i: int) -> np.ndarray:
         d = col(i)
-        ok = tracked & (d > PUPIL_RANGE[0]) & (d < PUPIL_RANGE[1])
+        ok = tracked & (d > 0)  # the plausible range is checked in mm by the pipeline
         return np.where(ok, d, np.nan)
 
     if gaze_eye == "right":
