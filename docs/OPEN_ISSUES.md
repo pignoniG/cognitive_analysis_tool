@@ -171,7 +171,12 @@ them rather than describing the headset or the participant.
   (e.g. half black, half white averages to code 128 → ~0.22 instead of 0.5 linear).
 - **Proposal:** linearise per pixel, then average. This makes the video cache depend on γ, or requires caching
   linear means for a fixed decoding curve (which issue 12 would settle).
-- **Status:** open.
+- **2.0:** pixels are linearised before averaging. Each area's per-channel histogram gives the mean of
+  (C/255)^γ for a grid of γ values (1.4–3.0 in steps of 0.2), which are cached; other γ values are
+  interpolated (error below 0.001 of full scale), so γ remains a live parameter without re-reading the video.
+  Textured scenes now read brighter than before (a half-black, half-white area gives 0.5 instead of about 0.22).
+  Older video caches are re-analysed automatically. γ is limited to 1.4–3.0.
+- **Status:** fixed in 2.0.
 
 ### 14. Fixation and background weighting done on raw RGB
 - **Where:** legacy `vid_analysis.subFrameAsinc` (0.65 weighting applied to encoded RGB means).
