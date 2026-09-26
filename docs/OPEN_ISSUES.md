@@ -206,7 +206,9 @@ them rather than describing the headset or the participant.
 - **Reference:** Eckert et al. (2022) used a fixation radius of about 16° (display width / 5) with weights 26:74.
   The 2.0 default is about 5° radius, roughly a tenth of their area, so the 65:35 and 26:74 weights are not directly
   comparable; the paper should report the radius next to the weights.
-- **Status:** open.
+- **2.0:** the gaze circle is set as a radius in degrees (`fixation_radius_deg`, default 5.25°, equal to the previous
+  Varjo default), converted to pixels with each device's vertical field of view, assuming a linear lens mapping.
+- **Status:** fixed in 2.0 (the lens mapping is approximate).
 
 ---
 

@@ -32,7 +32,8 @@ NUMBERS = {
     "max_gap": ("Max gap (s)", 0, 60, 0.1, 2, "Gaps longer than this are excluded from ΔPD; shorter ones are interpolated"),
     "cw_window": ("ΔPD window (s)", 0.01, 10, 0.05, 2, "Averaging window for ΔPD"),
     "field_radius": ("Scene circle radius", 0.05, 1, 0.05, 2, "Fraction of half the frame height (circular videos)"),
-    "fixation_ratio": ("Fixation ratio", 0.01, 1, 0.005, 3, "Gaze circle radius relative to the scene circle"),
+    "fixation_radius_deg": ("Gaze circle radius (°)", 0.5, 60, 0.25, 2,
+                            "Radius of the gaze circle in degrees of visual angle"),
 }
 INTS = {
     "cw_smoothing": ("ΔPD smoothing", 1, 100, "Savitzky-Golay half-window, in ΔPD windows"),
@@ -60,7 +61,7 @@ GROUPS = [
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]
 VIDEO_GROUP = ("Video analysis (re-run to apply)",
-               ["field_radius", "fixation_ratio", "background_excludes_fixation", "analysis_width"])
+               ["fixation_radius_deg", "field_radius", "background_excludes_fixation", "analysis_width"])
 
 
 class _Form(QWidget):

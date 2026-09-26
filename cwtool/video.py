@@ -113,7 +113,7 @@ def _circle_mask(shape: tuple[int, int], center: tuple[int, int], radius: int) -
 def radii(frame_height: int, settings: VideoSettings) -> tuple[int, int]:
     """Scene circle and fixation circle radii (px) for a frame of this height."""
     field_r = int(frame_height / 2 * settings.field_radius)
-    fix_r = max(int(frame_height / 2 * settings.field_radius * settings.fixation_ratio), 1)
+    fix_r = max(int(settings.fixation_radius_deg / settings.vertical_fov * frame_height), 1)
     return field_r, fix_r
 
 

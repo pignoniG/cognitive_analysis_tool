@@ -8,7 +8,7 @@ from cwtool.video import VideoResult, analyse_frame, analyse_video
 def test_two_areas_on_synthetic_frame():
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     frame[45:56, 45:56] = [200, 100, 50]  # bright patch at the centre
-    s = VideoSettings(circular_mask=True, field_radius=1.0, fixation_ratio=0.05)  # fixation radius 2 px
+    s = VideoSettings(circular_mask=True, field_radius=1.0, vertical_fov=100, fixation_radius_deg=2.5)  # 2 px
     fix, bg, *_ = analyse_frame(frame, np.array([[50, 50], [10, 50]]), s)
     assert fix[0] == pytest.approx([200, 100, 50])
     assert fix[1] == pytest.approx([0, 0, 0])
@@ -18,10 +18,10 @@ def test_two_areas_on_synthetic_frame():
 def test_background_can_exclude_fixation():
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     frame[40:61, 40:61] = 255
-    s = VideoSettings(circular_mask=True, field_radius=1.0, fixation_ratio=0.2, background_excludes_fixation=True)
+    s = VideoSettings(circular_mask=True, field_radius=1.0, vertical_fov=100, fixation_radius_deg=10, background_excludes_fixation=True)
     fix, bg, *_ = analyse_frame(frame, np.array([[50, 50]]), s)
     assert fix[0] == pytest.approx([255] * 3)
-    assert bg[0][0] < analyse_frame(frame, np.array([[50, 50]]), VideoSettings(circular_mask=True, field_radius=1.0, fixation_ratio=0.2))[1][0][0]
+    assert bg[0][0] < analyse_frame(frame, np.array([[50, 50]]), VideoSettings(circular_mask=True, field_radius=1.0, vertical_fov=100, fixation_radius_deg=10))[1][0][0]
 
 
 def test_analyse_video_follows_levels_and_caches(varjo_folder):
@@ -76,7 +76,7 @@ def test_textured_area_is_linearised_per_pixel():
     # the mean code value (127.5) would give about 0.22.
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     frame[:, 50:] = 255
-    s = VideoSettings(field_radius=1.0, fixation_ratio=0.3)
+    s = VideoSettings(field_radius=1.0, vertical_fov=100, fixation_radius_deg=15)
     fix_rgb, _, fix_lin, _ = analyse_frame(frame, np.array([[50, 50]]), s)
     white = fix_rgb[0][0] / 255            # share of white pixels in the disc (about half)
     assert white == pytest.approx(0.5, abs=0.05)
@@ -89,7 +89,7 @@ def test_textured_area_is_linearised_per_pixel():
 def test_gamma_interpolation_matches_exact_mean():
     rng = np.random.default_rng(0)
     frame = rng.integers(0, 256, (60, 80, 3)).astype(np.uint8)
-    s = VideoSettings(field_radius=1.0, fixation_ratio=0.5)
+    s = VideoSettings(field_radius=1.0, vertical_fov=100, fixation_radius_deg=25)
     fix_rgb, bg_rgb, fix_lin, bg_lin = analyse_frame(frame, np.array([[40, 30]]), s)
     res = VideoResult(np.zeros(1), fix_rgb, bg_rgb, fix_lin, bg_lin)
     for gamma in (1.4, 1.95, 2.2, 2.47, 3.0):
@@ -108,3 +108,11 @@ def test_old_cache_format_is_ignored(varjo_folder):
     (varjo_folder / CACHE_JSON).write_text(json.dumps({"settings": __import__("dataclasses").asdict(s),
                                                        "video": rec.scene_video.name}))
     assert VideoResult.load_cached(varjo_folder, s, rec.scene_video) is None
+
+
+def test_fixation_radius_in_degrees_follows_device_fov():
+    from cwtool.video import radii
+    varjo_like = VideoSettings(vertical_fov=105.0, fixation_radius_deg=5.25)
+    assert radii(1000, varjo_like)[1] == 50                     # 5 % of the frame height
+    narrow = VideoSettings(vertical_fov=52.5, fixation_radius_deg=5.25)
+    assert radii(1000, narrow)[1] == 100                        # same angle covers more pixels

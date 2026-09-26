@@ -16,13 +16,16 @@ class VideoSettings:
     the video analysis; everything in :class:`Parameters` does not."""
 
     circular_mask: bool = False          # set from the recording: scene is a circle with black corners
+    vertical_fov: float = 105.0          # deg spanned by the frame height; set from the recording's device
     field_radius: float = 0.8            # scene circle radius, fraction of half the frame height
-    fixation_ratio: float = 0.125        # fixation radius = fixation_ratio * field_radius * half frame height
+    # Gaze circle radius in degrees of visual angle (converted with vertical_fov, assuming a linear
+    # lens mapping). 5.25° equals the earlier default of 1/8 of the scene circle on the Varjo XR-4.
+    fixation_radius_deg: float = 5.25
     background_excludes_fixation: bool = False
     analysis_width: int = 500            # frames are downscaled to this width
 
     def for_recording(self, rec) -> "VideoSettings":
-        return replace(self, circular_mask=rec.circular_scene)
+        return replace(self, circular_mask=rec.circular_scene, vertical_fov=rec.profile.field_of_view[1])
 
 
 @dataclass
