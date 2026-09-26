@@ -1,0 +1,168 @@
+"""Editable form for :class:`Parameters` and :class:`VideoSettings`."""
+
+from __future__ import annotations
+
+from dataclasses import fields, replace
+
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox,
+                               QSpinBox, QVBoxLayout, QWidget)
+
+from cwtool.params import Parameters, VideoSettings
+
+# name: (label, min, max, step, decimals, tooltip)
+NUMBERS = {
+    "age": ("Age (years)", 1, 120, 1, 0, "Participant age"),
+    "reference_age": ("Reference age", 1, 120, 0.1, 2, "Watson & Yellott reference age"),
+    "field": ("Field", 0.1, 100000, 10, 1, "Adapting field term of the corneal flux density (see open issue 4)"),
+    "l_min": ("Lmin (cd/m²)", 0, 1000, 0.1, 3, "Panel black point"),
+    "l_max": ("Lmax (cd/m²)", 0.1, 100000, 50, 1, "Panel white point"),
+    "gain_r": ("Red gain", 0, 100, 0.1, 2, "Relative gain of the red channel"),
+    "gain_g": ("Green gain", 0, 100, 0.1, 2, "Relative gain of the green channel"),
+    "gain_b": ("Blue gain", 0, 100, 0.1, 2, "Relative gain of the blue channel"),
+    "gamma": ("Gamma", 0.5, 5, 0.1, 2, "sRGB decoding exponent"),
+    "fixation_weight": ("Fixation weight", 0, 1, 0.05, 2, "Weight of the gaze area; the background gets the rest"),
+    "pupil_scale": ("Pupil scale", 0.1, 10, 0.1, 2, "Multiplier on the measured diameter (see open issue 1)"),
+    "timelag": ("Time lag (s)", -60, 60, 0.05, 2, "Shift of the luminance signal"),
+    "delay": ("Delay (s)", 0, 5, 0.05, 2, "Pupil response latency"),
+    "attack": ("Dilation τ (s)", 0.01, 60, 0.5, 2, "Attack time constant"),
+    "release": ("Constriction τ (s)", 0.01, 60, 0.1, 2, "Release time constant"),
+    "cw_window": ("ΔPD window (s)", 0.01, 10, 0.05, 2, "Averaging window for ΔPD"),
+    "field_radius": ("Scene circle radius", 0.05, 1, 0.05, 2, "Fraction of half the frame height (circular videos)"),
+    "fixation_ratio": ("Fixation ratio", 0.01, 1, 0.005, 3, "Gaze circle radius relative to the scene circle"),
+}
+INTS = {
+    "cw_smoothing": ("ΔPD smoothing", 1, 100, "Savitzky-Golay half-window, in ΔPD windows"),
+    "analysis_width": ("Analysis width (px)", 100, 4000, "Frames are downscaled to this width"),
+}
+BOOLS = {
+    "align_mean": "Align measured mean to expected",
+    "dynamics": "Pupil dynamics (attack/release)",
+    "background_excludes_fixation": "Background excludes gaze area",
+}
+CHOICES = {
+    "eye": ("Pupil", ["both", "left", "right"]),
+    "eyes": ("Eyes viewing", [2, 1]),
+}
+
+GROUPS = [
+    ("Participant", ["age", "reference_age", "field", "eyes", "eye"]),
+    ("Photometric calibration", ["l_min", "l_max", "gain_r", "gain_g", "gain_b", "gamma", "fixation_weight"]),
+    ("Pupil signal", ["pupil_scale", "align_mean", "timelag"]),
+    ("Dynamics", ["delay", "dynamics", "attack", "release"]),
+    ("ΔPD", ["cw_window", "cw_smoothing"]),
+]
+VIDEO_GROUP = ("Video analysis (re-run to apply)",
+               ["field_radius", "fixation_ratio", "background_excludes_fixation", "analysis_width"])
+
+
+class _Form(QWidget):
+    """Builds editors for the named fields of a dataclass instance."""
+
+    changed = Signal()
+
+    def __init__(self, groups, value, parent=None):
+        super().__init__(parent)
+        self._value = value
+        self._editors = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        for title, names in groups:
+            box = QGroupBox(title)
+            form = QFormLayout(box)
+            for name in names:
+                editor, label = self._make(name)
+                self._editors[name] = editor
+                if label is None:
+                    form.addRow(editor)
+                else:
+                    form.addRow(label, editor)
+            layout.addWidget(box)
+        self.set_value(value)
+
+    def _make(self, name):
+        if name in NUMBERS:
+            label, lo, hi, step, dec, tip = NUMBERS[name]
+            w = QDoubleSpinBox()
+            w.setRange(lo, hi)
+            w.setSingleStep(step)
+            w.setDecimals(dec)
+            w.setKeyboardTracking(False)
+            w.setToolTip(tip)
+            w.valueChanged.connect(self.changed)
+            return w, label
+        if name in INTS:
+            label, lo, hi, tip = INTS[name]
+            w = QSpinBox()
+            w.setRange(lo, hi)
+            w.setKeyboardTracking(False)
+            w.setToolTip(tip)
+            w.valueChanged.connect(self.changed)
+            return w, label
+        if name in BOOLS:
+            w = QCheckBox(BOOLS[name])
+            w.toggled.connect(self.changed)
+            return w, None
+        label, options = CHOICES[name]
+        w = QComboBox()
+        for o in options:
+            w.addItem(str(o), o)
+        w.currentIndexChanged.connect(self.changed)
+        return w, label
+
+    def set_value(self, value) -> None:
+        self._value = value
+        for name, w in self._editors.items():
+            v = getattr(value, name)
+            w.blockSignals(True)
+            if isinstance(w, QCheckBox):
+                w.setChecked(bool(v))
+            elif isinstance(w, QComboBox):
+                w.setCurrentIndex(max(w.findData(v), 0))
+            else:
+                w.setValue(v)
+            w.blockSignals(False)
+
+    def value(self):
+        updates = {}
+        for name, w in self._editors.items():
+            if isinstance(w, QCheckBox):
+                updates[name] = w.isChecked()
+            elif isinstance(w, QComboBox):
+                updates[name] = w.currentData()
+            else:
+                updates[name] = w.value()
+        return replace(self._value, **updates)
+
+
+class ParameterPanel(QWidget):
+    params_changed = Signal()
+    video_settings_changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self._params = _Form(GROUPS, Parameters())
+        self._video = _Form([VIDEO_GROUP], VideoSettings())
+        self._params.changed.connect(self.params_changed)
+        self._video.changed.connect(self.video_settings_changed)
+        layout.addWidget(self._params)
+        layout.addWidget(self._video)
+        layout.addStretch(1)
+        covered = {n for _, names in GROUPS for n in names}
+        missing = {f.name for f in fields(Parameters)} - covered
+        assert not missing, f"Parameters without an editor: {missing}"
+
+    def params(self) -> Parameters:
+        return self._params.value()
+
+    def set_params(self, p: Parameters) -> None:
+        self._params.set_value(p)
+        self.params_changed.emit()
+
+    def video_settings(self) -> VideoSettings:
+        return self._video.value()
+
+    def set_video_settings(self, s: VideoSettings) -> None:
+        self._video.set_value(s)

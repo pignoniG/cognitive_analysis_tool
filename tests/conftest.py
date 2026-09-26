@@ -10,13 +10,14 @@ from cwtool.devices import varjo
 
 def write_varjo_recording(folder: Path, grays, seconds_per_level=1.0, fps=10, size=(64, 48),
                           gaze=(0.0, 0.0), pupil_mm=4.0, rate=100):
-    """Synthetic Varjo recording: a full-frame gray level per step and a constant gaze."""
+    """Synthetic Varjo recording: a full-frame gray level or RGB colour per step and a constant gaze."""
     folder.mkdir(parents=True, exist_ok=True)
     w, h = size
     writer = cv2.VideoWriter(str(folder / "varjo_capture_test.avi"), cv2.VideoWriter_fourcc(*"MJPG"), fps, (w, h))
     for g in grays:
+        bgr = (g, g, g) if np.isscalar(g) else tuple(reversed(g))  # a level or an (R, G, B) colour
         for _ in range(int(seconds_per_level * fps)):
-            writer.write(np.full((h, w, 3), g, dtype=np.uint8))
+            writer.write(np.full((h, w, 3), bgr, dtype=np.uint8))
     writer.release()
 
     n = int(len(grays) * seconds_per_level * rate)

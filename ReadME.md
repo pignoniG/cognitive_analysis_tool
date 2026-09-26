@@ -1,7 +1,7 @@
 # Cognitive workload tool, version 2.0 (in development)
 
-Version 2.0 is a rewrite. The analysis lives in the `cwtool` package, which runs without a GUI;
-a cross-platform Qt GUI will follow. One recording is processed at a time, from any supported device.
+Version 2.0 is a rewrite. The analysis lives in the `cwtool` package, which runs without a GUI,
+and a cross-platform Qt GUI (`cwtool-gui`) sits on top. One recording is processed at a time, from any supported device.
 
 | Device | Luminance source | Status |
 |---|---|---|
@@ -10,17 +10,24 @@ a cross-platform Qt GUI will follow. One recording is processed at a time, from 
 | Pupil Neon | external lux sensor + scene video | planned |
 
 ```
-pip install -e ".[plot,dev]"
-cwtool path/to/recording --params participant.json --plot
+pip install -e ".[gui,dev]"
+cwtool-gui [path/to/recording]                             # desktop app
+cwtool path/to/recording --params participant.json --plot  # batch / headless
 pytest
 ```
+
+In the GUI, open a recording folder; the scene video is analysed in the background (or loaded from the
+cache), and every parameter change updates the measured vs expected pupil and ΔPD plots immediately.
+For manual calibration, enable the calibration sequence overlay and drag its start line onto the
+sequence; the panel shows ΔPD RMS within the sequence. Save the parameters per participant and load
+them for that participant's other recordings.
 
 The video pass (fixation circle vs background, per gaze sample) is cached next to the recording
 in `cwtool_video.csv`, so changing photometric parameters or the fixation weight does not re-read the video.
 Participant parameters (Lmin, Lmax, channel gains, gamma, weights, dynamics) are saved as JSON.
 
 The legacy macOS application (`analysisTool.py`, `pupil_code/`) is still in the tree and will be removed
-once the new GUI replaces it.
+now that the new GUI replaces it.
 
 ## The following has not been updated
 

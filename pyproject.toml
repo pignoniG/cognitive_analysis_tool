@@ -18,10 +18,12 @@ dependencies = [
 
 [project.optional-dependencies]
 plot = ["matplotlib>=3.7"]
+gui = ["PySide6>=6.5", "pyqtgraph>=0.13", "matplotlib>=3.7"]
 dev = ["pytest>=7"]
 
 [project.scripts]
 cwtool = "cwtool.cli:main"
+cwtool-gui = "cwtool.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["cwtool*"]
