@@ -1,7 +1,26 @@
-# Cognitive workload tool for the varjo xr-4
+# Cognitive workload tool, version 2.0 (in development)
 
+Version 2.0 is a rewrite. The analysis lives in the `cwtool` package, which runs without a GUI;
+a cross-platform Qt GUI will follow. One recording is processed at a time, from any supported device.
 
-This branch is dedicated to a new verson of the software, modified to work with the varjo xr-4 headset, the software DOES NOT work, and the documentation and part of the interface are not updated completely.
+| Device | Luminance source | Status |
+|---|---|---|
+| Varjo XR-4 | scene video (display) | supported |
+| Pupil Core | external lux sensor + scene video | planned |
+| Pupil Neon | external lux sensor + scene video | planned |
+
+```
+pip install -e ".[plot,dev]"
+cwtool path/to/recording --params participant.json --plot
+pytest
+```
+
+The video pass (fixation circle vs background, per gaze sample) is cached next to the recording
+in `cwtool_video.csv`, so changing photometric parameters or the fixation weight does not re-read the video.
+Participant parameters (Lmin, Lmax, channel gains, gamma, weights, dynamics) are saved as JSON.
+
+The legacy macOS application (`analysisTool.py`, `pupil_code/`) is still in the tree and will be removed
+once the new GUI replaces it.
 
 ## The following has not been updated
 
