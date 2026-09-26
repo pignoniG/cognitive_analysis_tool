@@ -6,13 +6,14 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
+from PySide6.QtWidgets import (QCheckBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
                                QHBoxLayout, QLabel, QMainWindow, QMessageBox, QProgressBar,
                                QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget)
 
 from cwtool import __version__, calibration, devices, pipeline
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.plots import ResultPlots, rms_in
+from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
 from cwtool.params import Parameters
 from cwtool.video import VideoResult, analyse_video
@@ -60,6 +61,8 @@ class MainWindow(QMainWindow):
         for a in (self.open_action, None, self.load_params_action, self.save_params_action,
                   self.save_params_as_action, None, self.export_action, None, quit_action):
             file_menu.addSeparator() if a is None else file_menu.addAction(a)
+
+        self.view_menu = self.menuBar().addMenu("&View")
 
         toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
@@ -143,6 +146,16 @@ class MainWindow(QMainWindow):
         splitter.setSizes([380, 1020])
         self.setCentralWidget(splitter)
 
+        self.preview = VideoPreview()
+        self.preview.time_changed.connect(self.plots.set_cursor)
+        self.plots.cursor_changed.connect(self.preview.show_time)
+        dock = QDockWidget("Video preview", self)
+        dock.setObjectName("video_preview")
+        dock.setWidget(self.preview)
+        self.addDockWidget(Qt.RightDockWidgetArea, dock)
+        self.resizeDocks([dock], [420], Qt.Horizontal)
+        self.view_menu.addAction(dock.toggleViewAction())
+
     def _update_state(self) -> None:
         busy = self._task is not None and self._task.isRunning()
         has_rec = self.recording is not None
@@ -193,6 +206,9 @@ class MainWindow(QMainWindow):
         self.plots.clear_result()
         self.plots.show_events(rec.events)
         self.params_panel.set_video_settings(self.params_panel.video_settings().for_recording(rec))
+        self.preview.set_recording(rec, self.params_panel.video_settings())
+        if len(rec.time):
+            self.plots.set_cursor(float(rec.time[0]))
         self._update_state()
         if rec.scene_video is None:
             self.video_label.setText("No scene video found in this recording.")
@@ -224,6 +240,8 @@ class MainWindow(QMainWindow):
         self.recompute()
 
     def _video_settings_edited(self) -> None:
+        if self.recording is not None:
+            self.preview.set_settings(self.params_panel.video_settings().for_recording(self.recording))
         if self.video is not None:
             self.video_label.setText("Video settings changed: press Analyse video to apply.")
 
@@ -269,6 +287,7 @@ class MainWindow(QMainWindow):
         else:
             self.plots.show_result(self.result)
             self._update_sequence_rms()
+        self.preview.set_analysis(self.video, self.result)
         self._update_state()
 
     def _sequence_changed(self) -> None:

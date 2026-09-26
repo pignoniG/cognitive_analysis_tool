@@ -59,13 +59,33 @@ def _circle_mask(shape: tuple[int, int], center: tuple[int, int], radius: int) -
     return mask
 
 
+def radii(frame_height: int, settings: VideoSettings) -> tuple[int, int]:
+    """Scene circle and fixation circle radii (px) for a frame of this height."""
+    field_r = int(frame_height / 2 * settings.field_radius)
+    fix_r = max(int(frame_height / 2 * settings.field_radius * settings.fixation_ratio), 1)
+    return field_r, fix_r
+
+
+def frame_index(t, fps: float):
+    """Video frame shown at time ``t`` (s, video clock)."""
+    return (np.asarray(t) * fps).astype(int)
+
+
+def prepare_frame(frame_bgr: np.ndarray, settings: VideoSettings) -> np.ndarray:
+    """Downscale a decoded frame to the analysis width and convert to RGB."""
+    scale = settings.analysis_width / frame_bgr.shape[1]
+    size = (settings.analysis_width, max(int(frame_bgr.shape[0] * scale), 1))
+    small = cv2.resize(frame_bgr, size, interpolation=cv2.INTER_AREA)
+    return cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+
+
 def field_mask(shape: tuple[int, int], settings: VideoSettings) -> np.ndarray:
     """Background area: the centred scene circle for circular-mask videos
     (Varjo), otherwise the whole frame."""
     h, w = shape
     if not settings.circular_mask:
         return np.full((h, w), 255, dtype=np.uint8)
-    return _circle_mask((h, w), (w // 2, h // 2), int(h / 2 * settings.field_radius))
+    return _circle_mask((h, w), (w // 2, h // 2), radii(h, settings)[0])
 
 
 def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSettings,
@@ -73,7 +93,7 @@ def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSet
     """Measure one frame. ``gaze_px`` is (M, 2) pixel coordinates in the frame.
     Returns (M, 3) fixation and background mean RGB."""
     h, w = frame_rgb.shape[:2]
-    fix_r = max(int(h / 2 * settings.field_radius * settings.fixation_ratio), 1)
+    fix_r = radii(h, settings)[1]
     if mask is None:
         mask = field_mask((h, w), settings)
 
@@ -118,7 +138,7 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
 
     valid = np.isfinite(gaze).all(axis=1) & np.isfinite(time)
     idx = np.flatnonzero(valid)
-    frame_of = (time[idx] * fps).astype(int)
+    frame_of = frame_index(time[idx], fps)
     order = np.argsort(frame_of, kind="stable")
     idx, frame_of = idx[order], frame_of[order]
 
@@ -134,10 +154,7 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
             end = pos
             while end < len(idx) and frame_of[end] == frame_no:
                 end += 1
-            scale = settings.analysis_width / frame.shape[1]
-            small = cv2.resize(frame, (settings.analysis_width, max(int(frame.shape[0] * scale), 1)),
-                               interpolation=cv2.INTER_AREA)
-            small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+            small = prepare_frame(frame, settings)
             h, w = small.shape[:2]
             if mask is None:
                 mask = field_mask((h, w), settings)

@@ -54,3 +54,18 @@ def test_panel_round_trips_parameters(app):
     p = Parameters(age=41, l_max=4250, gain_b=11.3, eye="right", eyes=1, dynamics=True)
     panel.set_params(p)
     assert panel.params() == p
+
+
+def test_video_preview_follows_cursor(app, varjo_folder):
+    w = MainWindow()
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None)
+    w.plots.cursor_changed.emit(1.5)
+    assert "frame 15" in w.preview.time_label.text()  # 10 fps test video
+    import re
+    fixation_r = int(re.search(r"fixation</span> RGB (\d+)", w.preview.info.text()).group(1))
+    assert fixation_r == pytest.approx(128, abs=4)  # MJPG compression
+    w.preview.next_button.click()
+    assert "frame 16" in w.preview.time_label.text()
+    assert w.plots.cursors[0].value() == pytest.approx(1.65)
+    w.close()

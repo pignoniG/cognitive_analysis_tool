@@ -1,7 +1,7 @@
 """Varjo XR-4 recordings made with Varjo Base's eye tracking recorder.
 
 A recording folder holds ``varjo_gaze_output_*.csv`` and the scene video
-``varjo_capture_*``, plus an optional ``event_log*.csv``.
+``varjo_capture_*``, plus an optional ``*event_log*.csv``.
 
 Columns are read by position, matching the Varjo Base export used for the
 pilot study. Check them against a current export before trusting a new
@@ -39,8 +39,9 @@ MIN_STATUS = 1
 PUPIL_RANGE = (1.0, 9.0)
 
 
-def _find(folder: Path, prefix: str) -> Path | None:
-    matches = sorted(p for p in folder.iterdir() if p.name.startswith(prefix))
+def _find(folder: Path, name: str) -> Path | None:
+    """First file in ``folder`` whose name contains ``name`` (as the 1.x reader did)."""
+    matches = sorted(p for p in folder.iterdir() if p.is_file() and name in p.name)
     return matches[0] if matches else None
 
 
@@ -106,7 +107,7 @@ def load(folder: Path, gaze_eye: str = "left") -> Recording:
 
 
 def read_event_log(folder: Path, epoch_start: float) -> list[Event]:
-    """Read ``event_log*.csv``: one row per consecutive event with columns
+    """Read ``*event_log*.csv``: one row per consecutive event with columns
     id, start time (only the first row's is used), -, duration (s)."""
     path = _find(folder, "event_log")
     if path is None:

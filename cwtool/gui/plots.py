@@ -17,6 +17,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     is a draggable vertical line on the pupil plot."""
 
     sequence_start_changed = Signal(float)
+    cursor_changed = Signal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -29,9 +30,11 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             p.showGrid(x=True, y=True, alpha=0.2)
             p.setClipToView(True)
             p.setDownsampling(auto=True, mode="peak")
-        self.pupil.setLabel("left", "Pupil diameter", units="mm")
-        self.cw.setLabel("left", "ΔPD", units="mm")
-        self.cw.setLabel("bottom", "Time", units="s")
+            for side in ("left", "bottom"):
+                p.getAxis(side).enableAutoSIPrefix(False)  # keep values in mm and s
+        self.pupil.setLabel("left", "Pupil diameter (mm)")
+        self.cw.setLabel("left", "ΔPD (mm)")
+        self.cw.setLabel("bottom", "Time (s)")
         self.pupil.addLegend(offset=(-10, 10))
 
         self.raw_curve = self.pupil.plot(pen=pg.mkPen((160, 160, 160), width=1), name="Measured (raw)")
@@ -57,6 +60,35 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.sequence_line.sigPositionChanged.connect(self._line_moved)
         self._sequence_start = 0.0
         self._sequence_visible = False
+
+        # Preview cursor: click on either plot to place it, or drag it.
+        cursor_pen = pg.mkPen((214, 39, 40), width=1, style=pg.QtCore.Qt.DotLine)
+        self.cursors = [pg.InfiniteLine(angle=90, movable=True, pen=cursor_pen) for _ in range(2)]
+        for plot, line in zip((self.pupil, self.cw), self.cursors):
+            plot.addItem(line)
+            line.sigPositionChanged.connect(self._cursor_dragged)
+        self.scene().sigMouseClicked.connect(self._clicked)
+
+    def set_cursor(self, t: float) -> None:
+        for line in self.cursors:
+            line.blockSignals(True)
+            line.setValue(t)
+            line.blockSignals(False)
+
+    def _cursor_dragged(self, line) -> None:
+        t = float(line.value())
+        self.set_cursor(t)
+        self.cursor_changed.emit(t)
+
+    def _clicked(self, event) -> None:
+        if event.button() != pg.QtCore.Qt.LeftButton or event.double():
+            return
+        for plot in (self.pupil, self.cw):
+            if plot.sceneBoundingRect().contains(event.scenePos()):
+                t = float(plot.vb.mapSceneToView(event.scenePos()).x())
+                self.set_cursor(t)
+                self.cursor_changed.emit(t)
+                return
 
     def clear_result(self) -> None:
         for c in (self.raw_curve, self.measured_curve, self.expected_curve, self.cw_curve):
