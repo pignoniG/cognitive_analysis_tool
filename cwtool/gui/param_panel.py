@@ -30,6 +30,9 @@ NUMBERS = {
     "release": ("Constriction τ (s)", 0.01, 60, 0.1, 2, "Release time constant"),
     "analysis_rate": ("Analysis rate (Hz)", 0, 1000, 10, 0, "Uniform resampling rate; 0 uses the device's native rate"),
     "max_gap": ("Max gap (s)", 0, 60, 0.1, 2, "Gaps longer than this are excluded from ΔPD; shorter ones are interpolated"),
+    "max_pupil_speed": ("Max pupil speed (mm/s)", 0, 200, 1, 1,
+                        "Faster changes are treated as artefacts (blink edges); 0 disables the filter"),
+    "artefact_padding": ("Artefact padding (s)", 0, 1, 0.01, 2, "Removed on each side of an artefact"),
     "cw_window": ("ΔPD window (s)", 0.01, 10, 0.05, 2, "Averaging window for ΔPD"),
     "field_radius": ("Scene circle radius", 0.05, 1, 0.05, 2, "Fraction of half the frame height (circular videos)"),
     "fixation_radius_deg": ("Gaze circle radius (°)", 0.5, 60, 0.25, 2,
@@ -56,7 +59,7 @@ GROUPS = [
     ("Participant", ["age", "reference_age", "eyes", "eye"]),
     ("Photometric calibration", ["l_min", "l_max", "gain_r", "gain_g", "gain_b", "gamma", "fixation_weight"]),
     ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
-                      "timelag", "analysis_rate", "max_gap"]),
+                      "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
     ("Dynamics", ["delay", "dynamics", "attack", "release"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]

@@ -51,6 +51,8 @@ class Parameters:
     # Sampling
     analysis_rate: float = 100.0         # Hz, uniform analysis grid; 0 = device's native rate
     max_gap: float = 0.5                 # s, longer gaps (not blinks) are left out of ΔPD
+    max_pupil_speed: float = 10.0        # mm/s, faster changes are artefacts (blinks); 0 disables
+    artefact_padding: float = 0.05       # s removed around each artefact
 
     # Pupil signal
     pupil_correction: float = 1.0        # participant multiplier on the device's pupil scale

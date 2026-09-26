@@ -54,17 +54,50 @@ def interp_nan(x: np.ndarray) -> np.ndarray:
     return x
 
 
-def select_pupil(rec: Recording, eye: str) -> np.ndarray:
-    """Pupil in device units on the recording's own clock; NaN where invalid.
-    "both" averages the eyes, falling back to one eye where the other is missing."""
+def combine_eyes(left: np.ndarray, right: np.ndarray, eye: str) -> np.ndarray:
+    """"left", "right", or "both": the average, falling back to one eye where the other is missing."""
     if eye == "left":
-        return np.asarray(rec.pupil_left, dtype=float)
+        return np.asarray(left, dtype=float)
     if eye == "right":
-        return np.asarray(rec.pupil_right, dtype=float)
-    pair = np.vstack([rec.pupil_left, rec.pupil_right]).astype(float)
+        return np.asarray(right, dtype=float)
+    pair = np.vstack([left, right]).astype(float)
     with np.errstate(all="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         return np.nanmean(pair, axis=0)
+
+
+def select_pupil(rec: Recording, eye: str) -> np.ndarray:
+    """Pupil in device units on the recording's own clock; NaN where invalid."""
+    return combine_eyes(rec.pupil_left, rec.pupil_right, eye)
+
+
+# Pupil speed is measured over at least this span, so the threshold does not depend on the
+# sampling rate (sample-to-sample noise would otherwise read as high speed at 200 Hz).
+SPEED_SPAN = 0.04  # s
+
+
+def artefacts(time: np.ndarray, mm: np.ndarray, max_speed: float, padding: float) -> np.ndarray:
+    """Samples to drop: those where the pupil changes faster than ``max_speed`` (mm/s) towards
+    the previous or next sample at least SPEED_SPAN away (blink edges, tracking jumps), widened by
+    ``padding`` s on each side. Physiological pupil responses stay well below 10 mm/s."""
+    drop = np.zeros(len(mm), bool)
+    ok = np.flatnonzero(np.isfinite(mm) & np.isfinite(time))
+    if max_speed <= 0 or len(ok) < 3:
+        return drop
+    t, v = time[ok], mm[ok]
+    prev = np.searchsorted(t, t - SPEED_SPAN, side="right") - 1
+    nxt = np.searchsorted(t, t + SPEED_SPAN, side="left")
+    fast = np.zeros(len(t), bool)
+    has = prev >= 0
+    fast[has] |= np.abs(v[has] - v[prev[has]]) / (t[has] - t[prev[has]]) > max_speed
+    has = nxt < len(t)
+    fast[has] |= np.abs(v[nxt[has]] - v[has]) / (t[nxt[has]] - t[has]) > max_speed
+    if not fast.any():
+        return drop
+    bad_t = t[fast]
+    i = np.clip(np.searchsorted(bad_t, time), 1, len(bad_t) - 1) if len(bad_t) > 1 else np.zeros(len(time), int)
+    near = np.minimum(np.abs(time - bad_t[np.maximum(i - 1, 0)]), np.abs(time - bad_t[i]))
+    return near <= padding
 
 
 def resample(time: np.ndarray, values: np.ndarray, rate: float, max_gap: float):
@@ -150,13 +183,17 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
         raise ValueError("Video analysis has too few samples")
     profile = rec.profile
     fs = params.analysis_rate or profile.native_rate
-    raw = select_pupil(rec, params.eye)
     scale = None
+    eyes = [np.asarray(rec.pupil_left, dtype=float), np.asarray(rec.pupil_right, dtype=float)]
     if profile.pupil_scale is not None:
         scale = profile.pupil_scale * params.pupil_correction
-        with np.errstate(invalid="ignore"):
-            outside = (raw * scale < PUPIL_RANGE_MM[0]) | (raw * scale > PUPIL_RANGE_MM[1])
-        raw = np.where(outside, np.nan, raw)
+        for k, raw in enumerate(eyes):
+            with np.errstate(invalid="ignore"):
+                bad = (raw * scale < PUPIL_RANGE_MM[0]) | (raw * scale > PUPIL_RANGE_MM[1])
+            raw = np.where(bad, np.nan, raw)
+            eyes[k] = np.where(artefacts(rec.time, raw * scale, params.max_pupil_speed,
+                                         params.artefact_padding), np.nan, raw)
+    raw = combine_eyes(eyes[0], eyes[1], params.eye)
     time, pupil, valid = resample(rec.time, raw, fs, params.max_gap)
     smooth = savgol_filter(pupil, _odd(fs / 2 + 1), 2)
     fast = savgol_filter(pupil, _odd(fs / 4 + 1, 9), 6)

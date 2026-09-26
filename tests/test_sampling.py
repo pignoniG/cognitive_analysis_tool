@@ -63,3 +63,28 @@ def test_analysis_rate_is_independent_of_device_rate(tmp_path):
     assert rec.measured_rate == pytest.approx(200)
     assert np.diff(r100.time).mean() == pytest.approx(0.01)
     assert r100.expected_white == r200.expected_white
+
+
+def test_artefact_filter_removes_blink_edges_not_responses():
+    rate = 200
+    t = np.arange(0, 4, 1 / rate)
+    rng = np.random.default_rng(0)
+    # A fast but physiological constriction (5 mm/s, 0.3 s), noise, and a blink-like dip of 1.5 mm in 30 ms.
+    d = 6.0 - np.clip((t - 1.0) / 0.3, 0, 1) * 1.5 + rng.normal(0, 0.03, len(t))
+    blink = (t >= 2.5) & (t < 2.53)
+    d[blink] -= 1.5
+    drop = pipeline.artefacts(t, d, max_speed=10.0, padding=0.05)
+    assert drop[blink].all()
+    assert not drop[(t > 0.9) & (t < 1.4)].any()          # the constriction survives
+    assert not drop[(t < 2.35) | (t > 2.7)].any()          # noise at 200 Hz is not flagged
+    assert drop.mean() < 0.06                             # blink ± speed span ± padding only
+    assert not pipeline.artefacts(t, d, max_speed=0, padding=0.05).any()
+
+
+def test_artefacts_are_removed_per_eye(tmp_path):
+    def left(x):
+        return 1.2 if 1.0 <= x < 1.03 else 2.0   # device units (radius): a 1.6 mm dip for 30 ms
+    folder = write_varjo_recording(tmp_path / "rec", [128] * 3, pupil_mm=left)
+    rec, r = _run(folder, alignment="none")
+    near = (r.time > 0.95) & (r.time < 1.1)
+    assert np.nanmin(r.measured[near]) > 3.9            # the dip does not reach the output
