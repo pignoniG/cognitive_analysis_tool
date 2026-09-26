@@ -21,7 +21,7 @@ class VideoSettings:
     # Gaze circle radius in degrees of visual angle (converted with vertical_fov, assuming a linear
     # lens mapping). 5.25° equals the earlier default of 1/8 of the scene circle on the Varjo XR-4.
     fixation_radius_deg: float = 5.25
-    background_excludes_fixation: bool = False
+    background_excludes_fixation: bool = True   # background = rest of the scene, as in the paper and Eckert et al.
     analysis_width: int = 500            # frames are downscaled to this width
 
     def for_recording(self, rec) -> "VideoSettings":

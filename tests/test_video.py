@@ -8,7 +8,8 @@ from cwtool.video import VideoResult, analyse_frame, analyse_video
 def test_two_areas_on_synthetic_frame():
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     frame[45:56, 45:56] = [200, 100, 50]  # bright patch at the centre
-    s = VideoSettings(circular_mask=True, field_radius=1.0, vertical_fov=100, fixation_radius_deg=2.5)  # 2 px
+    s = VideoSettings(circular_mask=True, field_radius=1.0, vertical_fov=100, fixation_radius_deg=2.5,
+                      background_excludes_fixation=False)  # 2 px
     fix, bg, *_ = analyse_frame(frame, np.array([[50, 50], [10, 50]]), s)
     assert fix[0] == pytest.approx([200, 100, 50])
     assert fix[1] == pytest.approx([0, 0, 0])
@@ -21,7 +22,8 @@ def test_background_can_exclude_fixation():
     s = VideoSettings(circular_mask=True, field_radius=1.0, vertical_fov=100, fixation_radius_deg=10, background_excludes_fixation=True)
     fix, bg, *_ = analyse_frame(frame, np.array([[50, 50]]), s)
     assert fix[0] == pytest.approx([255] * 3)
-    assert bg[0][0] < analyse_frame(frame, np.array([[50, 50]]), VideoSettings(circular_mask=True, field_radius=1.0, vertical_fov=100, fixation_radius_deg=10))[1][0][0]
+    assert bg[0][0] < analyse_frame(frame, np.array([[50, 50]]), VideoSettings(circular_mask=True, field_radius=1.0, vertical_fov=100, fixation_radius_deg=10,
+                                                                           background_excludes_fixation=False))[1][0][0]
 
 
 def test_analyse_video_follows_levels_and_caches(varjo_folder):
@@ -61,7 +63,7 @@ def test_circular_mask_excludes_black_corners():
 def test_without_mask_background_is_whole_frame():
     frame = np.zeros((60, 100, 3), dtype=np.uint8)
     frame[:, :50] = 200  # left half bright, including the corners
-    _, bg, *_ = analyse_frame(frame, np.array([[50, 30]]), VideoSettings())
+    _, bg, *_ = analyse_frame(frame, np.array([[50, 30]]), VideoSettings(background_excludes_fixation=False))
     assert bg[0] == pytest.approx([100] * 3)
 
     corners = np.full((60, 100, 3), 200, dtype=np.uint8)
@@ -89,7 +91,7 @@ def test_textured_area_is_linearised_per_pixel():
 def test_gamma_interpolation_matches_exact_mean():
     rng = np.random.default_rng(0)
     frame = rng.integers(0, 256, (60, 80, 3)).astype(np.uint8)
-    s = VideoSettings(field_radius=1.0, vertical_fov=100, fixation_radius_deg=25)
+    s = VideoSettings(field_radius=1.0, vertical_fov=100, fixation_radius_deg=25, background_excludes_fixation=False)
     fix_rgb, bg_rgb, fix_lin, bg_lin = analyse_frame(frame, np.array([[40, 30]]), s)
     res = VideoResult(np.zeros(1), fix_rgb, bg_rgb, fix_lin, bg_lin)
     for gamma in (1.4, 1.95, 2.2, 2.47, 3.0):
@@ -116,3 +118,12 @@ def test_fixation_radius_in_degrees_follows_device_fov():
     assert radii(1000, varjo_like)[1] == 50                     # 5 % of the frame height
     narrow = VideoSettings(vertical_fov=52.5, fixation_radius_deg=5.25)
     assert radii(1000, narrow)[1] == 100                        # same angle covers more pixels
+
+
+def test_background_excludes_gaze_circle_by_default():
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    frame[45:56, 45:56] = 255
+    s = VideoSettings(vertical_fov=100, fixation_radius_deg=8)
+    assert s.background_excludes_fixation
+    fix, bg, *_ = analyse_frame(frame, np.array([[50, 50]]), s)
+    assert fix[0][0] > 100 and bg[0][0] == pytest.approx(0, abs=1)  # the whole patch is inside the disc

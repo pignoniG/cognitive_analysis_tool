@@ -189,7 +189,8 @@ them rather than describing the headset or the participant.
   The effect is small (the fixation circle is ~1.5 % of the scene circle) but the text and code disagree.
 - **Proposal:** pick one; 2.0 supports both.
 - **Reference:** Eckert et al. (2022) also define the background as "the whole screen except the fixation area".
-- **Status:** kept, open.
+- **2.0:** the background now excludes the gaze circle by default, matching both papers; including it remains an option.
+- **Status:** fixed in 2.0.
 
 ### 16. Legacy video CSV has R and G columns swapped
 - **Where:** `magicwand.mean` returns B, G, R (OpenCV order) but `subFrameAsinc` unpacks it as B, R, G;
