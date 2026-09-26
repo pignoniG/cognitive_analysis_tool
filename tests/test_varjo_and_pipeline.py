@@ -31,7 +31,7 @@ def test_pipeline_zero_cw_when_pupil_follows_model(tmp_path):
     def lum_of(t):
         g = grays[min(int(t), len(grays) - 1)]
         from cwtool import luminance
-        lin = luminance.srgb_to_linear([g, g, g], params.gamma)
+        lin = luminance.to_linear([g, g, g], params.gamma)
         return luminance.absolute_luminance(lin, params.l_min, params.l_max)
 
     from cwtool import model

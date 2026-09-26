@@ -1,5 +1,10 @@
 """RGB to absolute luminance, following the per-channel extension of the
-WCAG 2.1 relative luminance definition described in the Varjo paper."""
+WCAG 2.1 relative luminance definition described in the Varjo paper.
+
+Code values are decoded with a plain power law, C_lin = C'^γ. At the default
+γ = 2.2 this is the standard approximation of the sRGB curve (within 1 % of full
+scale), and unlike the piecewise sRGB formula it stays continuous for any γ,
+which is adjustable because headset tone mapping is undocumented."""
 
 from __future__ import annotations
 
@@ -9,10 +14,9 @@ import numpy as np
 SRGB_WEIGHTS = np.array([0.2126, 0.7152, 0.0722])
 
 
-def srgb_to_linear(rgb8, gamma: float = 2.2) -> np.ndarray:
-    """Decode 8-bit sRGB code values (0-255) to linear values in [0, 1]."""
-    c = np.asarray(rgb8, dtype=float) / 255.0
-    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** gamma)
+def to_linear(rgb8, gamma: float = 2.2) -> np.ndarray:
+    """Decode 8-bit code values (0-255) to linear values in [0, 1]: (C / 255)^γ."""
+    return (np.asarray(rgb8, dtype=float) / 255.0) ** gamma
 
 
 def relative_luminance(linear_rgb) -> np.ndarray:

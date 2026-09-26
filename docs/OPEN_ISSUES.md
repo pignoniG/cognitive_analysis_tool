@@ -158,7 +158,11 @@ them rather than describing the headset or the participant.
   power part 0.00506. "2.2" is the exponent of the *pure power* approximation of sRGB (C_lin = C'^2.2).
   The legacy code also mixes 2.2 (Varjo luminance) and 2.4 (video averages).
 - **Proposal:** either piecewise with 2.4 (exact sRGB) or pure power with an adjustable γ (default 2.2).
-- **Status:** open.
+- **2.0:** switched to the pure power curve C_lin = (C'/255)^γ with γ adjustable (default 2.2). It is continuous
+  for any γ and within 1 % of full scale of exact sRGB at 2.2. Compared with the previous hybrid, mid-tones decode
+  about 12 % darker (code 128: 0.218 instead of 0.248), so calibrations made before this change should be
+  re-checked on the sequence; this cannot be converted exactly.
+- **Status:** fixed in 2.0.
 
 ### 13. Averaging gamma-encoded pixel values
 - **Where:** legacy `magicwand.mean` / `meanSmall`; 2.0 `video.analyse_frame`.

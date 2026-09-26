@@ -4,16 +4,20 @@ import pytest
 from cwtool import luminance
 
 
-def test_srgb_endpoints_and_linear_segment():
-    lin = luminance.srgb_to_linear([0, 255, 10], gamma=2.4)
+def test_power_curve_endpoints_and_mid_gray():
+    lin = luminance.to_linear([0, 255, 128], gamma=2.2)
     assert lin[0] == 0
     assert lin[1] == pytest.approx(1.0)
-    assert lin[2] == pytest.approx(10 / 255 / 12.92)
+    assert lin[2] == pytest.approx((128 / 255) ** 2.2)
 
 
-def test_srgb_standard_mid_gray():
-    # sRGB 128 decodes to ~0.2159 with the standard 2.4 exponent.
-    assert luminance.srgb_to_linear(128, 2.4) == pytest.approx(0.2159, abs=1e-4)
+def test_power_22_approximates_srgb_and_is_continuous():
+    c = np.arange(256)
+    srgb = np.where(c / 255 <= 0.04045, c / 255 / 12.92, ((c / 255 + 0.055) / 1.055) ** 2.4)
+    assert np.abs(luminance.to_linear(c, 2.2) - srgb).max() < 0.01
+    for gamma in (1.8, 2.2, 2.6):
+        assert np.all(np.diff(luminance.to_linear(np.linspace(0, 255, 2000), gamma)) >= 0)
+        assert np.abs(np.diff(luminance.to_linear(np.linspace(0, 255, 2000), gamma))).max() < 0.01
 
 
 def test_absolute_luminance_endpoints_unit_gains():

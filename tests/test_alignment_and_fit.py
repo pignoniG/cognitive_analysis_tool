@@ -65,7 +65,7 @@ def test_fit_recovers_latency_dynamics_scale_and_offset(tmp_path):
     area = varjo.PROFILE.field_area
     t = np.arange(len(colours) * step * rate) / rate
     level = np.array([colours[min(int(x // step), len(colours) - 1)] for x in t])
-    lin = luminance.srgb_to_linear(np.stack([level] * 3, axis=1), params.gamma)
+    lin = luminance.to_linear(np.stack([level] * 3, axis=1), params.gamma)
     L = luminance.absolute_luminance(lin, params.l_min, params.l_max)
     pd = model.watson_yellott(L, params.age, area)
     pd = model.attack_release(model.delay(pd, rate, true["delay"]), rate, true["attack"], true["release"])

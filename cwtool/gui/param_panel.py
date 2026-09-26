@@ -19,7 +19,7 @@ NUMBERS = {
     "gain_r": ("Red gain", 0, 100, 0.1, 2, "Relative gain of the red channel"),
     "gain_g": ("Green gain", 0, 100, 0.1, 2, "Relative gain of the green channel"),
     "gain_b": ("Blue gain", 0, 100, 0.1, 2, "Relative gain of the blue channel"),
-    "gamma": ("Gamma", 0.5, 5, 0.1, 2, "sRGB decoding exponent"),
+    "gamma": ("Gamma", 0.5, 5, 0.1, 2, "Display gamma: code values are decoded as (C/255)^γ"),
     "fixation_weight": ("Fixation weight", 0, 1, 0.05, 2, "Weight of the gaze area; the background gets the rest"),
     "pupil_offset": ("Pupil offset (mm)", -10, 10, 0.01, 3, "Offset used by alignment 'fixed' (set by the calibration fit)"),
     "pupil_correction": ("Pupil scale correction", 0.1, 10, 0.01, 3,

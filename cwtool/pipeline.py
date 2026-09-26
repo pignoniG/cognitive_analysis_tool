@@ -91,8 +91,8 @@ def resample(time: np.ndarray, values: np.ndarray, rate: float, max_gap: float):
 def scene_luminance(video: VideoResult, params: Parameters) -> np.ndarray:
     """Absolute luminance (cd/m²) for each video sample: fixation and background
     are linearised, weighted, then mapped onto [l_min, l_max] with channel gains."""
-    fix = luminance.srgb_to_linear(video.fixation_rgb, params.gamma)
-    bg = luminance.srgb_to_linear(video.background_rgb, params.gamma)
+    fix = luminance.to_linear(video.fixation_rgb, params.gamma)
+    bg = luminance.to_linear(video.background_rgb, params.gamma)
     w = params.fixation_weight
     return luminance.absolute_luminance(w * fix + (1 - w) * bg, params.l_min, params.l_max, params.gains)
 
