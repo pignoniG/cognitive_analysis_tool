@@ -188,6 +188,7 @@ them rather than describing the headset or the participant.
 - **Problem:** the paper describes rL_bg as "the remainder of the frame". The code includes the fixation circle.
   The effect is small (the fixation circle is ~1.5 % of the scene circle) but the text and code disagree.
 - **Proposal:** pick one; 2.0 supports both.
+- **Reference:** Eckert et al. (2022) also define the background as "the whole screen except the fixation area".
 - **Status:** kept, open.
 
 ### 16. Legacy video CSV has R and G columns swapped
@@ -202,6 +203,9 @@ them rather than describing the headset or the participant.
 - **Problem:** the fixation area is a fraction of the frame, so it covers a different visual angle on each
   device (Varjo, Pupil Core, Neon scene cameras have different FOVs), and the paper does not give its size.
 - **Proposal:** define it in degrees per device and report the value in the paper.
+- **Reference:** Eckert et al. (2022) used a fixation radius of about 16° (display width / 5) with weights 26:74.
+  The 2.0 default is about 5° radius, roughly a tenth of their area, so the 65:35 and 26:74 weights are not directly
+  comparable; the paper should report the radius next to the weights.
 - **Status:** open.
 
 ---
@@ -265,6 +269,23 @@ them rather than describing the headset or the participant.
 - **2.0:** scene circle default changed to 0.8 (the old 0.5 covered only half of the visible Varjo disc, which the
   video preview makes obvious). The other defaults are unchanged; `cw_smoothing` is the equivalent of `pupilFiltering`.
 - **Status:** open.
+
+### 27. Pupil size depends on gaze angle
+- **Where:** all devices; not corrected anywhere.
+- **Problem:** camera-based eye trackers under-measure the pupil when the eye looks away from the camera
+  (pupil foreshortening; Hayes & Petrov 2016, Petersch & Dierkes 2021, cited by Eckert et al. 2022). With fixed eye
+  cameras this adds a gaze-dependent error to the measured PD, which could be mistaken for workload in tasks with
+  systematic gaze shifts.
+- **Proposal:** check its size on Varjo data (ΔPD against gaze eccentricity during steady light); if relevant, add a
+  per-device correction as a function of gaze angle, or report gaze distributions per condition.
+- **Status:** open.
+
+### 28. ΔPD is relative, not absolute
+- **Where:** interpretation of results.
+- **Note:** Eckert et al. (2022) also conclude that PLR-corrected pupil sizes only show relative changes and require a
+  baseline without task load. This supports "baseline" alignment and reporting in SD units, and is worth citing where
+  the paper discusses absolute vs relative ΔPD.
+- **Status:** open (paper).
 
 ## D. Paper text
 
