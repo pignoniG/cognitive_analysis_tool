@@ -26,6 +26,10 @@ The video pass (fixation circle vs background, per gaze sample) is cached next t
 in `cwtool_video.csv`, so changing photometric parameters or the fixation weight does not re-read the video.
 Participant parameters (Lmin, Lmax, channel gains, gamma, weights, dynamics) are saved as JSON.
 
+**Calibration sequence.** The overlay and the fit use the built-in 20-step sequence, or the timestamped
+RGB CSV played by the Unity calibration scene ("Load sequence…"), so other orders and durations, such as the
+pseudo-random order recommended by Eckert et al. (2022), work without code changes.
+
 **Calibration fit.** After setting the photometric calibration (Lmin, Lmax, gains, gamma) on the
 sequence, "Fit latency, scale and offset" estimates the participant's response latency, dilation and
 constriction time constants, pupil scale correction and offset. Applying it sets alignment to "fixed", so

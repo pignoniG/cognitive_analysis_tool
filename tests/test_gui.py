@@ -85,3 +85,17 @@ def test_fit_button_applies_fitted_parameters(app, varjo_folder, monkeypatch):
     w.fit_button.click()
     assert wait_for(app, lambda: w.params_panel.params().alignment == "fixed")
     w.close()
+
+
+def test_loaded_sequence_drives_overlay_and_rms(app, varjo_folder, tmp_path):
+    from cwtool import calibration
+    w = MainWindow()
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None)
+    (tmp_path / "s.csv").write_text("time,r,g,b\n0,0,0,0\n1,128,128,128\n2,255,255,255\n")
+    w.set_sequence(calibration.load_sequence(tmp_path / "s.csv"))
+    w.sequence_check.setChecked(True)
+    w.sequence_start.setValue(0)
+    assert len(w.plots._sequence_items) == 3
+    assert "3 steps" in w.sequence_label.text() and w.sequence_rms.text().endswith("mm")
+    w.close()

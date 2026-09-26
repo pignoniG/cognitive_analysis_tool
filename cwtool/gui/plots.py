@@ -59,6 +59,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.sequence_line.sigPositionChanged.connect(self._line_moved)
         self._sequence_start = 0.0
         self._sequence_visible = False
+        self._sequence = calibration.DEFAULT
 
         # Preview cursor: click on either plot to place it, or drag it.
         cursor_pen = pg.mkPen((214, 39, 40), width=1, style=pg.QtCore.Qt.DotLine)
@@ -119,9 +120,11 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
     # Calibration sequence overlay
 
-    def set_sequence(self, visible: bool, start: float) -> None:
+    def set_sequence(self, visible: bool, start: float, sequence: calibration.Sequence | None = None) -> None:
         self._sequence_visible = visible
         self._sequence_start = start
+        if sequence is not None:
+            self._sequence = sequence
         self._draw_sequence()
 
     def _draw_sequence(self) -> None:
@@ -133,8 +136,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         if not self._sequence_visible:
             return
         s = self._sequence_start
-        for step in calibration.SEQUENCE:
-            region = pg.LinearRegionItem((s + step.start, s + step.start + calibration.STEP_SECONDS),
+        for step in self._sequence.steps:
+            region = pg.LinearRegionItem((s + step.start, s + step.end),
                                          movable=False, brush=pg.mkBrush(*step.rgb, 70),
                                          pen=pg.mkPen((200, 200, 200)))
             region.setZValue(-10)
@@ -149,9 +152,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     def _line_moved(self) -> None:
         self._sequence_start = float(self.sequence_line.value())
         # Move the regions without rebuilding them while dragging.
-        for region, step in zip(self._sequence_items, calibration.SEQUENCE):
-            a = self._sequence_start + step.start
-            region.setRegion((a, a + calibration.STEP_SECONDS))
+        for region, step in zip(self._sequence_items, self._sequence.steps):
+            region.setRegion((self._sequence_start + step.start, self._sequence_start + step.end))
         self.sequence_start_changed.emit(self._sequence_start)
 
 

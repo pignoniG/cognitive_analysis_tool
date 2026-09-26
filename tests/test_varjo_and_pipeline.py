@@ -68,10 +68,11 @@ def test_params_roundtrip(tmp_path):
 
 
 def test_calibration_sequence():
-    assert len(calibration.SEQUENCE) == 20
-    assert calibration.DURATION == 120
-    assert calibration.SEQUENCE[8].rgb == (64, 0, 0)
-    assert calibration.SEQUENCE[-1].rgb == (0, 0, 255)
+    seq = calibration.DEFAULT
+    assert len(seq.steps) == 20
+    assert seq.duration == 120
+    assert seq.steps[8].rgb == (64, 0, 0)
+    assert seq.steps[-1].rgb == (0, 0, 255)
 
 
 def test_cli_end_to_end(varjo_folder, capsys):

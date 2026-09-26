@@ -97,8 +97,8 @@ def _best_delay(problem: _Problem, attack, release, step: float) -> float:
 def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, start: float,
                     end: Optional[float] = None, fit_dynamics: bool = True,
                     cancelled: Optional[Callable[[], bool]] = None) -> FitResult:
-    """Fit on the window [start, end] (default: the standard sequence duration)."""
-    end = start + calibration.DURATION if end is None else end
+    """Fit on the window [start, end] (default: the built-in sequence's duration)."""
+    end = start + calibration.DEFAULT.duration if end is None else end
     prep = prepare(rec, video, params)
     if prep.scale is None:
         raise ValueError("The calibration fit needs a device with a known pupil scale (not pixel data)")

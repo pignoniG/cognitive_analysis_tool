@@ -39,6 +39,7 @@ class MainWindow(QMainWindow):
 
         self._build_actions()
         self._build_ui()
+        self._restore_sequence()
         self._update_state()
 
     # UI
@@ -115,6 +116,19 @@ class MainWindow(QMainWindow):
         self.sequence_start.setToolTip("Drag the grey line on the plot or type a value")
         self.sequence_start.valueChanged.connect(self._sequence_changed)
         self.sequence_rms = QLabel("–")
+        self.sequence = calibration.DEFAULT
+        self.sequence_label = QLabel()
+        self.sequence_label.setWordWrap(True)
+        sequence_buttons = QHBoxLayout()
+        load_sequence = QPushButton("Load sequence…")
+        load_sequence.setToolTip("The timestamped RGB CSV played by the calibration scene")
+        load_sequence.clicked.connect(self.choose_sequence)
+        default_sequence = QPushButton("Built-in")
+        default_sequence.clicked.connect(lambda: self.set_sequence(calibration.DEFAULT))
+        sequence_buttons.addWidget(load_sequence)
+        sequence_buttons.addWidget(default_sequence)
+        cal_layout.addRow(self.sequence_label)
+        cal_layout.addRow(sequence_buttons)
         cal_layout.addRow(self.sequence_check)
         cal_layout.addRow("Start", self.sequence_start)
         cal_layout.addRow("ΔPD RMS in sequence", self.sequence_rms)
@@ -164,6 +178,16 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         self.resizeDocks([dock], [420], Qt.Horizontal)
         self.view_menu.addAction(dock.toggleViewAction())
+
+    def _restore_sequence(self) -> None:
+        path = self._settings.value("last_sequence", "")
+        sequence = calibration.DEFAULT
+        if path and Path(path).exists():
+            try:
+                sequence = calibration.load_sequence(path)
+            except Exception:
+                pass
+        self.set_sequence(sequence)
 
     def _update_state(self) -> None:
         busy = self._task is not None and self._task.isRunning()
@@ -308,16 +332,17 @@ class MainWindow(QMainWindow):
         self._update_state()
 
     def _sequence_changed(self) -> None:
-        self.plots.set_sequence(self.sequence_check.isChecked(), self.sequence_start.value())
+        self.plots.set_sequence(self.sequence_check.isChecked(), self.sequence_start.value(), self.sequence)
         self._update_sequence_rms()
         self._update_state()
 
     def fit_sequence(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, dynamics = self.sequence_start.value(), self.fit_dynamics_check.isChecked()
+        end = start + self.sequence.duration
 
         def work(progress, cancelled):
-            return fit_calibration(rec, video, params, start, fit_dynamics=dynamics, cancelled=cancelled)
+            return fit_calibration(rec, video, params, start, end, fit_dynamics=dynamics, cancelled=cancelled)
 
         self._start_task(work, self._fit_done, "Fitting on the calibration sequence…")
 
@@ -346,7 +371,26 @@ class MainWindow(QMainWindow):
             self.sequence_rms.setText("–")
             return
         s = self.sequence_start.value()
-        self.sequence_rms.setText(f"{rms_in(self.result, s, s + calibration.DURATION):.3f} mm")
+        self.sequence_rms.setText(f"{rms_in(self.result, s, s + self.sequence.duration):.3f} mm")
+
+    def choose_sequence(self) -> None:
+        start = self._settings.value("last_sequence_dir", str(Path.home()))
+        path, _ = QFileDialog.getOpenFileName(self, "Load calibration sequence", start, "CSV (*.csv *.txt)")
+        if not path:
+            return
+        try:
+            sequence = calibration.load_sequence(path)
+        except Exception as e:
+            self._error("Cannot read the sequence", str(e))
+            return
+        self._settings.setValue("last_sequence_dir", str(Path(path).parent))
+        self._settings.setValue("last_sequence", path)
+        self.set_sequence(sequence)
+
+    def set_sequence(self, sequence: calibration.Sequence) -> None:
+        self.sequence = sequence
+        self.sequence_label.setText(f"{sequence.name}: {len(sequence.steps)} steps, {sequence.duration:.0f} s")
+        self._sequence_changed()
 
     def choose_params(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Load parameters", self._params_dir(), "Parameters (*.json)")
