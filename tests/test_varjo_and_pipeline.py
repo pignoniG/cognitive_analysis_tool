@@ -19,6 +19,7 @@ def test_varjo_reader(varjo_folder):
     assert np.allclose(rec.gaze, 0.5)  # projected (0, 0) is the frame centre
     assert np.allclose(rec.pupil_left, 4.0)
     assert rec.luminance_source == "display"
+    assert rec.circular_scene
 
 
 def test_pipeline_zero_cw_when_pupil_follows_model(tmp_path):
@@ -35,7 +36,7 @@ def test_pipeline_zero_cw_when_pupil_follows_model(tmp_path):
     pupil = lambda t: float(model.watson_yellott(lum_of(t), params.age, params.field))
     folder = write_varjo_recording(tmp_path / "rec", grays, pupil_mm=pupil)
     rec = devices.load(folder)
-    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings())
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec))
     result = pipeline.run(rec, video, params)
     # Savitzky-Golay smoothing blurs the steps, so compare away from transitions.
     steady = np.array([(t % 1) > 0.4 and (t % 1) < 0.6 for t in result.cw_time])
@@ -48,7 +49,7 @@ def test_pipeline_detects_added_dilation(tmp_path):
     folder = write_varjo_recording(tmp_path / "rec", [128] * 6,
                                    pupil_mm=lambda t: 4.0 + (0.5 if 2 <= t < 4 else 0.0))
     rec = devices.load(folder)
-    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings())
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec))
     result = pipeline.run(rec, video, params)
     mid = lambda a, b: result.cw[(result.cw_time > a) & (result.cw_time < b)].mean()
     assert mid(2.5, 3.5) - mid(0.5, 1.5) == pytest.approx(0.5, abs=0.05)

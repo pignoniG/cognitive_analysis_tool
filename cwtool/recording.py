@@ -37,6 +37,7 @@ class Recording:
     sample_rate: float          # Hz, nominal
     luminance_source: LuminanceSource
     scene_video: Optional[Path] = None
+    circular_scene: bool = False  # scene video is a circle with black corners that must be masked out
     lux_time: Optional[np.ndarray] = None    # s, relative clock
     lux_values: Optional[np.ndarray] = None  # lux
     events: list[Event] = field(default_factory=list)

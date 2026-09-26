@@ -100,6 +100,7 @@ def load(folder: Path, gaze_eye: str = "left") -> Recording:
         sample_rate=SAMPLE_RATE,
         luminance_source="display",
         scene_video=_find(folder, "varjo_capture_"),
+        circular_scene=True,
         events=read_event_log(folder, epoch_start),
     )
 

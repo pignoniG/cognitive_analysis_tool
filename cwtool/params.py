@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 
 
@@ -12,10 +12,14 @@ class VideoSettings:
     """Geometry of the two-area estimate. Changing these requires re-running
     the video analysis; everything in :class:`Parameters` does not."""
 
+    circular_mask: bool = False          # set from the recording: scene is a circle with black corners
     field_radius: float = 0.5            # scene circle radius, fraction of half the frame height
-    fixation_ratio: float = 0.125        # fixation circle radius, fraction of the field radius
+    fixation_ratio: float = 0.125        # fixation radius = fixation_ratio * field_radius * half frame height
     background_excludes_fixation: bool = False
     analysis_width: int = 500            # frames are downscaled to this width
+
+    def for_recording(self, rec) -> "VideoSettings":
+        return replace(self, circular_mask=rec.circular_scene)
 
 
 @dataclass

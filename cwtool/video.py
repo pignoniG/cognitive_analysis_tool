@@ -1,8 +1,9 @@
 """Two-area scene video analysis.
 
 For every gaze sample, the mean RGB inside a small circle centred on the gaze
-(fixation area) and inside a large circle centred on the frame (background,
-the visible scene) is measured. Luminance weighting is applied later by the
+(fixation area) and over the background is measured. The background is the
+whole frame, or, for videos whose scene is a circle with black corners
+(Varjo), a centred circle that excludes the corners. Luminance weighting is applied later by the
 pipeline, so the fixation weight and photometric calibration can change
 without re-reading the video.
 """
@@ -58,18 +59,26 @@ def _circle_mask(shape: tuple[int, int], center: tuple[int, int], radius: int) -
     return mask
 
 
+def field_mask(shape: tuple[int, int], settings: VideoSettings) -> np.ndarray:
+    """Background area: the centred scene circle for circular-mask videos
+    (Varjo), otherwise the whole frame."""
+    h, w = shape
+    if not settings.circular_mask:
+        return np.full((h, w), 255, dtype=np.uint8)
+    return _circle_mask((h, w), (w // 2, h // 2), int(h / 2 * settings.field_radius))
+
+
 def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSettings,
-                  field_mask: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray]:
+                  mask: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray]:
     """Measure one frame. ``gaze_px`` is (M, 2) pixel coordinates in the frame.
     Returns (M, 3) fixation and background mean RGB."""
     h, w = frame_rgb.shape[:2]
-    field_r = int(h / 2 * settings.field_radius)
-    fix_r = max(int(field_r * settings.fixation_ratio), 1)
-    if field_mask is None:
-        field_mask = _circle_mask((h, w), (w // 2, h // 2), field_r)
+    fix_r = max(int(h / 2 * settings.field_radius * settings.fixation_ratio), 1)
+    if mask is None:
+        mask = field_mask((h, w), settings)
 
     pixels = frame_rgb.reshape(-1, 3).astype(np.float64)
-    in_field = field_mask.reshape(-1) > 0
+    in_field = mask.reshape(-1) > 0
     field_sum = pixels[in_field].sum(axis=0)
     field_n = int(in_field.sum())
 
@@ -86,7 +95,7 @@ def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSet
         fix_out[i] = crop[sel].mean(axis=0)
 
         if settings.background_excludes_fixation:
-            overlap = sel & (field_mask[y0:y1, x0:x1].reshape(-1) > 0)
+            overlap = sel & (mask[y0:y1, x0:x1].reshape(-1) > 0)
             n = field_n - int(overlap.sum())
             bg_out[i] = (field_sum - crop[overlap].sum(axis=0)) / max(n, 1)
         else:
@@ -114,7 +123,7 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
     idx, frame_of = idx[order], frame_of[order]
 
     times, fixes, bgs = [], [], []
-    field_mask = None
+    mask = None
     pos, frame_no = 0, 0
     last_frame = frame_of[-1] if len(frame_of) else -1
     while pos < len(idx) and frame_no <= last_frame:
@@ -130,11 +139,11 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
                                interpolation=cv2.INTER_AREA)
             small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
             h, w = small.shape[:2]
-            if field_mask is None:
-                field_mask = _circle_mask((h, w), (w // 2, h // 2), int(h / 2 * settings.field_radius))
+            if mask is None:
+                mask = field_mask((h, w), settings)
             sample = idx[pos:end]
             gaze_px = gaze[sample] * [w, h]
-            fix, bg = analyse_frame(small, gaze_px, settings, field_mask)
+            fix, bg = analyse_frame(small, gaze_px, settings, mask)
             times.append(time[sample])
             fixes.append(fix)
             bgs.append(bg)

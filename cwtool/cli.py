@@ -22,8 +22,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     params = Parameters.load(args.params) if args.params else Parameters()
-    settings = VideoSettings()
     rec = devices.load(args.recording, args.device)
+    settings = VideoSettings().for_recording(rec)
     print(f"{rec.device} recording {rec.name}: {len(rec.time)} samples, {rec.time[-1] - rec.time[0]:.1f} s")
 
     if rec.scene_video is None:
