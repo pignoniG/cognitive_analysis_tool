@@ -89,8 +89,9 @@ over the field it sees. The TSL2591's response is close to a cosine (datasheet, 
 integral is 3.10, against \(\pi\) for an ideal cosine). In the printed housing the board sits at the bottom of the
 funnel, so the photodiode is level with the funnel's base, 3.7 mm below its rim (10.6 mm across); the rim limits
 the field to a half-angle of 55°. The integral over that field is 2.12–2.15 (depending on where the chip sits
-under the funnel), within 2–4 % of 2.2, i.e. about 0.01 mm of modelled pupil. The 1.x values \(g\) = 1.706061, \(o\) = 0.66935
-came from a comparison in the 2019 master thesis (Pignoni, "Quantitative evaluation tool of cognitive workload",
+under the funnel), within 2–4 % of 2.2, i.e. about 0.01 mm of modelled pupil.
+
+**Where the 1.x gain and offset came from.** The 1.x values \(g\) = 1.706061, \(o\) = 0.66935 came from a comparison in the 2019 master thesis (Pignoni, "Quantitative evaluation tool of cognitive workload",
 NTNU; section 4.2, Table 2 and Figure 13): a projected screen in a dark room was measured by a Konica Minolta CS-2000
 spectroradiometer (a 2° spot at its centre, its brightest part) and by the head-mounted sensor (lux / 2.2, a field of
 more than 60° including the darker surround). Regressing the spectroradiometer on the sensor gives a slope of 1.709
