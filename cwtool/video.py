@@ -31,13 +31,21 @@ from cwtool.params import VideoSettings
 
 CACHE_CSV = "cwtool_video.csv"
 CACHE_JSON = "cwtool_video.json"
-CACHE_FORMAT = 3
+CACHE_FORMAT = 4
 MIN_CHUNK_FRAMES = 150   # frames per parallel chunk, at least
 
 GAMMA_GRID = np.round(np.arange(1.4, 3.0001, 0.2), 2)   # γ values the linear means are stored for
 GAMMA_RANGE = (float(GAMMA_GRID[0]), float(GAMMA_GRID[-1]))
 _CODES = np.arange(256, dtype=float)
 _LUT = (_CODES / 255.0)[None, :] ** GAMMA_GRID[:, None]   # (G, 256)
+
+
+def _clock_key(frame_times: Optional[np.ndarray]) -> str:
+    """Identifies how gaze samples were matched to frames, for the cache check."""
+    if frame_times is None:
+        return "fps"
+    import hashlib
+    return "times:" + hashlib.sha1(np.asarray(frame_times, dtype=np.float64).tobytes()).hexdigest()[:16]
 
 
 def _histograms(pixels: np.ndarray) -> np.ndarray:
@@ -58,6 +66,7 @@ class VideoResult:
     background_rgb: np.ndarray  # (N, 3)
     fixation_lin: np.ndarray    # (N, G, 3) mean of (C/255)^γ for each γ in GAMMA_GRID
     background_lin: np.ndarray  # (N, G, 3)
+    frame_lin: np.ndarray       # (N, G, 3) whole visible scene (field mask), fixation included
 
     def linear(self, gamma: float) -> tuple[np.ndarray, np.ndarray]:
         """Per-pixel-linearised mean R, G, B (N, 3) of the fixation and background areas.
@@ -72,40 +81,51 @@ class VideoResult:
 
         return interp(self.fixation_lin), interp(self.background_lin)
 
+    def frame_linear(self, gamma: float) -> np.ndarray:
+        """Per-pixel-linearised mean R, G, B (N, 3) of the whole visible scene."""
+        return VideoResult(self.time, self.fixation_rgb, self.background_rgb,
+                           self.frame_lin, self.frame_lin, self.frame_lin).linear(gamma)[0]
+
     @classmethod
     def empty(cls) -> "VideoResult":
         g = len(GAMMA_GRID)
-        return cls(np.empty(0), np.empty((0, 3)), np.empty((0, 3)), np.empty((0, g, 3)), np.empty((0, g, 3)))
+        return cls(np.empty(0), np.empty((0, 3)), np.empty((0, 3)), np.empty((0, g, 3)), np.empty((0, g, 3)),
+                   np.empty((0, g, 3)))
 
-    def save(self, folder: Path, settings: VideoSettings, video: Path) -> None:
-        lin_cols = [f"{area}_lin{g:.1f}_{c}" for area in ("fix", "bg") for g in GAMMA_GRID for c in "rgb"]
+    def save(self, folder: Path, settings: VideoSettings, video: Path,
+             frame_times: Optional[np.ndarray] = None) -> None:
+        lin_cols = [f"{area}_lin{g:.1f}_{c}" for area in ("fix", "bg", "frame") for g in GAMMA_GRID for c in "rgb"]
         n = len(self.time)
         with open(folder / CACHE_CSV, "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(["time", "fix_r", "fix_g", "fix_b", "bg_r", "bg_g", "bg_b"] + lin_cols)
             table = np.column_stack([self.time, self.fixation_rgb, self.background_rgb,
-                                     self.fixation_lin.reshape(n, -1), self.background_lin.reshape(n, -1)])
+                                     self.fixation_lin.reshape(n, -1), self.background_lin.reshape(n, -1),
+                                     self.frame_lin.reshape(n, -1)])
             for row in table:
                 w.writerow([f"{v:.6g}" for v in row])
         meta = {"format": CACHE_FORMAT, "gammas": GAMMA_GRID.tolist(), "settings": asdict(settings),
-                "video": video.name}
+                "video": video.name, "frame_clock": _clock_key(frame_times)}
         (folder / CACHE_JSON).write_text(json.dumps(meta, indent=2))
 
     @classmethod
-    def load_cached(cls, folder: Path, settings: VideoSettings, video: Path) -> Optional["VideoResult"]:
-        """Return the cached result if it was made from the same video, settings and format."""
+    def load_cached(cls, folder: Path, settings: VideoSettings, video: Path,
+                    frame_times: Optional[np.ndarray] = None) -> Optional["VideoResult"]:
+        """Return the cached result if it was made from the same video, settings, frame clock
+        and format."""
         meta_path, csv_path = folder / CACHE_JSON, folder / CACHE_CSV
         if not (meta_path.exists() and csv_path.exists()):
             return None
         meta = json.loads(meta_path.read_text())
         if (meta.get("format") != CACHE_FORMAT or meta.get("gammas") != GAMMA_GRID.tolist()
-                or meta.get("settings") != asdict(settings) or meta.get("video") != video.name):
+                or meta.get("settings") != asdict(settings) or meta.get("video") != video.name
+                or meta.get("frame_clock") != _clock_key(frame_times)):
             return None
         data = np.loadtxt(csv_path, delimiter=",", skiprows=1, ndmin=2)
         g = len(GAMMA_GRID)
-        lin = data[:, 7:].reshape(len(data), 2, g, 3)
+        lin = data[:, 7:].reshape(len(data), 3, g, 3)
         return cls(time=data[:, 0], fixation_rgb=data[:, 1:4], background_rgb=data[:, 4:7],
-                   fixation_lin=lin[:, 0], background_lin=lin[:, 1])
+                   fixation_lin=lin[:, 0], background_lin=lin[:, 1], frame_lin=lin[:, 2])
 
 
 def _circle_mask(shape: tuple[int, int], center: tuple[int, int], radius: int) -> np.ndarray:
@@ -122,8 +142,34 @@ def radii(frame_height: int, settings: VideoSettings) -> tuple[int, int]:
 
 
 def frame_index(t, fps: float):
-    """Video frame shown at time ``t`` (s, video clock)."""
-    return (np.asarray(t) * fps).astype(int)
+    """Video frame shown at time ``t`` (s, video clock) for evenly spaced frames."""
+    return np.floor(np.asarray(t) * fps).astype(int)
+
+
+class FrameClock:
+    """Which frame belongs to a time. With recorded frame timestamps (capture instants,
+    possibly unevenly spaced) the nearest frame is used, as Pupil Player does; otherwise
+    frames are evenly spaced at the frame rate and frame n covers [n/fps, (n+1)/fps)."""
+
+    def __init__(self, fps: float, times: Optional[np.ndarray] = None):
+        self.fps = fps
+        self.times = None if times is None else np.asarray(times, dtype=float)
+
+    def index(self, t):
+        if self.times is None:
+            return frame_index(t, self.fps)
+        t = np.asarray(t, dtype=float)
+        i = np.clip(np.searchsorted(self.times, t), 1, len(self.times) - 1)
+        nearest = np.where(t - self.times[i - 1] <= self.times[i] - t, i - 1, i)
+        # Times well outside the recorded frames belong to no frame.
+        half = np.median(np.diff(self.times)) / 2 if len(self.times) > 1 else 0.0
+        return np.where((t < self.times[0] - half) | (t > self.times[-1] + half), -1, nearest)
+
+    def time(self, n: int) -> float:
+        """Time of frame ``n`` (its timestamp, or its start for evenly spaced frames)."""
+        if self.times is None or not 0 <= n < len(self.times):
+            return n / self.fps
+        return float(self.times[n])
 
 
 def analysis_height(width: int, height: int, analysis_width: int) -> int:
@@ -155,8 +201,9 @@ def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSet
                   mask: Optional[np.ndarray] = None):
     """Measure one frame. ``gaze_px`` is (M, 2) pixel coordinates in the frame.
 
-    Returns (fix_rgb, bg_rgb, fix_lin, bg_lin): mean code values (M, 3) and
-    per-pixel-linearised means for each γ in GAMMA_GRID (M, G, 3).
+    Returns (fix_rgb, bg_rgb, fix_lin, bg_lin, frame_lin): mean code values (M, 3) and
+    per-pixel-linearised means for each γ in GAMMA_GRID (M, G, 3); frame_lin is the whole
+    visible scene, the same for every sample of the frame.
     """
     h, w = frame_rgb.shape[:2]
     fix_r = radii(h, settings)[1]
@@ -184,7 +231,7 @@ def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSet
             bg_rgb[i], bg_lin[i] = _means(field_hist - _histograms(crop[overlap]))
         else:
             bg_rgb[i], bg_lin[i] = bg_rgb_all, bg_lin_all
-    return fix_rgb, bg_rgb, fix_lin, bg_lin
+    return fix_rgb, bg_rgb, fix_lin, bg_lin, np.broadcast_to(bg_lin_all, bg_lin.shape)
 
 
 def video_info(video: Path) -> tuple[float, int]:
@@ -199,27 +246,36 @@ def video_info(video: Path) -> tuple[float, int]:
     return fps, n
 
 
-def _frames_pyav(video: Path, wanted, first: int, last: int, width: int, decode_threads: int):
-    """Yield (frame number, RGB frame or None) for frames first..last, decoding with PyAV and
-    converting only wanted frames, scaled to ``width`` and to RGB in one FFmpeg step
-    (nearest-neighbour). Frame numbers come from the timestamps, so a chunk that starts
-    by seeking is aligned exactly with one that decodes from the beginning."""
+def frame_pts(video: Path) -> list[int]:
+    """Presentation timestamps of all frames in display order, read from the container
+    without decoding. Frame n is the frame with the n-th smallest timestamp."""
     import av
 
     with av.open(str(video)) as container:
         stream = container.streams.video[0]
+        return sorted(p.pts for p in container.demux(stream) if p.pts is not None)
+
+
+def _frames_pyav(video: Path, wanted, first: int, last: int, width: int, decode_threads: int,
+                 pts_list: list[int]):
+    """Yield (frame number, RGB frame or None) for frames first..last, decoding with PyAV and
+    converting only wanted frames, scaled to ``width`` and to RGB in one FFmpeg step
+    (nearest-neighbour). Frames are numbered by their position in ``pts_list``, so a chunk
+    that starts by seeking is aligned exactly with one that decodes from the beginning."""
+    import av
+
+    index_of = {p: i for i, p in enumerate(pts_list)}
+    with av.open(str(video)) as container:
+        stream = container.streams.video[0]
         stream.thread_type = "AUTO"
         stream.thread_count = decode_threads
-        rate = float(stream.average_rate or stream.guessed_rate)
-        tb = float(stream.time_base)
-        start = stream.start_time or 0
-        if first > 0:
+        if first > 0 and first < len(pts_list):
             # Seek to the keyframe at or before the chunk's first frame, then decode forward.
-            container.seek(int(first / rate / tb) + start, stream=stream, backward=True, any_frame=False)
+            container.seek(pts_list[first], stream=stream, backward=True, any_frame=False)
         n = first - 1 if first == 0 else None
         for frame in container.decode(stream):
-            if frame.pts is not None:
-                n = int(round((frame.pts - start) * tb * rate))
+            if frame.pts is not None and frame.pts in index_of:
+                n = index_of[frame.pts]
             elif n is not None:
                 n += 1
             else:
@@ -269,7 +325,8 @@ def default_workers() -> int:
 def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: VideoSettings,
                   progress: Optional[Callable[[float], None]] = None,
                   cancelled: Optional[Callable[[], bool]] = None,
-                  backend: str = "auto", workers: int = 0) -> VideoResult:
+                  backend: str = "auto", workers: int = 0,
+                  frame_times: Optional[np.ndarray] = None) -> VideoResult:
     """Analyse ``video`` at each gaze sample. ``time`` is on the video clock (s),
     ``gaze`` is normalised (N, 2) with NaN for invalid samples, which are skipped.
 
@@ -278,11 +335,14 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
     CPU core) decoded in parallel threads; FFmpeg and OpenCV release the interpreter lock
     while decoding, so the threads run concurrently. ``backend`` is "pyav" (fast), "opencv",
     or "auto" (PyAV when installed). The result does not depend on the number of workers.
+    ``frame_times`` are the recorded frame start times on the same clock as ``time``, for
+    devices whose frames are not evenly spaced (see :class:`FrameClock`).
     """
     fps, _ = video_info(video)
+    clock = FrameClock(fps, frame_times)
     valid = np.isfinite(gaze).all(axis=1) & np.isfinite(time)
     idx = np.flatnonzero(valid)
-    frame_of = frame_index(time[idx], fps)
+    frame_of = clock.index(time[idx])
     keep = frame_of >= 0
     idx, frame_of = idx[keep], frame_of[keep]
     order = np.argsort(frame_of, kind="stable")
@@ -302,12 +362,13 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
     bounds = np.linspace(first_frame, last_frame + 1, workers + 1).astype(int)
     backend = decoder_backend() if backend == "auto" else backend
     decode_threads = max(1, default_workers() // workers)
+    pts_list = frame_pts(video) if backend == "pyav" else []
 
     done = [0]
     lock = threading.Lock()
 
     def run_chunk(a: int, b: int):
-        source = (_frames_pyav(video, samples_of, a, b, settings.analysis_width, decode_threads)
+        source = (_frames_pyav(video, samples_of, a, b, settings.analysis_width, decode_threads, pts_list)
                   if backend == "pyav" else _frames_opencv(video, samples_of, a, b, settings))
         out, mask, counted = [], None, 0
         for n, small in source:
@@ -341,4 +402,5 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
         return VideoResult.empty()
     sample = np.concatenate([r[0] for r in rows])
     return VideoResult(time[sample], np.vstack([r[1] for r in rows]), np.vstack([r[2] for r in rows]),
-                       np.concatenate([r[3] for r in rows]), np.concatenate([r[4] for r in rows]))
+                       np.concatenate([r[3] for r in rows]), np.concatenate([r[4] for r in rows]),
+                       np.concatenate([r[5] for r in rows]))

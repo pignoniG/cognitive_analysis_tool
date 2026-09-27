@@ -15,6 +15,7 @@ dependencies = [
     "scipy>=1.10",
     "opencv-python>=4.8",
     "av>=12",          # fast threaded decoding; OpenCV is used when it is missing
+    "msgpack>=1.0",    # Pupil Core camera intrinsics
 ]
 
 [project.optional-dependencies]

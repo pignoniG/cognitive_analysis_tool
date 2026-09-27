@@ -6,7 +6,7 @@ and a cross-platform Qt GUI (`cwtool-gui`) sits on top. One recording is process
 | Device | Luminance source | Status |
 |---|---|---|
 | Varjo XR-4 | scene video (display) | supported |
-| Pupil Core | external lux sensor + scene video | planned |
+| Pupil Core | external lux sensor + scene video | supported (Pupil Player export) |
 | Pupil Neon | external lux sensor + scene video | planned |
 
 ```
@@ -43,6 +43,15 @@ files from earlier versions are converted when loaded.
 The **video preview** dock shows the scene frame at the cursor (click or drag on the plots): the scene
 circle used as background on Varjo videos, the gaze circle, and the values measured there. It uses the
 current video settings, so circle sizes can be checked before re-running the analysis.
+
+**Pupil Core.** Open the recording folder after exporting it with Pupil Player (the newest export in
+`exports/` is used). The 3D eye model's diameter in mm is used when present, otherwise the 2D pixel
+diameter, scaled by matching the mean expected pupil as in 1.x; samples below confidence 0.6 are dropped.
+Scene frames are matched to gaze by their recorded timestamps, as in Pupil Player. Lux sensor logs are
+found in the recording folder or a `lux` subfolder, or chosen with *File → Choose lux folder…*
+(`--lux` on the command line); the sensor's average luminance is distributed over the view with the
+scene video (Pignoni et al. 2021, eq. 5-8), or used alone. Without lux logs the scene camera alone is
+used, with a warning, since its automatic exposure makes it only relative.
 
 Standalone scripts in `tools/`:
 - `lux_logger.py`: log the lux sensor over USB serial to hourly CSVs (`pip install -e ".[logger]"`).

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVB
 from cwtool.params import VideoSettings
 from cwtool.pipeline import Result
 from cwtool.recording import Recording
-from cwtool.video import VideoResult, frame_index, prepare_frame, radii
+from cwtool.video import FrameClock, VideoResult, prepare_frame, radii
 
 DISPLAY_WIDTH = 900
 SCENE_COLOUR = (255, 200, 0)    # RGB
@@ -37,6 +37,7 @@ class VideoPreview(QWidget):
         self._result: Optional[Result] = None
         self._cap = None
         self._fps = 0.0
+        self._clock: Optional[FrameClock] = None
         self._n_frames = 0
         self._time = 0.0
         self._frame_cache: tuple[int, np.ndarray] | None = None
@@ -78,6 +79,7 @@ class VideoPreview(QWidget):
             if cap.isOpened() and cap.get(cv2.CAP_PROP_FPS) > 0:
                 self._cap = cap
                 self._fps = cap.get(cv2.CAP_PROP_FPS)
+                self._clock = FrameClock(self._fps, rec.scene_frame_times)
                 self._n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self._set_enabled(self._cap is not None)
         if self._cap is None:
@@ -102,9 +104,9 @@ class VideoPreview(QWidget):
     def _step(self, frames: int) -> None:
         if self._fps:
             # Middle of the neighbouring frame, so rounding cannot land on the same one.
-            idx = int(frame_index(self._time, self._fps)) + frames
+            idx = int(self._clock.index(self._time)) + frames
             idx = int(np.clip(idx, 0, max(self._n_frames - 1, 0)))
-            self.show_time((idx + 0.5) / self._fps)
+            self.show_time((self._clock.time(idx) + self._clock.time(idx + 1)) / 2)
             self.time_changed.emit(self._time)
 
     def _read(self, idx: int) -> Optional[np.ndarray]:
@@ -121,7 +123,7 @@ class VideoPreview(QWidget):
         self._time = t
         if self._cap is None or self._rec is None:
             return
-        idx = int(np.clip(frame_index(t, self._fps), 0, max(self._n_frames - 1, 0)))
+        idx = int(np.clip(self._clock.index(t), 0, max(self._n_frames - 1, 0)))
         self.time_label.setText(f"{t:.2f} s  ·  frame {idx}")
         frame = self._read(idx)
         if frame is None:
@@ -135,7 +137,7 @@ class VideoPreview(QWidget):
         if not len(valid):
             return None
         # Only samples that fall on the displayed frame were analysed on it.
-        same = valid[frame_index(rec.time[valid], self._fps) == frame_index(t, self._fps)]
+        same = valid[self._clock.index(rec.time[valid]) == self._clock.index(t)]
         pool = same if len(same) else valid
         return int(pool[np.argmin(np.abs(rec.time[pool] - t))])
 

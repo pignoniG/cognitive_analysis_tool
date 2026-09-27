@@ -79,10 +79,10 @@ def test_textured_area_is_linearised_per_pixel():
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     frame[:, 50:] = 255
     s = VideoSettings(field_radius=1.0, vertical_fov=100, fixation_radius_deg=15)
-    fix_rgb, _, fix_lin, _ = analyse_frame(frame, np.array([[50, 50]]), s)
+    fix_rgb, _, fix_lin, _, _ = analyse_frame(frame, np.array([[50, 50]]), s)
     white = fix_rgb[0][0] / 255            # share of white pixels in the disc (about half)
     assert white == pytest.approx(0.5, abs=0.05)
-    res = VideoResult(np.zeros(1), fix_rgb, fix_rgb, fix_lin, fix_lin)
+    res = VideoResult(np.zeros(1), fix_rgb, fix_rgb, fix_lin, fix_lin, fix_lin)
     lin, _ = res.linear(2.2)
     assert lin[0] == pytest.approx([white] * 3, abs=1e-3)   # linear mean = share of white
     assert white ** 2.2 < 0.25                               # decoding the mean code value instead
@@ -92,8 +92,8 @@ def test_gamma_interpolation_matches_exact_mean():
     rng = np.random.default_rng(0)
     frame = rng.integers(0, 256, (60, 80, 3)).astype(np.uint8)
     s = VideoSettings(field_radius=1.0, vertical_fov=100, fixation_radius_deg=25, background_excludes_fixation=False)
-    fix_rgb, bg_rgb, fix_lin, bg_lin = analyse_frame(frame, np.array([[40, 30]]), s)
-    res = VideoResult(np.zeros(1), fix_rgb, bg_rgb, fix_lin, bg_lin)
+    fix_rgb, bg_rgb, fix_lin, bg_lin, frame_lin = analyse_frame(frame, np.array([[40, 30]]), s)
+    res = VideoResult(np.zeros(1), fix_rgb, bg_rgb, fix_lin, bg_lin, frame_lin)
     for gamma in (1.4, 1.95, 2.2, 2.47, 3.0):
         _, bg = res.linear(gamma)
         exact = ((frame.reshape(-1, 3) / 255.0) ** gamma).mean(axis=0)

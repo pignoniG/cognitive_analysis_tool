@@ -48,6 +48,12 @@ class Parameters:
     gamma: float = 2.2
     fixation_weight: float = 0.65        # background weight is 1 - fixation_weight
 
+    # Lux sensor (Pupil devices): average luminance = (gain · lux + offset) / solid angle (1.x values)
+    lux_gain: float = 1.706061
+    lux_offset: float = 0.66935
+    lux_solid_angle: float = 2.2         # sr
+    lux_use_video: bool = True           # distribute the sensor's average with the scene video (2021 eq. 5-8)
+
     # Sampling
     analysis_rate: float = 100.0         # Hz, uniform analysis grid; 0 = device's native rate
     max_gap: float = 0.5                 # s, longer gaps (not blinks) are left out of ΔPD

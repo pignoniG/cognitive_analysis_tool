@@ -21,14 +21,18 @@ class DeviceProfile:
     pupil_unit: PupilUnit
     pupil_scale: Optional[float]       # reported value × scale = diameter in mm; None: must be fitted (px)
     luminance_source: LuminanceSource
-    field_of_view: tuple[float, float]  # deg (horizontal, vertical) of the visible scene
+    field_of_view: tuple[float, float]  # deg (horizontal, vertical) covered by the scene video
     circular_scene: bool = False       # scene video is a circle with black corners that must be masked out
     native_rate: float = 100.0         # Hz, nominal pupil sampling rate
+    # Field the eye adapts to (deg, h × v), if larger than the scene video: e.g. the whole binocular
+    # visual field for glasses-type trackers. Defaults to field_of_view (headsets).
+    adapting_field: Optional[tuple[float, float]] = None
 
     @property
     def field_area(self) -> float:
-        """Adapting field area in deg², treating the field of view as an ellipse."""
-        return math.pi / 4 * self.field_of_view[0] * self.field_of_view[1]
+        """Adapting field area in deg² (Watson & Yellott), treating the field as an ellipse."""
+        w, h = self.adapting_field or self.field_of_view
+        return math.pi / 4 * w * h
 
 
 @dataclass
@@ -56,6 +60,9 @@ class Recording:
     pupil_right: np.ndarray     # device units
     gaze: np.ndarray            # (N, 2), normalised [0, 1], origin top-left of the scene video
     scene_video: Optional[Path] = None
+    # Timestamp (s, relative clock) of each scene video frame, when the device records them
+    # (frames may not be evenly spaced); None: frames are timed from the video's frame rate.
+    scene_frame_times: Optional[np.ndarray] = None
     lux_time: Optional[np.ndarray] = None    # s, relative clock
     lux_values: Optional[np.ndarray] = None  # lux
     events: list[Event] = field(default_factory=list)

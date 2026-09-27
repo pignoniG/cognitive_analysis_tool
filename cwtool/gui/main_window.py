@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QCheckBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
@@ -33,6 +34,7 @@ class MainWindow(QMainWindow):
         self.result = None
         self._task: Task | None = None
         self._params_path: Path | None = None
+        self._lux_folder: Path | None = None
 
         self._recompute_timer = QTimer(self, singleShot=True, interval=RECOMPUTE_DELAY_MS)
         self._recompute_timer.timeout.connect(self.recompute)
@@ -53,6 +55,7 @@ class MainWindow(QMainWindow):
             return a
 
         self.open_action = action("Open recording…", self.choose_recording, QKeySequence.Open)
+        self.lux_action = action("Choose lux folder…", self.choose_lux_folder)
         self.load_params_action = action("Load parameters…", self.choose_params)
         self.save_params_action = action("Save parameters", self.save_params, QKeySequence.Save)
         self.save_params_as_action = action("Save parameters as…", self.save_params_as, QKeySequence.SaveAs)
@@ -60,7 +63,7 @@ class MainWindow(QMainWindow):
         quit_action = action("Quit", self.close, QKeySequence.Quit)
 
         file_menu = self.menuBar().addMenu("&File")
-        for a in (self.open_action, None, self.load_params_action, self.save_params_action,
+        for a in (self.open_action, self.lux_action, None, self.load_params_action, self.save_params_action,
                   self.save_params_as_action, None, self.export_action, None, quit_action):
             file_menu.addSeparator() if a is None else file_menu.addAction(a)
 
@@ -203,9 +206,10 @@ class MainWindow(QMainWindow):
             r = self.result
             gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
             warn = "".join(f"<br><span style='color:#c00'>⚠ {w}</span>" for w in r.warnings)
+            ends = (f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
+                    if np.isfinite(r.expected_black) else "luminance from lux sensor &nbsp;&nbsp; ")
             self.summary_label.setText(
-                f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm &nbsp;&nbsp; "
-                f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
+                f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm &nbsp;&nbsp; {ends}"
                 f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
                 f"{r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}{warn}")
         name = self._params_path.name if self._params_path else "unsaved parameters"
@@ -227,9 +231,19 @@ class MainWindow(QMainWindow):
             self._settings.setValue("last_recording_dir", str(Path(folder).parent))
             self.open_recording(Path(folder))
 
+    def choose_lux_folder(self) -> None:
+        start = str(self._lux_folder or self._settings.value("last_recording_dir", str(Path.home())))
+        folder = QFileDialog.getExistingDirectory(self, "Folder with the lux sensor logs", start)
+        if folder:
+            self._lux_folder = Path(folder)
+            if self.recording is not None:
+                self.open_recording(self.recording.folder)
+
     def open_recording(self, folder: Path) -> None:
+        lux_folder = self._lux_folder
+
         def load(progress, cancelled):
-            return devices.load(folder)
+            return devices.load(folder, lux_folder=lux_folder)
 
         self._start_task(load, self._recording_loaded, f"Loading {folder.name}…")
 
@@ -241,9 +255,11 @@ class MainWindow(QMainWindow):
         scale = f"×{prof.pupil_scale:g}" if prof.pupil_scale else "scale fitted"
         self.recording_label.setText(
             f"<b>{rec.name}</b><br>{rec.device}, {len(rec.time)} samples, {duration:.1f} s, "
-            f"{rec.measured_rate:.0f} Hz<br>field of view {prof.field_of_view[0]:g}° × "
-            f"{prof.field_of_view[1]:g}° ({prof.field_area:,.0f} deg²), pupil {prof.pupil_unit} {scale}"
-            f"<br>video: {video}<br>events: {len(rec.events)}")
+            f"{rec.measured_rate:.0f} Hz<br>camera {prof.field_of_view[0]:.0f}° × {prof.field_of_view[1]:.0f}°, "
+            f"adapting field {prof.field_area:,.0f} deg², pupil {prof.pupil_unit} {scale}"
+            f"<br>video: {video}<br>events: {len(rec.events)}"
+            + (f"<br>lux sensor: {len(rec.lux_values)} readings" if rec.lux_values is not None
+               else ("<br>lux sensor: none found" if rec.luminance_source == "lux_sensor" else "")))
         self.plots.clear_result()
         self.plots.show_events(rec.events)
         self.params_panel.set_video_settings(self.params_panel.video_settings().for_recording(rec))
@@ -260,16 +276,17 @@ class MainWindow(QMainWindow):
         rec = self.recording
         settings = self.params_panel.video_settings().for_recording(rec)
         if use_cache:
-            cached = VideoResult.load_cached(rec.folder, settings, rec.scene_video)
+            cached = VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times)
             if cached is not None:
                 self._video_ready(cached, "cached analysis")
                 return
 
         def work(progress, cancelled):
-            res = analyse_video(rec.scene_video, rec.time, rec.gaze, settings, progress, cancelled)
+            res = analyse_video(rec.scene_video, rec.time, rec.gaze, settings, progress, cancelled,
+                                frame_times=rec.scene_frame_times)
             if cancelled():
                 return None
-            res.save(rec.folder, settings, rec.scene_video)
+            res.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times)
             return res
 
         self._start_task(work, lambda res: res and self._video_ready(res, "analysed"),

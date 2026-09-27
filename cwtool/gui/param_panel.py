@@ -33,6 +33,9 @@ NUMBERS = {
     "max_pupil_speed": ("Max pupil speed (mm/s)", 0, 200, 1, 1,
                         "Faster changes are treated as artefacts (blink edges); 0 disables the filter"),
     "artefact_padding": ("Artefact padding (s)", 0, 1, 0.01, 2, "Removed on each side of an artefact"),
+    "lux_gain": ("Lux gain", 0, 100, 0.01, 6, "Sensor calibration: average luminance = (gain·lux + offset) / solid angle"),
+    "lux_offset": ("Lux offset", -1000, 1000, 0.01, 5, "Sensor calibration offset"),
+    "lux_solid_angle": ("Sensor solid angle (sr)", 0.01, 12.6, 0.1, 3, "Solid angle seen by the lux sensor"),
     "cw_window": ("ΔPD window (s)", 0.01, 10, 0.05, 2, "Averaging window for ΔPD"),
     "field_radius": ("Scene circle radius", 0.05, 1, 0.05, 2, "Fraction of half the frame height (circular videos)"),
     "fixation_radius_deg": ("Gaze circle radius (°)", 0.5, 60, 0.25, 2,
@@ -45,6 +48,7 @@ INTS = {
 BOOLS = {
     "dynamics": "Pupil dynamics (attack/release)",
     "background_excludes_fixation": "Background excludes gaze area",
+    "lux_use_video": "Distribute sensor luminance with the scene video",
 }
 CHOICES = {
     "eye": ("Pupil", ["both", "left", "right"]),
@@ -60,6 +64,7 @@ GROUPS = [
     ("Photometric calibration", ["l_min", "l_max", "gain_r", "gain_g", "gain_b", "gamma", "fixation_weight"]),
     ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
                       "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
+    ("Lux sensor (Pupil devices)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
     ("Dynamics", ["delay", "dynamics", "attack", "release"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Signal
 
@@ -99,8 +100,12 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.measured_curve.setData(r.time, r.measured)
         self.expected_curve.setData(r.time, r.expected)
         self.cw_curve.setData(r.cw_time, r.cw)
-        self.black_line.setValue(r.expected_black)
-        self.white_line.setValue(r.expected_white)
+        markers = np.isfinite(r.expected_black)   # not defined when luminance comes from a lux sensor
+        self.black_line.setVisible(bool(markers))
+        self.white_line.setVisible(bool(markers))
+        if markers:
+            self.black_line.setValue(r.expected_black)
+            self.white_line.setValue(r.expected_white)
 
     def show_events(self, events) -> None:
         for plot, item in self._event_items:

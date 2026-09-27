@@ -16,13 +16,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("recording", type=Path, help="recording folder")
     ap.add_argument("--device", choices=sorted(devices.READERS), help="default: auto-detect")
     ap.add_argument("--params", type=Path, help="participant parameters JSON")
+    ap.add_argument("--lux", type=Path, help="folder with lux sensor logs (Pupil devices; default: in the recording)")
     ap.add_argument("--out", type=Path, help="export folder (default: RECORDING/cwtool_export)")
     ap.add_argument("--reanalyse", action="store_true", help="ignore the cached video analysis")
     ap.add_argument("--workers", type=int, default=0, help="parallel video chunks (default: one per CPU core)")
     ap.add_argument("--plot", action="store_true", help="save a PDF plot (needs matplotlib)")
     args = ap.parse_args(argv)
 
-    rec = devices.load(args.recording, args.device)
+    rec = devices.load(args.recording, args.device, lux_folder=args.lux)
     params = Parameters.load(args.params, rec.profile) if args.params else Parameters()
     settings = VideoSettings().for_recording(rec)
     print(f"{rec.device} recording {rec.name}: {len(rec.time)} samples, {rec.time[-1] - rec.time[0]:.1f} s")
@@ -30,13 +31,15 @@ def main(argv: list[str] | None = None) -> int:
     if rec.scene_video is None:
         print("No scene video found", file=sys.stderr)
         return 1
-    video = None if args.reanalyse else VideoResult.load_cached(rec.folder, settings, rec.scene_video)
+    video = None if args.reanalyse else VideoResult.load_cached(rec.folder, settings, rec.scene_video,
+                                                                      rec.scene_frame_times)
     if video is None:
         print(f"Analysing {rec.scene_video.name} ...")
         video = analyse_video(rec.scene_video, rec.time, rec.gaze, settings,
-                              progress=lambda p: print(f"\r{p:5.0%}", end="", flush=True), workers=args.workers)
+                              progress=lambda p: print(f"\r{p:5.0%}", end="", flush=True), workers=args.workers,
+                              frame_times=rec.scene_frame_times)
         print()
-        video.save(rec.folder, settings, rec.scene_video)
+        video.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times)
 
     result = pipeline.run(rec, video, params)
     print(f"ΔPD RMS: {result.cw_rms:.3f} mm, SD: {result.cw_sd:.3f} mm "

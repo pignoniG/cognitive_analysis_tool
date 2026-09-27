@@ -12,6 +12,7 @@ import numpy as np
 from scipy.signal import savgol_filter
 
 from cwtool import luminance, model
+from cwtool import lux as lux_module
 from cwtool.params import Parameters
 from cwtool.recording import Recording
 from cwtool.video import VideoResult
@@ -121,6 +122,16 @@ def resample(time: np.ndarray, values: np.ndarray, rate: float, max_gap: float):
     return grid, filled, valid
 
 
+def relative_luminances(video: VideoResult, params: Parameters) -> tuple[np.ndarray, np.ndarray]:
+    """Gaze-weighted and whole-scene relative luminance (0-1) per video sample, with the
+    channel gains as a relative balance."""
+    fix, bg = video.linear(params.gamma)
+    w = params.fixation_weight
+    gains = np.asarray(params.gains, dtype=float)
+    weights = luminance.SRGB_WEIGHTS * gains / gains.mean()
+    return (w * fix + (1 - w) * bg) @ weights, video.frame_linear(params.gamma) @ weights
+
+
 def scene_luminance(video: VideoResult, params: Parameters) -> np.ndarray:
     """Absolute luminance (cd/m²) for each video sample: the per-pixel-linearised
     fixation and background means are weighted, then mapped onto [l_min, l_max]
@@ -174,11 +185,11 @@ class Prepared:
     valid: np.ndarray           # False inside gaps longer than max_gap
     luminance: np.ndarray       # cd/m²
     scale: Optional[float]      # device units to mm, None for pixel data (fitted per recording)
+    photometric: bool = True    # luminance comes from the Lmin/Lmax mapping (not a lux sensor)
+    notes: list = field(default_factory=list)
 
 
 def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
-    if rec.luminance_source != "display":
-        raise NotImplementedError("Lux-sensor recordings (Pupil Core / Neon) are not supported yet")
     if len(video.time) < 2:
         raise ValueError("Video analysis has too few samples")
     profile = rec.profile
@@ -201,9 +212,32 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
     fast[~valid] = np.nan
 
     order = np.argsort(video.time)
-    lum_video = scene_luminance(video, params)[order]
-    lum = np.interp(time, video.time[order] - params.timelag, lum_video)
-    return Prepared(time, fs, smooth, fast, valid, lum, scale)
+    vt = video.time[order] - params.timelag
+    notes = []
+    if rec.luminance_source == "lux_sensor" and rec.lux_values is not None and len(rec.lux_values) >= 2:
+        # Pignoni et al. 2021, eq. 5-8: the sensor gives the average luminance of the view; the
+        # video distributes it: L = avgL · rL(gaze-weighted) / rL(whole frame).
+        avg = luminance_from_lux(rec, params, time)
+        lum = avg
+        if params.lux_use_video:
+            y_w, y_frame = relative_luminances(video, params)
+            ratio = np.where(y_frame[order] > 1e-4, y_w[order] / np.maximum(y_frame[order], 1e-4), 1.0)
+            lum = avg * np.interp(time, vt, ratio)
+        photometric = False
+    else:
+        if rec.luminance_source == "lux_sensor":
+            notes.append("No lux sensor data found: luminance is estimated from the scene camera alone, "
+                         "mapped onto Lmin–Lmax. The camera's automatic exposure makes this only relative.")
+        lum = np.interp(time, vt, scene_luminance(video, params)[order])
+        photometric = True
+    return Prepared(time, fs, smooth, fast, valid, lum, scale, photometric, notes)
+
+
+def luminance_from_lux(rec: Recording, params: Parameters, time: np.ndarray) -> np.ndarray:
+    """Average luminance (cd/m²) from the lux sensor on the analysis grid."""
+    avg = lux_module.average_luminance(lux_module.smooth(rec.lux_values), params.lux_gain,
+                                       params.lux_offset, params.lux_solid_angle)
+    return np.interp(time, rec.lux_time - params.timelag, avg)
 
 
 def event_mask(time: np.ndarray, events, labels: str) -> np.ndarray:
@@ -235,7 +269,7 @@ def alignment_offset(expected, measured, valid, params: Parameters, time, events
 def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
     prep = prepare(rec, video, params)
     profile, fs, time, valid = rec.profile, prep.fs, prep.time, prep.valid
-    notes = []
+    notes = list(prep.notes)
     expected = expected_pupil(prep.luminance, fs, params, profile.field_area)
 
     scale = prep.scale
@@ -259,8 +293,11 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         smooth = savgol_filter(interp_nan(cw), min(_odd(params.cw_smoothing * 2), _odd(len(cw) - 2)), 1)
         cw = np.where(good, smooth, np.nan)
 
-    ends = model.watson_yellott(np.array([params.l_min, params.l_max]), params.age, profile.field_area,
-                                params.eyes, params.reference_age)
+    if prep.photometric:
+        ends = model.watson_yellott(np.array([params.l_min, params.l_max]), params.age, profile.field_area,
+                                    params.eyes, params.reference_age)
+    else:
+        ends = (float("nan"), float("nan"))  # Lmin/Lmax are not used with a lux sensor
 
     return Result(time=time, luminance=prep.luminance, measured_raw=measured_raw, measured=measured,
                   expected=expected, cw_time=cw_time, cw=cw, cw_rms=residual_rms(cw),

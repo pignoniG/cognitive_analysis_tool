@@ -240,7 +240,12 @@ them rather than describing the headset or the participant.
 - **Problem:** if the capture is variable frame rate or starts at an offset, gaze samples drift away from the
   frames they belong to.
 - **Proposal:** use the container's frame timestamps (`CAP_PROP_POS_MSEC`) and check on a sample.
-- **Status:** needs data.
+- **Confirmed on the Pupil Core sample:** the scene camera's real capture times (`world_timestamps.npy`) have a
+  0.23 s gap at the start and jitter, while the MP4's own timestamps are perfectly regular. A fixed 30 fps mapping
+  assigned every gaze sample to the wrong frame, by up to 24 frames (0.8 s).
+- **2.0:** readers can supply recorded frame timestamps; gaze samples are then matched to the nearest frame, which
+  agrees with Pupil Player's `world_index` for 100 % of the sample's gaze samples. Varjo still uses the frame rate.
+- **Status:** fixed for Pupil Core; needs a Varjo sample to check.
 
 ### 22. Event log times depend on the computer's time zone
 - **Where:** `data_tools.readEvents` (dateutil parse of a naive timestamp); 2.0 `varjo.read_event_log`.
@@ -258,6 +263,10 @@ them rather than describing the headset or the participant.
   is not documented, and hour-named files depend on the logger's local time.
 - **Proposal:** document or re-derive while porting the Pupil readers (the legacy reader is on `develop-varjo`;
   the logger that writes these files is now `tools/lux_logger.py`).
+- **2.0:** ported from master: average luminance = (1.706061 · lux + 0.66935) / 2.2 sr, with the three constants
+  editable as "lux sensor" parameters. For a uniform field seen by a sensor with half-angle θ, E = π·L·sin²θ
+  (L ≈ E / 0.79 for the 60° sensor field of view in the 2021 paper), which differs from dividing by 2.2; the origin
+  of the calibration line should still be documented.
 - **Status:** needs data.
 
 ---
@@ -289,6 +298,21 @@ them rather than describing the headset or the participant.
   baseline without task load. This supports "baseline" alignment and reporting in SD units, and is worth citing where
   the paper discusses absolute vs relative ΔPD.
 - **Status:** open (paper).
+
+### 29. Master combines the lux sensor and camera differently from the 2021 paper
+- **Where:** master `lum_analysis.py` (`useCamera`): Lmin = lux / (10 · frame + 1), Lmax = 11 · Lmin, and the
+  result is halved.
+- **Problem:** the published method (Pignoni et al. 2021, eq. 5-8) is Lmax = avgL / avgRL, Lmin = 0,
+  L = Lmax · aoiRL. The two give different absolute luminances.
+- **2.0:** implements the paper's equations with the gaze-weighted relative luminance: L = avgL · rL_w / rL_frame.
+  Master's heuristic is not reproduced; add it as an option if results must match 1.x.
+- **Status:** open (confirm which is intended).
+
+### 30. Master pooled both eyes and used pixel diameters for Pupil Core
+- **Where:** master `processPupil` (column 6 = 2D diameter in px, eye0 and eye1 rows in one series).
+- **2.0:** eyes are kept separate (eye0 = right, eye1 = left) and combined per sample; the 3D model's diameter in mm
+  is used when available, pixels (scaled by the 2021 ratio method) otherwise.
+- **Status:** changed in 2.0 (results differ from 1.x).
 
 ## D. Paper text
 

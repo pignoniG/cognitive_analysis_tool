@@ -7,12 +7,13 @@ with that interface and listing it in ``READERS``.
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
+from cwtool.devices import pupil_core, varjo
 from cwtool.recording import Recording
-from cwtool.devices import varjo
 
-READERS = {varjo.NAME: varjo}
+READERS = {varjo.NAME: varjo, pupil_core.NAME: pupil_core}
 
 
 def detect(folder: str | Path) -> str | None:
@@ -30,4 +31,6 @@ def load(folder: str | Path, device: str | None = None, **options) -> Recording:
         raise ValueError(f"No supported recording found in {folder}")
     if device not in READERS:
         raise ValueError(f"Unknown device {device!r}; supported: {', '.join(READERS)}")
-    return READERS[device].load(folder, **options)
+    reader = READERS[device]
+    accepted = inspect.signature(reader.load).parameters
+    return reader.load(folder, **{k: v for k, v in options.items() if k in accepted and v is not None})
