@@ -574,7 +574,9 @@ is revised; they remain in the git history of this file.
     anticipation and test whether it was the cause;
   - later, with a model of re-dilation (issue 43): measure onsets against the model's predicted continuation rather
     than a flat level.
-- **Status:** open; part of the dynamics model (issue 43) and the new calibration sequence.
+- **2.0 (September 2026):** onsets under 0.1 s are left out of the latency, and a note of the fit says how many.
+- **Status:** fixed in 2.0 (the latency); whether anticipation is the cause, and removing it, wait for the new
+  calibration sequence (irregular step lengths).
 
 ### 42. The sensitivity prior breaks the display–sensitivity equivalence
 - **Where:** 2.0 `photometry.fit_light_response` (`PRIOR_LOG_SENSITIVITY`);

@@ -204,3 +204,30 @@ def test_two_stage_constriction_keeps_the_true_latency(tmp_path):
     assert fit.params.constriction_stages == 2
     one = fit_calibration(rec, video, Parameters(), start=0.0, sequence=seq)
     assert fit.rms_after < one.rms_after
+
+
+def test_anticipated_constrictions_are_left_out_of_the_latency(tmp_path):
+    """Constrictions that start before the display changes (anticipation of regular steps) are not a
+    reflex: they are left out of the latency, which stays that of the others, and a note says so."""
+    from cwtool import calibration
+    params = Parameters()
+    colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191]
+    step, rate, true_delay = 6, 100, 0.35
+    t = np.arange(len(colours) * step * rate) / rate
+    level = np.array([colours[min(int(x // step), len(colours) - 1)] for x in t])
+    L = luminance.absolute_luminance(luminance.to_linear(np.stack([level] * 3, axis=1), params.gamma),
+                                     params.l_min, params.l_max)
+    wy = model.watson_yellott(L, params.age, varjo.PROFILE.field_area)
+    pd = model.attack_release(model.delay(wy, rate, true_delay), rate, 3.0, 0.3)
+    early = np.roll(model.attack_release(wy, rate, 3.0, 0.3), -int(0.4 * rate))   # starts 0.4 s before
+    for i in (3, 10):                                  # two anticipated brightening steps
+        sel = (t >= i * step - 2) & (t < i * step + 3)
+        pd[sel] = early[sel]
+    folder = write_varjo_recording(tmp_path / "cal", colours, seconds_per_level=step,
+                                   pupil_mm=lambda x: pd[min(int(x * rate), len(t) - 1)] / 2)
+    rec, video = _load(folder)
+    seq = calibration.Sequence(tuple(calibration.Step(i * step, (i + 1) * step, (c, c, c), str(c))
+                                     for i, c in enumerate(colours)), "test")
+    fit = fit_calibration(rec, video, params, start=0.0, sequence=seq)
+    assert fit.delay == pytest.approx(true_delay, abs=0.05)
+    assert any("left out of the latency" in n and n.startswith("2 ") for n in fit.notes)

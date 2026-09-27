@@ -109,6 +109,10 @@ def _best_delay(problem: _Problem, attack, release, transient, escape, step: flo
 MIN_ONSETS = 3            # brightening steps needed to measure the latency from onsets
 MIN_CONSTRICTION = 0.3    # mm, smallest constriction whose onset is measured
 ONSET_SEARCH = (-0.2, 1.5)  # s around the video change searched for the constriction
+# s; shorter onsets are not a reflex to the change (the shortest reported pupil latencies are about
+# 0.2 s): on the calibration recordings they were constrictions starting before the display changed,
+# probably in anticipation of the regular steps (open issue 41). They are left out of the latency.
+MIN_ONSET = 0.1
 
 
 def onset_latency(prep: Prepared, video: VideoResult, params: Parameters, start: float,
@@ -198,7 +202,9 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     # The transient belongs to the dynamics: without them it is neither applied nor fitted.
     fit_transient = fit_transient and attack is not None
     transient, escape = (params.transient if attack is not None else 0.0), params.escape
-    onsets = onset_latency(prep, video, params, start, sequence) if sequence is not None else []
+    measured = onset_latency(prep, video, params, start, sequence) if sequence is not None else []
+    onsets = [o for o in measured if o >= MIN_ONSET]
+    early = len(measured) - len(onsets)
     fixed_delay = len(onsets) >= MIN_ONSETS
     stages = params.constriction_stages
     onset = float(np.median(onsets)) if fixed_delay else float("nan")
@@ -257,6 +263,11 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     if fixed_delay:
         notes.append(f"Latency {delay:.2f} s from {len(onsets)} constriction onsets (median onset {onset:.2f} s, "
                      f"interquartile range {np.percentile(onsets, 25):.2f}–{np.percentile(onsets, 75):.2f} s).")
+    if early:
+        notes.append(f"{early} constriction{'s' if early > 1 else ''} started less than {MIN_ONSET:g} s after the "
+                     "change (or before it), too early for a reflex, and "
+                     f"{'were' if early > 1 else 'was'} left out of the latency: the participant may have "
+                     "anticipated the regular steps.")
     for name, value, (lo, hi) in (("latency", None if fixed_delay else delay, DELAY_RANGE),
                                   ("dilation τ", attack if attack is not None else None, ATTACK_RANGE),
                                   ("constriction τ", release if release is not None else None, RELEASE_RANGE)):

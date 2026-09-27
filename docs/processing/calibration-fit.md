@@ -88,7 +88,10 @@ When the sequence is known (always, from the app), the latency is measured rathe
 brighter step, the video change is located and the constriction onset read the standard way: the line through the
 points where the pupil has made 20 % and 50 % of its constriction, extended back to the level of the second before the
 change. Only constrictions of at least 0.3 mm count, and at least three are needed; the median onset is held fixed,
-and its interquartile range is reported.
+and its interquartile range is reported. Onsets under 0.1 s are left out and counted in a note: a reflex cannot be that
+fast (the shortest reported pupil latencies are about 0.2 s), and on the Varjo calibration recordings such onsets were
+constrictions that started before the display changed, probably anticipating the regular steps
+([open issue 41](../OPEN_ISSUES.md)).
 
 The onset read this way is not quite the latency: the same construction applied to the model's own constriction
 lands about 0.09 τ before its start with one constriction stage (which starts at full speed) and about 0.25 τ after
