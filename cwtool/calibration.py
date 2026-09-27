@@ -129,6 +129,11 @@ class Location:
     start: float          # s, recording time of the sequence start
     sequence: Sequence    # possibly rescaled to the recording's step length
     error: float          # relative RMS error of the colour match (0 = perfect)
+    coverage: float = 1.0  # fraction of the sequence with analysed video (tracking gaps have none)
+
+
+MAX_VIDEO_GAP = 0.5     # s; farther from an analysed video sample, the colour is unknown
+MIN_COVERAGE = 0.5      # fraction of a candidate window that must have analysed video
 
 
 def _change_points(time, rgb, threshold=8.0, min_gap=0.3):
@@ -144,7 +149,13 @@ def locate(time: np.ndarray, rgb: np.ndarray, sequence: Sequence, gamma: float =
     """Find ``sequence`` in a recording from the measured scene colour ``rgb`` (N, 3, code
     values) at ``time`` (s). Step changes in the colour give candidate starts and the step
     length; each candidate is scored by how well the sequence's colours, with one gain per
-    channel (recorded levels are lower than nominal), explain the measured colours."""
+    channel (recorded levels are lower than nominal), explain the measured colours.
+
+    Only times with analysed video are scored: the video is analysed at valid gaze samples, so
+    tracking gaps have no colour, and interpolating across them would invent one. A candidate
+    must lie within the recording (give or take its first and last step, which may have begun
+    before the recording or been cut short) and have video for at least MIN_COVERAGE of its
+    duration; otherwise a start near the end, scored on the few seconds inside, could win."""
     order = np.argsort(time)
     t, c = np.asarray(time)[order], np.asarray(rgb, dtype=float)[order]
     changes = _change_points(t, c)
@@ -157,28 +168,36 @@ def locate(time: np.ndarray, rgb: np.ndarray, sequence: Sequence, gamma: float =
         typical = np.median(gaps[gaps > 0.5]) if (gaps > 0.5).any() else lengths[0]
         factors.add(round(float(typical / lengths[0]), 3))
 
-    grid = np.arange(t[0], t[-1], 0.1)
-    measured = (np.stack([np.interp(grid, t, c[:, k]) for k in range(3)], axis=1) / 255.0) ** gamma
+    def analysed(times):
+        i = np.clip(np.searchsorted(t, times), 1, len(t) - 1)
+        nearest = np.minimum(np.abs(times - t[i - 1]), np.abs(t[i] - times))
+        return (times >= t[0]) & (times <= t[-1]) & (nearest <= MAX_VIDEO_GAP)
+
     best = None
     for factor in factors:
         seq = scaled(sequence, factor)
         starts_rel = np.array([s.start for s in seq.steps])
         colours = (np.array([s.rgb for s in seq.steps], dtype=float) / 255.0) ** gamma
+        first, last = seq.steps[0].end - seq.steps[0].start, seq.steps[-1].end - seq.steps[-1].start
+        phase = np.arange(0.0, seq.duration, 0.1)
+        k = np.clip(np.searchsorted(starts_rel, phase, side="right") - 1, 0, len(starts_rel) - 1)
+        # Skip the first half second of every step: the video changes a frame late.
+        settled = phase - starts_rel[k] > 0.5
+        phase, k = phase[settled], k[settled]
         for change in changes:
             for rel in starts_rel:
                 start = change - rel
-                inside = (grid >= start) & (grid < start + seq.duration)
-                if inside.sum() < 10:
+                if start < t[0] - first or start + seq.duration > t[-1] + last:
                     continue
-                # Skip the first half second of every step: the video changes a frame late.
-                phase = grid[inside] - start
-                k = np.clip(np.searchsorted(starts_rel, phase, side="right") - 1, 0, len(starts_rel) - 1)
-                settled = phase - starts_rel[k] > 0.5
-                exp, mea = colours[k][settled], measured[inside][settled]
-                if len(exp) < 10:
+                have = analysed(start + phase)
+                coverage = float(have.mean()) if len(have) else 0.0
+                if coverage < MIN_COVERAGE or have.sum() < 10:
                     continue
+                times = start + phase[have]
+                mea = (np.stack([np.interp(times, t, c[:, j]) for j in range(3)], axis=1) / 255.0) ** gamma
+                exp = colours[k[have]]
                 gain = (exp * mea).sum(axis=0) / np.maximum((exp * exp).sum(axis=0), 1e-9)
                 err = np.sqrt(np.mean((mea - exp * gain) ** 2)) / max(np.sqrt(np.mean(mea ** 2)), 1e-9)
                 if best is None or err < best.error:
-                    best = Location(float(start), seq, float(err))
+                    best = Location(float(start), seq, float(err), coverage)
     return best

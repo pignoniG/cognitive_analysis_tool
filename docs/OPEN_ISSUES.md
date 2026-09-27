@@ -487,10 +487,11 @@ them rather than describing the headset or the participant.
   the true start (1.8 s, 10 s steps) scores 25 % because the gaps are interpolated. A start at 159.9 s with 6 s steps
   scores 18 %: its window runs to 280 s in a 206 s recording, and the 46 s inside happen to match. The app accepts
   anything below 35 %, so the wrong start is set silently.
-- **2.0:** unchanged; the start was placed by hand for issue 36.
-- **Proposal:** reject candidates whose window extends beyond the recording (or score the missing part as a
-  mismatch), and leave out grid points far from any analysed video sample instead of interpolating across gaps.
-- **Status:** open.
+- **2.0:** a candidate must lie within the recording, give or take its first and last step; only times within
+  0.5 s of an analysed video sample are scored, and at least half of the window must have one. Recording e is now
+  found at 1.74 s with 10 s steps (error 9.5 %, 70 % of the sequence analysed); the other six starts are unchanged.
+  The status bar reports the share of the sequence in tracking gaps.
+- **Status:** fixed in 2.0.
 
 ### 40. Step levels extrapolated from unsettled steps are unstable
 - **Where:** 2.0 `photometry.step_asymptote`.
@@ -502,8 +503,10 @@ them rather than describing the headset or the participant.
 - **2.0:** asymptote fitted from the turning point, limited to 1 mm beyond the last second.
 - **Proposal:** use the mean of the step's end, or constrain the time constant of the extrapolation to a physiological
   range (the fitted dilation τ is 1.6–5.4 s) and extrapolate only when the fit is well determined; either way, report
-  steps that are dropped by their uncertainty.
-- **Status:** open.
+  steps that are dropped by their uncertainty. A new calibration sequence, being defined, may make most steps settle
+  (longer steps, or an order in which a step rarely follows a much darker or brighter one), which would make the
+  extrapolation rarely needed.
+- **Status:** open; revisit with the new calibration sequence.
 
 ### 41. Negative constriction onsets are accepted
 - **Where:** 2.0 `fit.onset_latency`.
@@ -514,6 +517,17 @@ them rather than describing the headset or the participant.
 - **Proposal:** discard onsets outside a physiological range (e.g. 0.1–0.8 s) and require a flat baseline before
   the change.
 - **Status:** open.
+
+### 42. The sensitivity prior breaks the display–sensitivity equivalence slightly
+- **Where:** 2.0 `photometry.fit_light_response`; `tests/test_photometry.py::test_display_error_is_absorbed_by_the_sensitivity`,
+  which fails on `v2.0` (September 2026).
+- **Problem:** the docs state that doubling the datasheet luminance halves the fitted sensitivity and leaves the
+  predictions unchanged. The prior on log sensitivity is centred on 1, so it pulls the two fits differently: on the
+  synthetic participant the sensitivities are 2.735 and 1.417 (ratio 1.93) and the predictions differ by up to
+  0.021 mm, just over the test's 0.02 mm. Without the prior the ratio is 2.000 and the predictions are identical.
+- **Proposal:** state the equivalence as approximate (exact only when the data determine the sensitivity), or centre
+  the prior on the sensitivity that the display photometry implies, e.g. from a pooled fit (issue 36).
+- **Status:** open (the test fails until decided).
 
 ## D. Paper text
 

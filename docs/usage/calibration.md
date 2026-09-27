@@ -46,7 +46,9 @@ is using the same display photometry for all participants and recordings made wi
 Open the recording and click **Find in recording**. It finds the step changes in the analysed video colour, tries
 each as a start, and scores how well the sequence's colours explain the measured ones (with one gain per channel,
 since recorded levels are below nominal). If the steps are evenly spaced it also tries the recording's actual
-step length, so a sequence played with 10 s steps is found even though the built-in one uses 6 s.
+step length, so a sequence played with 10 s steps is found even though the built-in one uses 6 s. Stretches where
+eye tracking was lost have no analysed colour and are left out of the score; the status bar says how much of the
+sequence fell in such gaps.
 
 The overlay turns on and the start is set. Adjust it by dragging the grey line if needed.
 

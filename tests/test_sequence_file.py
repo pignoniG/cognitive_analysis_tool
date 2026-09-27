@@ -59,3 +59,22 @@ def test_locate_gives_up_without_changes():
     import numpy as np
     t = np.arange(0, 10, 0.1)
     assert calibration.locate(t, np.full((len(t), 3), 100.0), calibration.DEFAULT) is None
+
+
+def test_locate_ignores_tracking_gaps_and_windows_past_the_end():
+    # Calibration recording e (September 2026): tracking, and so the video analysis, is missing
+    # during most red and blue steps, and the recording ends soon after the sequence. A start near
+    # the end used to win, scored on the few seconds of its window inside the recording.
+    import numpy as np
+    seq = calibration.DEFAULT
+    start, factor = 1.8, 10 / 6
+    t = np.arange(0, 206, 0.005)
+    rgb = np.full((len(t), 3), 45.0)
+    for s in calibration.scaled(seq, factor).steps:
+        sel = (t >= start + s.start) & (t < start + s.end)
+        rgb[sel] = np.array(s.rgb) * 0.9
+    lost = ((t > 95) & (t < 120)) | ((t > 158) & (t < 200))
+    loc = calibration.locate(t[~lost], rgb[~lost], seq)
+    assert loc.start == pytest.approx(start, abs=0.1)
+    assert loc.sequence.duration == pytest.approx(200, abs=0.5)
+    assert 0.5 < loc.coverage < 0.9

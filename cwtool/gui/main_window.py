@@ -501,8 +501,9 @@ class MainWindow(QMainWindow):
         self.set_sequence(loc.sequence, keep_base=True)
         self.sequence_start.setValue(loc.start)
         self.sequence_check.setChecked(True)
+        gaps = f", {1 - loc.coverage:.0%} of it in tracking gaps" if loc.coverage < 0.95 else ""
         self.statusBar().showMessage(f"Sequence found at {loc.start:.2f} s "
-                                     f"(colour match error {loc.error:.0%})", 5000)
+                                     f"(colour match error {loc.error:.0%}{gaps})", 5000)
 
     def set_sequence(self, sequence: calibration.Sequence, keep_base: bool = False) -> None:
         if not keep_base:

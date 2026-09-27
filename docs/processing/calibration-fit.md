@@ -11,11 +11,13 @@ their calibration sequence, given the display photometry. For the procedure, see
 1. **Change points:** frames where any channel jumps by more than 8 code values, at least 0.3 s apart.
 2. **Step length:** if the sequence's steps are all the same length, the median interval between change points
    gives the recording's step length, and a rescaled copy of the sequence is tried as well.
-3. **Scoring:** every change point, aligned with every step start, is a candidate start. Within the candidate
-   window the sequence's colours and the measured ones are compared in linear light, skipping the first half second
-   of each step (the video changes a frame late). One gain per channel is fitted by least squares, because recorded
-   levels are below nominal (on the Varjo sample grey 255 records as 253, red 255 as 231). The score is the
-   relative RMS error.
+3. **Scoring:** every change point, aligned with every step start, is a candidate start. A candidate must lie within
+   the recording, give or take its first and last step (which may have begun before the recording or been cut
+   short). Within the candidate window the sequence's colours and the measured ones are compared in linear light,
+   skipping the first half second of each step (the video changes a frame late). Only times with analysed video are
+   compared: the video is analysed at valid gaze samples, so tracking gaps have no colour, and at least half of the
+   window must have one. One gain per channel is fitted by least squares, because recorded levels are below nominal
+   (on the Varjo sample grey 255 records as 253, red 255 as 231). The score is the relative RMS error.
 
 The best candidate gives the start and, if rescaled, the new step timing.
 
