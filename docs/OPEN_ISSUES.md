@@ -357,7 +357,17 @@ is revised; they remain in the git history of this file.
   L = Lmax · aoiRL. The two give different absolute luminances.
 - **2.0:** implements the paper's equations with the gaze-weighted relative luminance: L = avgL · rL_w / rL_frame.
   Master's heuristic is not reproduced; add it as an option if results must match 1.x.
-- **Status:** open (confirm which is intended).
+- **What the heuristic does** (E the sensor's average luminance, A the whole frame's and S the gaze area's relative
+  luminance, 0–1): it works out to L = E/2 · (10·S + 1) / (10·A + 1), against the paper's L = E · S / A.
+  1. It caps the contrast: the gaze area is at most 11 times brighter than the average, even in a nearly black frame,
+     where S / A amplifies a small, noisy A (2.0 only guards A ≥ 0.0001, i.e. up to 10 000:1).
+  2. It floors dark areas at about E/22: with automatic exposure a black pixel means "below the captured range", not
+     no light, and lens flare adds light.
+  3. It halves everything, apparently an empirical correction; without a calibration sequence on Pupil devices
+     nothing absorbs it, so it changes absolute luminance by a factor 2.
+- **Proposal:** keep the paper's method, add a bound on the gaze/frame ratio (e.g. 1:10 to 10:1, adjustable), and
+  leave out the halving; set the bound on a Pupil recording with a lux log.
+- **Status:** open; waiting for a Pupil sample recording (G. Pignoni, expected early October 2026).
 
 ### 30. Master pooled both eyes and used pixel diameters for Pupil Core
 - **Where:** master `processPupil` (column 6 = 2D diameter in px, eye0 and eye1 rows in one series).
