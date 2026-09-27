@@ -489,19 +489,37 @@ is revised; they remain in the git history of this file.
 
 ### 41. Negative constriction onsets are accepted
 - **Where:** 2.0 `fit.onset_latency`.
-- **Problem:** every one of the seven calibration recordings has 1–3 onsets between −0.2 and −0.7 s, all at small
-  brightening steps within a colour (e.g. red 191 → 255, blue 64 → 128), where the constriction is small and the
-  pupil is still moving from the previous step. The median is robust, but the reported interquartile range includes
-  them (e: −0.19–0.40 s), and with few onsets they pull the median down.
-- **Cause:** not the timing of the change: the detected video change is within 0.09 s of the nominal one at these
-  steps, as at the others. The pupil was already shrinking before the change (median −0.29 mm/s over the second
-  before, against +0.05 mm/s at steps with a normal onset), so the 20 % point is reached early against a baseline
-  taken as flat. Whether this is spontaneous fluctuation or anticipation of the regular 10 s rhythm is unknown; a
-  sequence with irregular step lengths would tell.
-- **Proposal:** measure the onset against the pre-change trend (or against the model's prediction, once it describes
-  re-dilation, issue 43) rather than a flat level, and discard onsets outside a physiological range (e.g.
-  0.1–0.8 s).
-- **Status:** open; part of the dynamics model (issue 43).
+- **Problem:** 14 of the 87 onsets measured on the seven calibration recordings are between −0.2 and −0.7 s, 1–3
+  per participant: the pupil starts constricting before the display changes, which a reflex cannot do. They occur
+  at brightening steps of every kind (mostly within a colour, e.g. red 191 → 255, blue 64 → 128; in e also grey
+  73 → 109 and 109 → 146), and their constrictions are not small (median 1.07 mm, against 0.85 mm at the others).
+- **What the pupil does:** averaged over these steps, it is steady until about 0.5 s before the change, then starts
+  constricting: 0.25 mm down at the moment of the change, when the pupil at normal steps has not moved yet. By 1 s
+  both reach the same depth. So it is an early constriction, not a slow drift under a flat baseline.
+- **Ruled out:**
+  - the timing of the change: the detected video change is within 0.09 s of the nominal one at these steps, as at
+    the others;
+  - drift between the video and gaze clocks (the Varjo video is timed by its frame rate): the video's length
+    (frames / 30 fps) matches the gaze span within 0.05 s in every recording, and onsets do not shrink over the
+    recording in a, c, d, e and f (slopes within ±0.07 s per 100 s);
+  - tracking gaps: 1.9 % of the 3 s before these changes lack pupil data, against 1.5 % before the others.
+- **Likely cause: anticipation.** The steps change every 10 s in a fixed, ascending order, so each change is
+  predictable. Negative onsets cluster late in the sequence (11 of 46 steps in its second half, 3 of 41 in the first),
+  and in g the onsets grow earlier as the sequence goes on (median 0.34 s in the first half, 0.20 s in the second;
+  −0.34 s per 100 s), as the participant learns the rhythm. Pupil constriction in anticipation of expected light is
+  documented, but these data cannot prove it; a sequence with irregular step lengths would.
+- **Effect on the latency:** small, because the median is robust. Leaving the negative onsets out moves the median
+  by at most 0.04 s (e 0.26 → 0.30 s, g 0.27 → 0.31 s, c 0.32 → 0.34 s, others ≤ 0.01 s), but the reported
+  interquartile ranges shrink markedly (e −0.19–0.34 → 0.26–0.38 s, g 0.20–0.34 → 0.23–0.35 s). Anticipated steps may
+  also bias the rest of the fit, as the model cannot constrict before the light does.
+- **Proposal:**
+  - now: discard onsets below a physiological floor (0.1 s; the shortest pupil latencies reported are about 0.2 s)
+    and report how many were discarded;
+  - with the new calibration sequence: irregular step lengths (e.g. 7–13 s) and a less predictable order, to remove
+    anticipation and test whether it was the cause;
+  - later, with a model of re-dilation (issue 43): measure onsets against the model's predicted continuation rather
+    than a flat level.
+- **Status:** open; part of the dynamics model (issue 43) and the new calibration sequence.
 
 ### 42. The sensitivity prior breaks the display–sensitivity equivalence slightly
 - **Where:** 2.0 `photometry.fit_light_response`; `tests/test_photometry.py::test_display_error_is_absorbed_by_the_sensitivity`,
