@@ -325,11 +325,21 @@ is revised; they remain in the git history of this file.
   - effect on the model: in Watson & Yellott a luminance error of ×1.3 moves the pupil by 0.08, 0.04 and 0.02 mm at
     10, 100 and 1000 cd/m² (×2: 0.21, 0.10, 0.04 mm), so the chip's absolute spread matters little and the geometry
     more.
-- **Proposal:** keep 2.2 (now derived); optionally confirm the housing's field by turning the sensor in front of a
-  distant lamp in 10° steps (relative readings only, no reference meter). Keep the 1.706061 · lux + 0.66935 line only
-  if it came from a reference meter; otherwise use the chip's lux as reported.
-- **Status:** geometry settled (2.2 derived from the datasheet and the housing); needs the origin of the calibration
-  line.
+- **Origin of the linear calibration** (G. Pignoni's 2019 master thesis, NTNU, section 4.2, Table 2 and Figure 13): a
+  projected screen in a dark room, measured by a Konica Minolta CS-2000 spectroradiometer on a 2° spot at its centre
+  and by the head-mounted sensor (lux / 2.2, a field of more than 60° including the darker surround). The thesis notes
+  the two diverge because of their fields of view but are linearly related, "so this measure can be used as a simple
+  calibration". Regressing the spectroradiometer on the sensor gives slope 1.709 and intercept 0.54 cd/m² (r = 0.9998,
+  on the rounded table), matching 1.706061 (the intercept presumably from the unrounded data). The line is thus not a
+  sensor calibration but a correction of the field-of-view mismatch in that scene: it maps the sensor's field average
+  onto the luminance of the scene's bright centre. It does not carry over to other scenes (in a uniform field the
+  factor would be about 1), and with the video it corrects twice, since the 2021 method already turns the field
+  average into the luminance at the gaze with the camera's gaze/frame ratio.
+- **Proposal:** average luminance = lux / 2.2 (gain 1, offset 0), with 2.2 derived from the housing and the chip's
+  lux taken as reported (±15 % between units); optionally confirm the housing's field by turning the sensor in front of
+  a distant lamp in 10° steps. For Pupil devices this lowers luminance by about 1.7 relative to 1.x, about 0.1 mm of
+  modelled pupil at indoor levels.
+- **Status:** explained; changing the defaults (gain 1, offset 0) awaits a decision.
 
 ---
 
