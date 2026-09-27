@@ -68,6 +68,7 @@ def smooth(values: np.ndarray) -> np.ndarray:
 
 
 def average_luminance(lux: np.ndarray, gain: float, offset: float, solid_angle: float) -> np.ndarray:
-    """Average luminance (cd/m²) in the sensor's field of view: calibrated illuminance
-    divided by the sensor's solid angle (1.x: (1.706061·lux + 0.66935) / 2.2 sr)."""
+    """Average luminance (cd/m²) in the sensor's field of view: illuminance, optionally recalibrated
+    (gain, offset), divided by the ratio of illuminance to luminance for the sensor in its housing
+    (``solid_angle``, 2.2 for the TSL2591 kit; 1.x also applied gain 1.706061 and offset 0.66935)."""
     return (gain * np.asarray(lux, dtype=float) + offset) / solid_angle

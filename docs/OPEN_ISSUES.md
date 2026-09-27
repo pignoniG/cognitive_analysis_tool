@@ -339,7 +339,9 @@ is revised; they remain in the git history of this file.
   lux taken as reported (±15 % between units); optionally confirm the housing's field by turning the sensor in front of
   a distant lamp in 10° steps. For Pupil devices this lowers luminance by about 1.7 relative to 1.x, about 0.1 mm of
   modelled pupil at indoor levels.
-- **Status:** explained; changing the defaults (gain 1, offset 0) awaits a decision.
+- **2.0 (September 2026):** defaults gain 1 and offset 0 (the chip's lux), with 2.2 kept and derived; the parameters
+  stay editable, and parameter files that store the 1.x values keep them. To check on the Pupil sample recording.
+- **Status:** fixed in 2.0 (to be checked on a Pupil recording).
 
 ---
 

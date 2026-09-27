@@ -73,9 +73,10 @@ The analysis converts lux to average luminance with
 \bar L = \frac{g \cdot E + o}{\Omega}
 \]
 
-where \(E\) is the reading in lux, \(g\) = 1.706061 and \(o\) = 0.66935 are the sensor's linear calibration, and
-\(\Omega\) = 2.2 is the ratio of illuminance to average luminance for the sensor in its housing (the 1.x values;
-parameters `lux_gain`, `lux_offset`, `lux_solid_angle`).
+where \(E\) is the reading in lux, \(g\) and \(o\) an optional recalibration of it (default 1 and 0: the chip's own
+lux), and \(\Omega\) = 2.2 the ratio of illuminance to average luminance for the sensor in its housing (parameters
+`lux_gain`, `lux_offset`, `lux_solid_angle`). 1.x used \(g\) = 1.706061 and \(o\) = 0.66935; see below for why 2.0
+does not.
 
 **Where 2.2 comes from.** It is not a solid angle, although 1.x called it one: for a uniform field of luminance
 \(L\), a sensor with angular response \(R(\alpha)\) reads
@@ -88,11 +89,13 @@ over the field it sees. The TSL2591's response is close to a cosine (datasheet, 
 integral is 3.10, against \(\pi\) for an ideal cosine). In the printed housing the board sits at the bottom of the
 funnel, so the photodiode is level with the funnel's base, 3.7 mm below its rim (10.6 mm across); the rim limits
 the field to a half-angle of 55°. The integral over that field is 2.12–2.15 (depending on where the chip sits
-under the funnel), within 2–4 % of 2.2, i.e. about 0.01 mm of modelled pupil. The linear calibration \(g\), \(o\)
-comes from a comparison in the 2019 master thesis (Pignoni, "Quantitative evaluation tool of cognitive workload",
+under the funnel), within 2–4 % of 2.2, i.e. about 0.01 mm of modelled pupil. The 1.x values \(g\) = 1.706061, \(o\) = 0.66935
+came from a comparison in the 2019 master thesis (Pignoni, "Quantitative evaluation tool of cognitive workload",
 NTNU; section 4.2, Table 2 and Figure 13): a projected screen in a dark room was measured by a Konica Minolta CS-2000
 spectroradiometer (a 2° spot at its centre, its brightest part) and by the head-mounted sensor (lux / 2.2, a field of
 more than 60° including the darker surround). Regressing the spectroradiometer on the sensor gives a slope of 1.709
 and an intercept of 0.54 cd/m² (r = 0.9998, on the rounded table). The line therefore maps the sensor's field average
-onto the luminance of the centre of that particular scene; it corrects a field-of-view mismatch, not the sensor
-([open issue 23](../OPEN_ISSUES.md)).
+onto the luminance of the centre of that particular scene; it corrects a field-of-view mismatch, not the sensor. In
+other scenes the factor differs (about 1 in a uniform field), and with the scene video it would correct twice: the
+video already turns the field average into the luminance at the gaze. 2.0 therefore uses the chip's lux as reported
+(about ±15 % between units, datasheet) ([open issue 23](../OPEN_ISSUES.md)).

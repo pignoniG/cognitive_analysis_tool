@@ -53,10 +53,14 @@ class Parameters:
     gain_b: float = 1.0
     fixation_weight: float = 0.65        # background weight is 1 - fixation_weight
 
-    # Lux sensor (Pupil devices): average luminance = (gain · lux + offset) / solid angle (1.x values)
-    lux_gain: float = 1.706061
-    lux_offset: float = 0.66935
-    lux_solid_angle: float = 2.2         # sr
+    # Lux sensor (Pupil devices): average luminance = (gain · lux + offset) / lux_solid_angle.
+    # 2.2 is the ratio of illuminance to average luminance for the TSL2591 in its printed housing (its
+    # near-cosine response over the 55° half-angle field), not a solid angle, despite the 1.x name kept for
+    # compatibility. Gain and offset default to the chip's own lux; 1.x used 1.706061 and 0.66935, a
+    # correction for the field-of-view mismatch in one projector test, not a sensor calibration (open issue 23).
+    lux_gain: float = 1.0
+    lux_offset: float = 0.0
+    lux_solid_angle: float = 2.2
     lux_use_video: bool = True           # distribute the sensor's average with the scene video (2021 eq. 5-8)
 
     # Scene camera alone, when a Pupil recording has no lux log:

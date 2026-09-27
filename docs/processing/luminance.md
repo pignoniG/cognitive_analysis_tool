@@ -55,7 +55,9 @@ For the Pupil Core and Neon, the scene camera's automatic exposure hides the abs
 
 1. The lux readings are smoothed (Savitzky–Golay, 11 samples, order 6) and converted to the **average luminance**
    of the sensor's view: \(\bar L = (g \cdot E + o) / \Omega\) (parameters `lux_gain`, `lux_offset`,
-   `lux_solid_angle`).
+   `lux_solid_angle`). \(\Omega\) = 2.2 is the ratio of illuminance to average luminance for the sensor in its
+   housing, and \(g\) = 1, \(o\) = 0 by default (1.x used 1.706061 and 0.66935; see
+   [Lux sensor](../hardware/lux-sensor.md)).
 2. The video **distributes** that average over the view. With \(Y_w\) the relative luminance of the weighted
    gaze/background colour and \(Y_\text{frame}\) that of the whole frame, both computed with the photopic weights
    and channel balance:

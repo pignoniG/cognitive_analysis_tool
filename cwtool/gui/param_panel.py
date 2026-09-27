@@ -39,9 +39,13 @@ NUMBERS = {
     "max_pupil_speed": ("Max pupil speed (mm/s)", 0, 200, 1, 1,
                         "Faster changes are treated as artefacts (blink edges); 0 disables the filter"),
     "artefact_padding": ("Artefact padding (s)", 0, 1, 0.01, 2, "Removed on each side of an artefact"),
-    "lux_gain": ("Lux gain", 0, 100, 0.01, 6, "Sensor calibration: average luminance = (gain·lux + offset) / solid angle"),
-    "lux_offset": ("Lux offset", -1000, 1000, 0.01, 5, "Sensor calibration offset"),
-    "lux_solid_angle": ("Sensor solid angle (sr)", 0.01, 12.6, 0.1, 3, "Solid angle seen by the lux sensor"),
+    "lux_gain": ("Lux gain", 0, 100, 0.01, 6,
+                 "Recalibration of the sensor's lux (1 = as reported): average luminance = (gain·lux + offset) / "
+                 "field factor. 1.x used 1.706061"),
+    "lux_offset": ("Lux offset", -1000, 1000, 0.01, 5, "Recalibration offset in lux (1.x used 0.66935)"),
+    "lux_solid_angle": ("Sensor field factor", 0.01, 12.6, 0.1, 3,
+                        "Illuminance / average luminance for the sensor in its housing: the sensor's angular "
+                        "response integrated over its field (2.2 for the TSL2591 kit; π for a bare cosine sensor)"),
     "camera_white": ("Camera full scale (cd/m²)", 0.1, 1e7, 50, 1,
                      "Luminance that saturates the scene camera (code 255) at the reference exposure; "
                      "set it with 'Calibrate camera from lux' on a recording made with the same exposure"),
