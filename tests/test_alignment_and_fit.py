@@ -132,3 +132,48 @@ def test_latency_from_constriction_onsets(tmp_path):
     fit = fit_calibration(rec, video, params, start=0.0, sequence=seq)
     assert fit.delay == pytest.approx(true_delay, abs=0.06)
     assert any("constriction onsets" in n for n in fit.notes)
+
+
+def test_fit_recovers_the_transient(tmp_path):
+    """A participant who constricts beyond the steady state after each brightening step and re-dilates
+    (pupillary escape): the transient and its escape time constant are recovered, and fitting them
+    lowers the error."""
+    from cwtool import calibration
+    params = Parameters()
+    colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191, 20, 230]
+    step, rate = 8, 100
+    true = dict(delay=0.3, attack=3.0, release=0.3, transient=0.6, escape=2.0)
+    t = np.arange(len(colours) * step * rate) / rate
+    level = np.array([colours[min(int(x // step), len(colours) - 1)] for x in t])
+    L = luminance.absolute_luminance(luminance.to_linear(np.stack([level] * 3, axis=1), params.gamma),
+                                     params.l_min, params.l_max)
+    pd = pipeline.dynamic_pupil(model.watson_yellott(L, params.age, varjo.PROFILE.field_area), L, rate, **true)
+    folder = write_varjo_recording(tmp_path / "cal", colours, seconds_per_level=step,
+                                   pupil_mm=lambda x: pd[min(int(x * rate), len(t) - 1)] / 2)
+    rec, video = _load(folder)
+    seq = calibration.Sequence(tuple(calibration.Step(i * step, (i + 1) * step, (c, c, c), str(c))
+                                     for i, c in enumerate(colours)), "test")
+    without = fit_calibration(rec, video, params, start=0.0, sequence=seq)
+    fit = fit_calibration(rec, video, params, start=0.0, sequence=seq, fit_transient=True)
+    assert fit.transient == pytest.approx(true["transient"], rel=0.2)
+    assert fit.escape == pytest.approx(true["escape"], rel=0.3)
+    assert fit.params.transient == fit.transient and fit.params.escape == fit.escape
+    assert fit.rms_after < without.rms_after / 2
+    assert without.transient == 0.0 and without.params.transient == 0.0
+
+
+def test_fit_turns_the_transient_off_when_there_is_none(tmp_path):
+    params = Parameters()
+    colours = [0, 73, 146, 255, 0, 128, 255, 64]
+    step, rate = 8, 100
+    t = np.arange(len(colours) * step * rate) / rate
+    level = np.array([colours[min(int(x // step), len(colours) - 1)] for x in t])
+    L = luminance.absolute_luminance(luminance.to_linear(np.stack([level] * 3, axis=1), params.gamma),
+                                     params.l_min, params.l_max)
+    pd = pipeline.dynamic_pupil(model.watson_yellott(L, params.age, varjo.PROFILE.field_area), L, rate,
+                                0.3, 3.0, 0.3)
+    folder = write_varjo_recording(tmp_path / "cal", colours, seconds_per_level=step,
+                                   pupil_mm=lambda x: pd[min(int(x * rate), len(t) - 1)] / 2)
+    rec, video = _load(folder)
+    fit = fit_calibration(rec, video, params, start=0.0, end=t[-1], fit_transient=True)
+    assert fit.transient == 0.0 and any("No transient" in n for n in fit.notes)

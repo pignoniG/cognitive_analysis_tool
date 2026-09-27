@@ -42,3 +42,25 @@ def test_attack_release_asymmetry():
 def test_attack_release_starts_at_input():
     out = model.attack_release([5.0, 5.0, 5.0], fs=100, attack=6, release=0.5)
     assert out.tolist() == [5.0, 5.0, 5.0]
+
+
+def test_escape_transient_follows_brightening_only():
+    fs = 100
+    t = np.arange(0, 30, 1 / fs)
+    up = np.where(t < 10, 1.0, 10.0)                   # one log unit brighter at 10 s
+    tr = model.escape_transient(up, fs, escape=2.0)
+    assert np.all(tr[t < 10] == 0)
+    peak = tr[np.searchsorted(t, 10)]
+    assert peak == pytest.approx(1 / (1 + model.TRANSIENT_HALF), rel=0.01)   # saturating in the step
+    h = lambda x: x / (1 - x) * model.TRANSIENT_HALF   # back to the log increase
+    assert h(tr[np.searchsorted(t, 12)]) == pytest.approx(np.exp(-1), rel=0.02)   # decays with escape
+    assert tr[-1] < 0.01
+    down = model.escape_transient(up[::-1], fs, escape=2.0)
+    assert np.all(down == 0)                           # darkening gives none
+    small = model.escape_transient(np.where(t < 10, 1.0, 10 ** 0.2), fs, escape=2.0)
+    assert small.max() == pytest.approx(0.5, rel=0.01)  # half at the half-saturation step
+
+
+def test_lowpass_starts_at_the_first_value():
+    out = model.lowpass([5.0, 5.0, 5.0], fs=100, tau=0.5)
+    assert out == pytest.approx([5.0, 5.0, 5.0])

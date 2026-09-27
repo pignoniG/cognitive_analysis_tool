@@ -92,6 +92,10 @@ class Parameters:
     dynamics: bool = False
     attack: float = 6.0                  # s, dilation
     release: float = 0.5                 # s, constriction
+    # Transient constriction after brightening ("pupillary escape"): the pupil constricts beyond its new
+    # steady state and re-dilates within seconds. Applied whenever transient > 0.
+    transient: float = 0.0               # mm, largest transient constriction (saturating in the step size)
+    escape: float = 2.0                  # s, re-dilation time constant of the transient
 
     # ΔPD
     cw_window: float = 0.2               # s, averaging window

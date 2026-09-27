@@ -5,6 +5,8 @@ and the participant's light sensitivity and channel weights, this fits:
 
 - the response latency (``delay``), from the timing of the sequence's steps,
 - the dilation and constriction time constants (``attack``, ``release``),
+- optionally the transient constriction after brightening and its escape time constant
+  (``transient``, ``escape``),
 - the pupil scale correction and offset, by least squares of measured on expected.
 
 The result is meant to be saved with the participant's parameters and applied
@@ -19,15 +21,17 @@ from typing import Callable, Optional
 import numpy as np
 from scipy.optimize import minimize
 
-from cwtool import calibration, model
+from cwtool import calibration
 from cwtool.params import Parameters
-from cwtool.pipeline import Prepared, prepare, residual_rms, run, steady_pupil
+from cwtool.pipeline import Prepared, dynamic_pupil, prepare, residual_rms, run, steady_pupil
 from cwtool.recording import Recording
 from cwtool.video import VideoResult
 
 DELAY_RANGE = (0.0, 1.5)       # s
 ATTACK_RANGE = (0.3, 30.0)     # s, dilation
 RELEASE_RANGE = (0.05, 5.0)    # s, constriction
+TRANSIENT_RANGE = (0.01, 3.0)  # mm, largest transient constriction
+ESCAPE_RANGE = (0.3, 30.0)     # s, re-dilation of the transient
 PRE_ROLL = 30.0                # s of signal before the window, so the filter state has settled
 SCALE_RANGE = (0.5, 2.0)       # plausible pupil scale corrections; outside, only the offset is fitted
 MIN_PUPIL_SD = 0.05            # mm; a flatter pupil cannot constrain the scale
@@ -39,6 +43,8 @@ class FitResult:
     delay: float
     attack: float
     release: float
+    transient: float            # mm, 0 when not fitted and not in the input parameters
+    escape: float
     pupil_correction: float
     pupil_offset: float
     rms_before: float           # mm, residual RMS of ΔPD in the window with the input parameters
@@ -56,7 +62,8 @@ class _Problem:
         hi = np.searchsorted(t, end, side="right")
         self.fs = prep.fs
         self.offset_in = np.searchsorted(t, start) - lo
-        self.base = steady_pupil(prep.luminance[lo:hi], params, field_area)
+        self.luminance = prep.luminance[lo:hi]
+        self.base = steady_pupil(self.luminance, params, field_area)
         seg = slice(lo + self.offset_in, hi)
         scale = prep.scale if prep.scale is not None else 1.0
         # The lightly smoothed signal keeps the step edges that carry latency and constriction speed.
@@ -67,20 +74,19 @@ class _Problem:
         self.measured = measured[self.use]
         self.fit_scale = float(np.std(self.measured)) >= MIN_PUPIL_SD
 
-    def expected(self, delay: float, attack: Optional[float], release: Optional[float]) -> np.ndarray:
-        pd = model.delay(self.base, self.fs, delay)
-        if attack is not None:
-            pd = model.attack_release(pd, self.fs, attack, release)
+    def expected(self, delay: float, attack: Optional[float], release: Optional[float],
+                 transient: float = 0.0, escape: float = 2.0) -> np.ndarray:
+        pd = dynamic_pupil(self.base, self.luminance, self.fs, delay, attack, release, transient, escape)
         return pd[self.offset_in:][self.use]
 
-    def solve(self, delay, attack, release) -> tuple[float, float, float]:
+    def solve(self, delay, attack, release, transient=0.0, escape=2.0) -> tuple[float, float, float]:
         """Best k, b with k·measured + b ≈ expected; returns (rms, k, b).
 
         The noisy side is the measurement, so the model is mapped onto it (measured ≈ c·expected + d,
         k = 1/c, b = −d/c) and the RMS is in measured millimetres. Regressing the model on the
         measurement instead would bias k towards zero whenever the pupil varies in ways the model
         does not (re-dilation, fluctuations)."""
-        e = self.expected(delay, attack, release)
+        e = self.expected(delay, attack, release, transient, escape)
         k, b = 1.0, float(np.mean(e - self.measured))
         if self.fit_scale and np.std(e) > 1e-6:
             A = np.column_stack([e, np.ones_like(e)])
@@ -91,9 +97,9 @@ class _Problem:
         return rms, float(k), float(b)
 
 
-def _best_delay(problem: _Problem, attack, release, step: float) -> float:
+def _best_delay(problem: _Problem, attack, release, transient, escape, step: float) -> float:
     delays = np.arange(DELAY_RANGE[0], DELAY_RANGE[1] + step / 2, step)
-    costs = [problem.solve(d, attack, release)[0] for d in delays]
+    costs = [problem.solve(d, attack, release, transient, escape)[0] for d in delays]
     return float(delays[int(np.argmin(costs))])
 
 
@@ -146,10 +152,12 @@ def onset_latency(prep: Prepared, video: VideoResult, params: Parameters, start:
 def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, start: float,
                     end: Optional[float] = None, fit_dynamics: bool = True,
                     cancelled: Optional[Callable[[], bool]] = None,
-                    sequence: Optional[calibration.Sequence] = None) -> FitResult:
+                    sequence: Optional[calibration.Sequence] = None,
+                    fit_transient: bool = False) -> FitResult:
     """Fit on the window [start, end] (default: the sequence's duration). With the ``sequence``, the
     latency is measured from the constriction onsets at its brightening steps and held fixed;
-    otherwise (or with too few onsets) it is fitted with the time constants."""
+    otherwise (or with too few onsets) it is fitted with the time constants. ``fit_transient`` also
+    fits the transient constriction after brightening and its escape time constant."""
     end = start + (sequence or calibration.DEFAULT).duration if end is None else end
     prep = prepare(rec, video, params)
     if prep.scale is None:
@@ -159,49 +167,57 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
 
     attack = params.attack if (params.dynamics or fit_dynamics) else None
     release = params.release if attack is not None else None
+    transient, escape = params.transient, params.escape
     onsets = onset_latency(prep, video, params, start, sequence) if sequence is not None else []
     fixed_delay = len(onsets) >= MIN_ONSETS
-    delay = float(np.clip(np.median(onsets), *DELAY_RANGE)) if fixed_delay else _best_delay(problem, attack, release, step)
+    delay = (float(np.clip(np.median(onsets), *DELAY_RANGE)) if fixed_delay
+             else _best_delay(problem, attack, release, transient, escape, step))
 
-    if fit_dynamics and fixed_delay:
-        def cost(x):
-            if cancelled and cancelled():
-                raise InterruptedError("fit cancelled")
-            return problem.solve(delay, float(np.clip(np.exp(x[0]), *ATTACK_RANGE)),
-                                 float(np.clip(np.exp(x[1]), *RELEASE_RANGE)))[0]
+    # Free values, searched together by Nelder–Mead (on log scales except the latency). Without measured
+    # onsets, latency and constriction speed trade off (a late fast response looks like an early slow
+    # one), so the latency joins the search rather than being fitted first.
+    free = []
+    if fit_dynamics and not fixed_delay:
+        free.append(("delay", DELAY_RANGE, False))
+    if fit_dynamics:
+        free += [("attack", ATTACK_RANGE, True), ("release", RELEASE_RANGE, True)]
+    if fit_transient:
+        free += [("transient", TRANSIENT_RANGE, True), ("escape", ESCAPE_RANGE, True)]
+    current = dict(delay=delay, attack=attack, release=release, transient=transient, escape=escape)
 
+    def unpack(x):
+        values = dict(current)
+        for (name, (lo, hi), log), v in zip(free, x):
+            values[name] = float(np.clip(np.exp(v) if log else v, lo, hi))
+        return values
+
+    def cost(x):
+        if cancelled and cancelled():
+            raise InterruptedError("fit cancelled")
+        return problem.solve(**unpack(x))[0]
+
+    if free:
+        # Two starts: fast and slow constriction (and a short, small or a long, larger transient).
+        starts = [dict(release=0.3, transient=0.5, escape=2.0), dict(release=1.0, transient=1.0, escape=5.0)]
+        names = {n for n, _, _ in free}
         best = None
-        for release0 in (0.3, 1.0):
-            res = minimize(cost, [np.log(np.clip(params.attack, *ATTACK_RANGE)), np.log(release0)],
-                           method="Nelder-Mead", options={"xatol": 1e-3, "fatol": 1e-6, "maxiter": 400})
-            if best is None or res.fun < best.fun:
-                best = res
-        attack = float(np.clip(np.exp(best.x[0]), *ATTACK_RANGE))
-        release = float(np.clip(np.exp(best.x[1]), *RELEASE_RANGE))
-    elif fit_dynamics:
-        # Latency and constriction speed trade off, so fit them jointly (starting from
-        # the grid-search latency) rather than one after the other.
-        def unpack(x):
-            return (float(np.clip(x[0], *DELAY_RANGE)),
-                    float(np.clip(np.exp(x[1]), *ATTACK_RANGE)),
-                    float(np.clip(np.exp(x[2]), *RELEASE_RANGE)))
-
-        def cost(x):
-            if cancelled and cancelled():
-                raise InterruptedError("fit cancelled")
-            return problem.solve(*unpack(x))[0]
-
-        best = None
-        for release0 in (0.3, 1.0):  # two starts: fast and slow constriction
-            x0 = [delay, np.log(np.clip(params.attack, *ATTACK_RANGE)), np.log(release0)]
+        for s0 in starts:
+            guess = {**current, **{k: v for k, v in s0.items() if k in names}}
+            x0 = [np.log(np.clip(guess[n], lo, hi)) if log else guess[n] for n, (lo, hi), log in free]
             res = minimize(cost, x0, method="Nelder-Mead",
-                           options={"xatol": 1e-3, "fatol": 1e-6, "maxiter": 600})
+                           options={"xatol": 1e-3, "fatol": 1e-6, "maxiter": 300 * len(free)})
             if best is None or res.fun < best.fun:
                 best = res
-        delay, attack, release = unpack(best.x)
+        current = unpack(best.x)
+    delay, attack, release = current["delay"], current["attack"], current["release"]
+    transient, escape = current["transient"], current["escape"]
 
-    _, k, b = problem.solve(delay, attack, release)
     notes = []
+    no_transient = fit_transient and transient <= TRANSIENT_RANGE[0] * 1.02 + 1e-3
+    if no_transient:
+        transient = 0.0
+        notes.append("No transient constriction after brightening was found; the transient is off.")
+    _, k, b = problem.solve(delay, attack, release, transient, escape)
     at_limit = []
     if fixed_delay:
         notes.append(f"Latency {delay:.2f} s measured from {len(onsets)} constriction onsets "
@@ -211,6 +227,14 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
                                   ("constriction τ", release if release is not None else None, RELEASE_RANGE)):
         if value is not None and (value <= lo * 1.02 + 1e-3 or value >= hi * 0.98):
             at_limit.append(name)
+    if fit_transient and not no_transient:
+        limits = [name for name, value, (lo, hi) in (("transient", transient, TRANSIENT_RANGE),
+                                                     ("escape τ", escape, ESCAPE_RANGE))
+                  if value <= lo * 1.02 + 1e-3 or value >= hi * 0.98]
+        if limits:
+            notes.append(f"The {' and '.join(limits)} reached the limit of the search range: this participant "
+                         "shows little constriction beyond the steady state followed by re-dilation, and the "
+                         "transient may only be reshaping the constriction. Consider leaving it off.")
     if at_limit:
         notes.append(f"{', '.join(at_limit)} reached the limit of the search range: the model probably does "
                      "not match the measured pupil yet. Fit the light sensitivity on the sequence first (and "
@@ -224,6 +248,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
                      pupil_offset=b, alignment="fixed")
     if attack is not None:
         fitted = replace(fitted, dynamics=True, attack=attack, release=release)
+    if fit_transient:
+        fitted = replace(fitted, transient=transient, escape=escape)
 
     def window_rms(p: Parameters) -> float:
         r = run(rec, video, p)
@@ -231,6 +257,7 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         return residual_rms(r.cw[sel])
 
     return FitResult(params=fitted, delay=delay, attack=fitted.attack, release=fitted.release,
+                     transient=fitted.transient, escape=fitted.escape,
                      pupil_correction=fitted.pupil_correction, pupil_offset=b,
                      rms_before=window_rms(params), rms_after=window_rms(fitted), window=(start, end),
                      notes=notes)

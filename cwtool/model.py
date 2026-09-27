@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from scipy.signal import lfilter
 
 
 def stanley_davies(flux) -> np.ndarray:
@@ -54,3 +55,34 @@ def attack_release(signal, fs: float, attack: float, release: float) -> np.ndarr
         a = a_att if x[n] > y[n - 1] else a_rel
         y[n] = a * y[n - 1] + (1 - a) * x[n]
     return y
+
+
+# Half-saturation of the transient, in log10 units of luminance increase. On the seven Varjo calibration
+# recordings (September 2026) the re-dilation after a brightening step grew from 0.25 mm for a 0.1 log
+# unit step to 0.52 mm for a 1 log unit step; a fitted half-saturation varied between participants
+# without improving the fit, so it is fixed.
+TRANSIENT_HALF = 0.2
+
+
+def lowpass(signal, fs: float, tau: float) -> np.ndarray:
+    """One-pole low-pass with time constant ``tau`` (s), starting from the first value."""
+    x = np.asarray(signal, dtype=float)
+    if len(x) == 0:
+        return x.copy()
+    a = np.exp(-1 / (fs * tau))
+    return lfilter([1 - a], [1, -a], x, zi=[a * x[0]])[0]
+
+
+def escape_transient(luminance, fs: float, escape: float, half: float = TRANSIENT_HALF) -> np.ndarray:
+    """Share (0–1) of the maximum transient constriction ("pupillary escape").
+
+    After a brightening step the pupil constricts beyond its new steady state and re-dilates towards
+    it within seconds. The drive is the increase of log luminance over its recent level, a low-pass
+    with time constant ``escape``: it jumps at a brightening step and decays with ``escape``. Only
+    increases count (darkening gives no transient), and it saturates as ``h / (h + half)``.
+    """
+    log_l = np.log10(np.maximum(np.asarray(luminance, dtype=float), 1e-4))
+    if len(log_l) == 0:
+        return log_l
+    h = np.clip(log_l - lowpass(log_l, fs, escape), 0, None)
+    return h / (h + half)

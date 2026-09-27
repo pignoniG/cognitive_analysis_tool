@@ -75,12 +75,15 @@ between participants calibrated with the same display photometry.
 
 ## 3. Fit latency, scale and offset
 
-Click **2. Fit latency, scale and offset** (tick *Include dilation/constriction time constants* to fit dynamics).
+Click **2. Fit latency, scale and offset** (tick *Include dilation/constriction time constants* to fit dynamics,
+and *Include transient (pupillary escape)* to fit the constriction beyond the steady state after brightening steps
+and its re-dilation).
 The latency is measured from the constriction onsets at the sequence's brightening steps (the result reports it with
 its spread); the rest is fitted on the sequence window, and the ΔPD RMS before and after is reported. Applying it
 sets:
 
 - `delay` (latency), `attack` and `release` (dilation and constriction time constants) with dynamics on,
+- `transient` and `escape` with the transient option,
 - `pupil_correction` (scale multiplier) and `pupil_offset`,
 - `alignment` = `fixed`, so the offset is applied as fitted in other recordings, instead of being re-estimated.
 

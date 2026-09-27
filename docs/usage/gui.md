@@ -79,7 +79,8 @@ See [Participant calibration](calibration.md) for the procedure.
   by hand.
 - **1. Fit light sensitivity**: the participant's light sensitivity and channel weights (optionally gamma), with a
   result window showing each step's steady-state pupil against the model.
-- **2. Fit latency, scale and offset**: the participant's timing, pupil scale and offset.
+- **2. Fit latency, scale and offset**: the participant's timing, pupil scale and offset, optionally with the
+  transient constriction after brightening (pupillary escape).
 
 ## Video preview
 

@@ -169,11 +169,15 @@ class MainWindow(QMainWindow):
         cal_layout.addRow(self.light_button)
         self.fit_dynamics_check = QCheckBox("Include dilation/constriction time constants")
         self.fit_dynamics_check.setChecked(True)
+        self.fit_transient_check = QCheckBox("Include transient (pupillary escape)")
+        self.fit_transient_check.setToolTip("Also fit the constriction beyond the steady state after each "
+                                            "brightening step and the time constant of the re-dilation")
         self.fit_button = QPushButton("2. Fit latency, scale and offset")
         self.fit_button.setToolTip("Fits the participant's latency, dilation/constriction time constants, pupil "
                                    "scale and offset on the sequence. Fit the light sensitivity first.")
         self.fit_button.clicked.connect(self.fit_sequence)
         cal_layout.addRow(self.fit_dynamics_check)
+        cal_layout.addRow(self.fit_transient_check)
         cal_layout.addRow(self.fit_button)
         side_layout.addWidget(cal_box)
 
@@ -419,18 +423,21 @@ class MainWindow(QMainWindow):
     def fit_sequence(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, dynamics = self.sequence_start.value(), self.fit_dynamics_check.isChecked()
+        transient = self.fit_transient_check.isChecked()
         sequence = self.sequence
         end = start + sequence.duration
 
         def work(progress, cancelled):
             return fit_calibration(rec, video, params, start, end, fit_dynamics=dynamics, cancelled=cancelled,
-                                   sequence=sequence)
+                                   sequence=sequence, fit_transient=transient)
 
         self._start_task(work, self._fit_done, "Fitting on the calibration sequence…")
 
     def _fit_done(self, fit) -> None:
         dyn = (f"<br>dilation τ {fit.attack:.2f} s, constriction τ {fit.release:.2f} s"
                if fit.params.dynamics else "")
+        if fit.transient > 0:
+            dyn += f"<br>transient {fit.transient:.2f} mm, escape τ {fit.escape:.2f} s"
         notes = "".join(f"<br><span style='color:#c00'>⚠ {n}</span>" for n in fit.notes)
         box = QMessageBox(QMessageBox.Question, "Calibration fit",
                           f"<b>ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b><br><br>"

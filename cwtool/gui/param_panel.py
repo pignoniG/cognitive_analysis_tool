@@ -31,6 +31,10 @@ NUMBERS = {
     "delay": ("Delay (s)", 0, 5, 0.05, 2, "Pupil response latency"),
     "attack": ("Dilation τ (s)", 0.01, 60, 0.5, 2, "Attack time constant"),
     "release": ("Constriction τ (s)", 0.01, 60, 0.1, 2, "Release time constant"),
+    "transient": ("Transient (mm)", 0, 5, 0.05, 2,
+                  "Largest constriction beyond the steady state after a brightening step, which then "
+                  "re-dilates (pupillary escape); 0 = off. Fitted on the calibration sequence"),
+    "escape": ("Escape τ (s)", 0.1, 60, 0.5, 2, "Re-dilation time constant of the transient"),
     "analysis_rate": ("Analysis rate (Hz)", 0, 1000, 10, 0, "Uniform resampling rate; 0 uses the device's native rate"),
     "max_gap": ("Max gap (s)", 0, 60, 0.1, 2, "Gaps longer than this are excluded from ΔPD; shorter ones are interpolated"),
     "max_pupil_speed": ("Max pupil speed (mm/s)", 0, 200, 1, 1,
@@ -80,7 +84,7 @@ GROUPS = [
     ("Lux sensor (Pupil devices)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
     ("Scene camera without lux log (Pupil devices)",
      ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
-    ("Dynamics", ["delay", "dynamics", "attack", "release"]),
+    ("Dynamics", ["delay", "dynamics", "attack", "release", "transient", "escape"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]
 VIDEO_GROUP = ("Video analysis (re-run to apply)",

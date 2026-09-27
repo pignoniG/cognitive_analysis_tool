@@ -100,6 +100,8 @@ onsets, the latency is fitted as below.
 | latency (`delay`) | 0–1.5 s | grid search, then jointly with the time constants |
 | dilation τ (`attack`) | 0.3–30 s | Nelder–Mead on log τ |
 | constriction τ (`release`) | 0.05–5 s | Nelder–Mead on log τ |
+| transient (`transient`), optional | 0.01–3 mm | Nelder–Mead on log, with the time constants |
+| escape τ (`escape`), optional | 0.3–30 s | Nelder–Mead on log τ, with the time constants |
 | scale (`pupil_correction`) | ×0.5–2 | least squares, for each candidate dynamics |
 | offset (`pupil_offset`) | – | least squares, for each candidate dynamics |
 
@@ -120,14 +122,19 @@ an early slow one), so they are fitted **jointly** rather than one after the oth
 - A fitted scale outside ×0.5–2 is implausible: the device scale is kept and only the offset is fitted.
 - A latency or time constant ending on its search limit means the model does not match the pupil yet; the notes say
   to revisit the light sensitivity fit.
+- A transient at its lower limit means there is none: it is set to 0. A transient or escape τ at another limit
+  usually means the participant shows little escape and the transient is only reshaping the constriction onset; the
+  note suggests leaving it off.
 - Pixel data (Pupil Core 2D) is refused: its scale is not defined.
 
 ### Result
 
-The fitted parameters are the input parameters with `delay`, `attack`, `release`, `dynamics` = on,
-`pupil_correction` (multiplied by the fitted scale), `pupil_offset` and `alignment` = `fixed`. The ΔPD RMS in the
+The fitted parameters are the input parameters with `delay`, `attack`, `release`, `dynamics` = on, `transient` and
+`escape` (with the transient option), `pupil_correction` (multiplied by the fitted scale), `pupil_offset` and
+`alignment` = `fixed`. The ΔPD RMS in the
 window before and after is reported. Saved with the participant's parameters, they apply unchanged to the
 participant's other recordings.
 
-On synthetic recordings the fit recovers latency, time constants, scale and offset closely (see
-`tests/test_alignment_and_fit.py`).
+On synthetic recordings the fit recovers latency, time constants, transient, scale and offset closely (see
+`tests/test_alignment_and_fit.py`). On the seven Varjo calibration recordings the transient lowers the ΔPD RMS in the
+sequence by 5–19 % and in the 4 s after brightening steps by 15–25 %; see [open issue 43](../OPEN_ISSUES.md).

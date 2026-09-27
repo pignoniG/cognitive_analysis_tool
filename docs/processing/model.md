@@ -55,6 +55,24 @@ y_n = \alpha\, y_{n-1} + (1 - \alpha)\, x_n, \qquad \alpha = e^{-1/(f_s \tau)}
 Dilation is slow (`attack`, default 6 s) and constriction fast (`release`, default 0.5 s). The filter acts on the
 expected diameter after the formula and starts from the first value.
 
+## 4. Transient (optional)
+
+After a brightening step the pupil constricts beyond its new steady state and then re-dilates towards it within a
+few seconds ("pupillary escape"). On the seven Varjo calibration recordings the model without it misses a dip of
+0.43 mm on average 1 s after a brightening step, which recovers with a time constant of 1–2 s. With `transient`
+above 0, the expected pupil is reduced by
+
+\[
+T(t) = \text{transient} \cdot \frac{h}{h + h_0}, \qquad h = \max\big(0,\; \log_{10} L - \mathrm{LP}_{\tau_\text{escape}}(\log_{10} L)\big)
+\]
+
+where \(\mathrm{LP}_\tau\) is a one-pole low-pass with time constant `escape`: \(h\) is the increase of log luminance
+over its recent level, jumping at a brightening step and decaying with `escape`. Darkening gives no transient. The
+response saturates with the step size (\(h_0\) = 0.2 log units, fixed: the measured re-dilation grew from 0.25 mm for a
+0.1 log unit step to 0.52 mm for a 1 log unit step), so `transient` is the largest transient constriction in mm. It
+has the same latency as the rest and, with `dynamics` on, passes through a one-pole low-pass with the constriction
+time constant `release`.
+
 ## Display range
 
 For display devices the expected pupil at \(L_\text{min}\) and \(L_\text{max}\) is shown as the dashed black and

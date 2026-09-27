@@ -559,7 +559,34 @@ them rather than describing the headset or the participant.
      (removing issue 41).
   The new calibration sequence should allow these to be identified: irregular step lengths, return-to-dark steps,
   and some long steps.
-- **Status:** open.
+- **2.0, step 1 (transient pathway):** with `transient` above 0 the expected pupil is reduced by
+  `transient · h / (h + 0.2)`, where `h` is the increase of log luminance over its low-pass with time constant
+  `escape` (only increases), delayed like the rest and smoothed with the constriction τ. A transient proportional to
+  `h` fitted poorly: the measured escape saturates with the step size (0.25 mm at 0.1 log units, 0.31 at 0.2, 0.43 at
+  0.45, 0.52 at 1), so a gain matching small steps overshoots large ones (fitted escape τ collapsed to 0.2–0.5 s or ran
+  to 20–30 s). A fitted half-saturation varied from 0.03 to 0.41 between participants without improving the fit, so
+  it is fixed at 0.2. Step 2 of the calibration fits `transient` and `escape` optionally. On a–g (light sensitivity
+  fit first, latency from onsets, then time constants, scale and offset without → with the transient):
+
+  | | ΔPD RMS in sequence | RMS 0–4 s after brightening | residual at 1 s | transient | escape τ | constr. τ |
+  |---|---|---|---|---|---|---|
+  | a | 0.150 → 0.143 | 0.151 → 0.129 | −0.12 → +0.02 | 1.15 mm | 0.30 s (limit) | 0.21 → 0.76 s |
+  | b | 0.462 → 0.420 | 0.416 → 0.325 | −0.46 → −0.02 | 0.91 mm | 1.13 s | 0.17 → 0.30 s |
+  | c | 0.214 → 0.186 | 0.253 → 0.190 | −0.41 → −0.05 | 0.81 mm | 0.73 s | 0.09 → 0.22 s |
+  | d | 0.501 → 0.424 | 0.604 → 0.470 | −0.83 → −0.22 | 1.71 mm | 1.07 s | 0.15 → 0.48 s |
+  | e | 0.346 → 0.308 | 0.403 → 0.330 | −0.47 → −0.11 | 1.03 mm | 1.42 s | 0.23 → 0.49 s |
+  | f | 0.188 → 0.160 | 0.184 → 0.139 | −0.24 → −0.02 | 0.43 mm | 1.07 s | 0.13 → 0.25 s |
+  | g | 0.336 → 0.272 | 0.343 → 0.278 | −0.48 → −0.16 | 1.16 mm | 7.16 s | 0.12 → 0.17 s |
+
+  Residual: mean measured − expected relative to the second before brightening steps, mm. Every participant
+  improves; the dip at 1 s is mostly removed. The whole-sequence gain is limited because the dip lasts 1–3 s of each
+  10 s step. Latency (from onsets), pupil scale (−0.06 to 0) and offset barely change.
+- **What it does not yet separate:** the constriction τ rises in every participant (to 0.17–0.76 s): a transient
+  that decays quickly, smoothed by a slower constriction, forms the dip, and together they also reshape the
+  constriction onset, which step 3 (a two-pole constriction) is meant to model. In a, which has almost no dip, the
+  escape τ ends on its lower limit and the transient only does that. In g the escape τ (7.2 s) and dilation τ (3.6 →
+  9.6 s) trade off. The transient and escape values are therefore not yet physiological estimates.
+- **Status:** step 1 (transient) done, optional and off by default; steps 2–4 open.
 
 ## D. Paper text
 

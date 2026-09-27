@@ -155,12 +155,27 @@ def steady_pupil(lum, params: Parameters, field_area: float) -> np.ndarray:
                                 params.eyes, params.reference_age)
 
 
-def expected_pupil(lum: np.ndarray, fs: float, params: Parameters, field_area: float) -> np.ndarray:
-    pd = steady_pupil(lum, params, field_area)
-    pd = model.delay(pd, fs, params.delay)
-    if params.dynamics:
-        pd = model.attack_release(pd, fs, params.attack, params.release)
+def dynamic_pupil(steady: np.ndarray, lum: np.ndarray, fs: float, delay: float, attack: Optional[float],
+                  release: Optional[float], transient: float = 0.0, escape: float = 2.0) -> np.ndarray:
+    """The steady-state pupil ``steady`` for luminance ``lum``, delayed, through the attack/release
+    filter (if ``attack`` is given), minus the transient constriction of ``transient`` mm at most.
+    The transient has the same latency and, with the filter, the constriction speed."""
+    pd = model.delay(steady, fs, delay)
+    if attack is not None:
+        pd = model.attack_release(pd, fs, attack, release)
+    if transient > 0:
+        tr = model.delay(model.escape_transient(lum, fs, escape), fs, delay)
+        if attack is not None:
+            tr = model.lowpass(tr, fs, release)
+        pd = pd - transient * tr
     return pd
+
+
+def expected_pupil(lum: np.ndarray, fs: float, params: Parameters, field_area: float) -> np.ndarray:
+    dyn = params.dynamics
+    return dynamic_pupil(steady_pupil(lum, params, field_area), lum, fs, params.delay,
+                         params.attack if dyn else None, params.release if dyn else None,
+                         params.transient, params.escape)
 
 
 def windowed_difference(time, a, b, window_n: int):

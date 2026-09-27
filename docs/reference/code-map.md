@@ -14,7 +14,7 @@ cwtool/
 ├── video.py            scene video pass: frame clock, decoding (PyAV/OpenCV), parallel chunks, two-area
 │                       measurement, gamma grid, cache
 ├── luminance.py        code values → linear, relative and absolute luminance
-├── model.py            Watson & Yellott, Stanley & Davies, delay, attack/release
+├── model.py            Watson & Yellott, Stanley & Davies, delay, attack/release, transient
 ├── pipeline.py         prepare(), run(), export(): from recording + video pass + parameters to ΔPD
 ├── calibration.py      calibration sequences: built-in, CSV, locate in a recording
 ├── fit.py              participant fit on the calibration sequence
