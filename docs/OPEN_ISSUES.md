@@ -312,22 +312,24 @@ is revised; they remain in the git history of this file.
   - the chip's angular response (datasheet Fig. 12) is close to a cosine: over a hemisphere it integrates to 3.10,
     against π for an ideal cosine, so the bare chip is effectively an illuminance sensor and the geometry can be
     computed rather than measured;
-  - the housing (`Lux Sensor/Mount Hardware/Adafruit Pupil lumiance sensor kit.stl`) has an aperture of 6.5 mm
-    (radius 3.25 mm) and a funnel widening to about 10.6 mm across at 7 mm from its base. Its rim limits the field to
-    a half-angle of 39–47°, depending on how far the photodiode sits below the aperture (2.6 to 1.0 mm), which the
-    model does not show. For a uniform field the average luminance is then E / 1.25 to E / 1.69 (datasheet response
-    integrated over that field), not E / 2.2: the current constant gives luminances 23–43 % low. 2.2 sr matches a
-    cone limited by the aperture alone, used as a solid angle instead of cosine-weighted;
+  - the housing (`Lux Sensor/Mount Hardware/Adafruit Pupil lumiance sensor kit.stl`) has a 19 × 16.5 mm pocket for
+    the Adafruit board, a 6.5 mm aperture above it, and a funnel widening to about 10.6 mm across at 7 mm from its
+    base. The board sits at the bottom of the funnel (G. Pignoni), so the photodiode (0.295 mm below the top of the
+    0.65 mm package, datasheet Fig. 18) is level with the funnel's base, 3.7 mm below its rim, which limits the field
+    to a half-angle of 55°. For a uniform field the datasheet response integrated over that field gives E / L =
+    2.12–2.15 (depending on where the chip sits under the funnel): **the 1.x constant 2.2 is right to 2–4 %**, about
+    0.01 mm of modelled pupil. It is not a solid angle, as 1.x called it (the cone's solid angle is 2.70 sr), but the
+    cosine-weighted field; the lux sensor page now derives it;
   - the datasheet gives responsivity only as irradiance (264 counts per µW/cm² for a 4000 K white LED, 1120–1510
     counts between units, about ±15 %); lux comes from an empirical formula (Adafruit's library in the logger);
   - effect on the model: in Watson & Yellott a luminance error of ×1.3 moves the pupil by 0.08, 0.04 and 0.02 mm at
     10, 100 and 1000 cd/m² (×2: 0.21, 0.10, 0.04 mm), so the chip's absolute spread matters little and the geometry
     more.
-- **Proposal (no reference meter needed):** measure the photodiode's depth below the aperture and compute the divisor
-  from the datasheet response and the housing; optionally check it by turning the sensor in front of a distant lamp in
-  10° steps (relative readings only). Keep the 1.706061 · lux + 0.66935 line only if it came from a reference meter;
-  otherwise use the chip's lux as reported.
-- **Status:** needs the photodiode depth and the origin of the calibration line.
+- **Proposal:** keep 2.2 (now derived); optionally confirm the housing's field by turning the sensor in front of a
+  distant lamp in 10° steps (relative readings only, no reference meter). Keep the 1.706061 · lux + 0.66935 line only
+  if it came from a reference meter; otherwise use the chip's lux as reported.
+- **Status:** geometry settled (2.2 derived from the datasheet and the housing); needs the origin of the calibration
+  line.
 
 ---
 

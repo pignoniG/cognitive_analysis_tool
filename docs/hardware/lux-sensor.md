@@ -74,6 +74,19 @@ The analysis converts lux to average luminance with
 \]
 
 where \(E\) is the reading in lux, \(g\) = 1.706061 and \(o\) = 0.66935 are the sensor's linear calibration, and
-\(\Omega\) = 2.2 sr is the solid angle of its field of view (the 1.x values; parameters `lux_gain`, `lux_offset`,
-`lux_solid_angle`). Where these constants come from is not documented in 1.x
-([open issue 23](../OPEN_ISSUES.md)).
+\(\Omega\) = 2.2 is the ratio of illuminance to average luminance for the sensor in its housing (the 1.x values;
+parameters `lux_gain`, `lux_offset`, `lux_solid_angle`).
+
+**Where 2.2 comes from.** It is not a solid angle, although 1.x called it one: for a uniform field of luminance
+\(L\), a sensor with angular response \(R(\alpha)\) reads
+
+\[
+E = L \int_0^{2\pi}\!\!\int_0^{\theta} R(\alpha)\,\sin\alpha\;d\alpha\,d\varphi
+\]
+
+over the field it sees. The TSL2591's response is close to a cosine (datasheet, Fig. 12; over a hemisphere the
+integral is 3.10, against \(\pi\) for an ideal cosine). In the printed housing the board sits at the bottom of the
+funnel, so the photodiode is level with the funnel's base, 3.7 mm below its rim (10.6 mm across); the rim limits
+the field to a half-angle of 55°. The integral over that field is 2.12–2.15 (depending on where the chip sits
+under the funnel), within 2–4 % of 2.2, i.e. about 0.01 mm of modelled pupil. The linear calibration \(g\), \(o\)
+is still undocumented ([open issue 23](../OPEN_ISSUES.md)).
