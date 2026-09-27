@@ -37,12 +37,15 @@ def delay(signal, fs: float, seconds: float) -> np.ndarray:
     return np.concatenate([np.full(n, x[0]), x[:-n]])
 
 
-def attack_release(signal, fs: float, attack: float, release: float) -> np.ndarray:
+def attack_release(signal, fs: float, attack: float, release: float, stages: int = 1) -> np.ndarray:
     """One-pole filter with time constant ``attack`` (s) while the input rises
     above the output and ``release`` (s) while it falls.
 
     Applied to the expected pupil diameter: a rising diameter is a dilation
-    (slow), a falling diameter a constriction (fast).
+    (slow), a falling diameter a constriction (fast). With ``stages`` = 2 a second
+    stage with time constant ``release`` acts during constriction only (it follows
+    the first stage directly while that rises), so a constriction starts gradually
+    (S-shaped) instead of at full speed, and dilation is unchanged.
     """
     x = np.asarray(signal, dtype=float)
     y = np.empty_like(x)
@@ -54,6 +57,11 @@ def attack_release(signal, fs: float, attack: float, release: float) -> np.ndarr
     for n in range(1, len(x)):
         a = a_att if x[n] > y[n - 1] else a_rel
         y[n] = a * y[n - 1] + (1 - a) * x[n]
+    for _ in range(stages - 1):
+        x, y = y, np.empty_like(y)
+        y[0] = x[0]
+        for n in range(1, len(x)):
+            y[n] = x[n] if x[n] >= y[n - 1] else a_rel * y[n - 1] + (1 - a_rel) * x[n]
     return y
 
 

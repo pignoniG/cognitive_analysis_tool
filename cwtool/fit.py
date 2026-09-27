@@ -16,12 +16,13 @@ unchanged to their other recordings (alignment "fixed").
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Callable, Optional
 
 import numpy as np
 from scipy.optimize import minimize
 
-from cwtool import calibration
+from cwtool import calibration, model
 from cwtool.params import Parameters
 from cwtool.pipeline import Prepared, dynamic_pupil, prepare, residual_rms, run, steady_pupil
 from cwtool.recording import Recording
@@ -63,6 +64,7 @@ class _Problem:
         self.fs = prep.fs
         self.offset_in = np.searchsorted(t, start) - lo
         self.luminance = prep.luminance[lo:hi]
+        self.stages = params.constriction_stages
         self.base = steady_pupil(self.luminance, params, field_area)
         seg = slice(lo + self.offset_in, hi)
         scale = prep.scale if prep.scale is not None else 1.0
@@ -76,7 +78,8 @@ class _Problem:
 
     def expected(self, delay: float, attack: Optional[float], release: Optional[float],
                  transient: float = 0.0, escape: float = 2.0) -> np.ndarray:
-        pd = dynamic_pupil(self.base, self.luminance, self.fs, delay, attack, release, transient, escape)
+        pd = dynamic_pupil(self.base, self.luminance, self.fs, delay, attack, release, transient, escape,
+                           self.stages)
         return pd[self.offset_in:][self.use]
 
     def solve(self, delay, attack, release, transient=0.0, escape=2.0) -> tuple[float, float, float]:
@@ -149,6 +152,31 @@ def onset_latency(prep: Prepared, video: VideoResult, params: Parameters, start:
     return out
 
 
+@lru_cache(maxsize=4096)
+def _onset_bias(release: float, stages: int, window: float) -> float:
+    """Where :func:`onset_latency`'s construction puts the onset of the model's own constriction, relative to
+    its true start (the latency): about −0.09 τ for one stage, which starts at full speed, and +0.26 τ for two,
+    which start gradually. ``window`` is how long after the start the constriction is searched."""
+    fs = 1000.0
+    x = np.concatenate([np.ones(int(fs)), np.zeros(int(4 * fs))])
+    y = model.attack_release(x, fs, 1e3, release, stages)[int(fs):int(fs) + int(max(window, 0.1) * fs)]
+    drop = 1.0 - y
+    lowest = int(np.argmax(drop))
+    total = drop[lowest]
+    t = np.arange(len(y)) / fs
+    t20 = t[np.flatnonzero(drop[:lowest + 1] >= 0.2 * total)[0]]
+    t50 = t[np.flatnonzero(drop[:lowest + 1] >= 0.5 * total)[0]]
+    return float(t20 - (t50 - t20) * 0.2 / 0.3)
+
+
+def latency_from_onset(onset: float, release: Optional[float], stages: int) -> float:
+    """The model's latency (``delay``) that puts its constriction onset at the measured ``onset``."""
+    if release is None:           # no filter: the response starts at full size
+        return float(np.clip(onset, *DELAY_RANGE))
+    bias = _onset_bias(round(float(release), 4), int(stages), round(ONSET_SEARCH[1] - onset, 2))
+    return float(np.clip(onset - bias, *DELAY_RANGE))
+
+
 def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, start: float,
                     end: Optional[float] = None, fit_dynamics: bool = True,
                     cancelled: Optional[Callable[[], bool]] = None,
@@ -170,7 +198,10 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     transient, escape = params.transient, params.escape
     onsets = onset_latency(prep, video, params, start, sequence) if sequence is not None else []
     fixed_delay = len(onsets) >= MIN_ONSETS
-    delay = (float(np.clip(np.median(onsets), *DELAY_RANGE)) if fixed_delay
+    stages = params.constriction_stages
+    onset = float(np.median(onsets)) if fixed_delay else float("nan")
+    # The measured onset is held fixed; the latency that reproduces it depends on the constriction's shape.
+    delay = (latency_from_onset(onset, release, stages) if fixed_delay
              else _best_delay(problem, attack, release, transient, escape, step))
 
     # Free values, searched together by Nelder–Mead (on log scales except the latency). Without measured
@@ -189,6 +220,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         values = dict(current)
         for (name, (lo, hi), log), v in zip(free, x):
             values[name] = float(np.clip(np.exp(v) if log else v, lo, hi))
+        if fixed_delay:
+            values["delay"] = latency_from_onset(onset, values["release"], stages)
         return values
 
     def cost(x):
@@ -220,8 +253,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     _, k, b = problem.solve(delay, attack, release, transient, escape)
     at_limit = []
     if fixed_delay:
-        notes.append(f"Latency {delay:.2f} s measured from {len(onsets)} constriction onsets "
-                     f"(interquartile range {np.percentile(onsets, 25):.2f}–{np.percentile(onsets, 75):.2f} s).")
+        notes.append(f"Latency {delay:.2f} s from {len(onsets)} constriction onsets (median onset {onset:.2f} s, "
+                     f"interquartile range {np.percentile(onsets, 25):.2f}–{np.percentile(onsets, 75):.2f} s).")
     for name, value, (lo, hi) in (("latency", None if fixed_delay else delay, DELAY_RANGE),
                                   ("dilation τ", attack if attack is not None else None, ATTACK_RANGE),
                                   ("constriction τ", release if release is not None else None, RELEASE_RANGE)):

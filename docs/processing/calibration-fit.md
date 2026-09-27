@@ -84,8 +84,13 @@ leaves the predictions unchanged.
 When the sequence is known (always, from the app), the latency is measured rather than fitted. At every clearly
 brighter step, the video change is located and the constriction onset read the standard way: the line through the
 points where the pupil has made 20 % and 50 % of its constriction, extended back to the level of the second before the
-change. Only constrictions of at least 0.3 mm count, and at least three are needed; the median is used and held fixed,
+change. Only constrictions of at least 0.3 mm count, and at least three are needed; the median onset is held fixed,
 and its interquartile range is reported.
+
+The onset read this way is not quite the latency: the same construction applied to the model's own constriction
+lands about 0.09 τ before its start with one constriction stage (which starts at full speed) and about 0.25 τ after
+it with two (which start gradually). For each candidate constriction τ the latency is therefore set to the median
+onset minus that bias, so `delay` is the time to the first movement of the pupil.
 
 Fitting the latency together with the rest does not work on real data: the fit error barely depends on it (on the
 April 2026 recording, 0.145 mm at 0 s against 0.152 mm at 0.4 s), so small mismatches in the response's shape, such

@@ -55,6 +55,11 @@ y_n = \alpha\, y_{n-1} + (1 - \alpha)\, x_n, \qquad \alpha = e^{-1/(f_s \tau)}
 Dilation is slow (`attack`, default 6 s) and constriction fast (`release`, default 0.5 s). The filter acts on the
 expected diameter after the formula and starts from the first value.
 
+A one-pole constriction starts at full speed, while the pupil's starts gradually. With `constriction_stages` = 2 a
+second stage with the same time constant `release` acts while the pupil constricts (it follows the first stage
+directly while that rises), so the constriction is S-shaped, like that of a critically damped second-order system,
+and dilation is unchanged. `release` is then the time constant of each stage.
+
 ## 4. Transient (optional)
 
 After a brightening step the pupil constricts beyond its new steady state and then re-dilates towards it within a
@@ -70,8 +75,8 @@ where \(\mathrm{LP}_\tau\) is a one-pole low-pass with time constant `escape`: \
 over its recent level, jumping at a brightening step and decaying with `escape`. Darkening gives no transient. The
 response saturates with the step size (\(h_0\) = 0.2 log units, fixed: the measured re-dilation grew from 0.25 mm for a
 0.1 log unit step to 0.52 mm for a 1 log unit step), so `transient` is the largest transient constriction in mm. It
-has the same latency as the rest and, with `dynamics` on, passes through a one-pole low-pass with the constriction
-time constant `release`.
+has the same latency as the rest and, with `dynamics` on, passes through as many one-pole low-passes with the
+constriction time constant `release` as there are constriction stages.
 
 ## Display range
 

@@ -586,7 +586,32 @@ them rather than describing the headset or the participant.
   constriction onset, which step 3 (a two-pole constriction) is meant to model. In a, which has almost no dip, the
   escape τ ends on its lower limit and the transient only does that. In g the escape τ (7.2 s) and dilation τ (3.6 →
   9.6 s) trade off. The transient and escape values are therefore not yet physiological estimates.
-- **Status:** step 1 (transient) done, optional and off by default; steps 2–4 open.
+- **2.0, step 3 (two-stage constriction):** with `constriction_stages` = 2 a second stage with the constriction τ
+  acts during constriction only, so it starts gradually; the transient gets the same smoothing. The latency from
+  onsets is corrected by where the 20–50 % construction puts the model's own onset (−0.09 τ for one stage, +0.25 τ for
+  two), so `delay` is the latency to the first movement; this also moves one-stage latencies by +0.01–0.02 s.
+  On a–g (same light fits; one or two stages, without or with the transient):
+
+  | | ΔPD RMS 1 → 2 stages | with transient 1 → 2 | latency 1 → 2 stages (transient) | constr. τ with transient 1 → 2 | transient, escape τ with 2 stages |
+  |---|---|---|---|---|---|
+  | a | 0.150 → 0.150 | 0.146 → 0.141 | 0.36 → 0.28 s | 0.94 → 0.18 s | 0.35 mm, 0.55 s |
+  | b | 0.463 → 0.463 | 0.421 → 0.421 | 0.36 → 0.29 s | 0.28 → 0.16 s | 0.89 mm, 1.15 s |
+  | c | 0.214 → 0.214 | 0.186 → 0.185 | 0.33 → 0.28 s | 0.20 → 0.12 s | 0.77 mm, 0.76 s |
+  | d | 0.501 → 0.501 | 0.424 → 0.423 | 0.33 → 0.24 s | 0.41 → 0.21 s | 1.47 mm, 1.22 s |
+  | e | 0.346 → 0.345 | 0.309 → 0.307 | 0.29 → 0.20 s | 0.43 → 0.24 s | 0.93 mm, 1.53 s |
+  | f | 0.188 → 0.187 | 0.160 → 0.160 | 0.38 → 0.33 s | 0.22 → 0.13 s | 0.41 mm, 1.12 s |
+  | g | 0.336 → 0.336 | 0.272 → 0.272 | 0.29 → 0.24 s | 0.16 → 0.13 s | 1.16 mm, 7.17 s |
+
+  - The RMS hardly changes: the onset shape occupies a few hundred milliseconds per step.
+  - With the transient, two stages remove the trade-off noted above: the constriction τ per stage falls back to
+    0.12–0.24 s, and in a the transient no longer ends on a limit (0.35 mm, escape 0.55 s instead of 1.41 mm with
+    escape on its 0.3 s limit and τc 0.94 s). The residual 0.5 s after brightening steps is closer to 0 in a, b, c, f
+    and g (g +0.13 → +0.03 mm) and slightly further in d and e (−0.08 → −0.11, −0.13 → −0.15 mm).
+  - Latency is 0.20–0.33 s with two stages instead of 0.29–0.38 s: the onset lies after the true start of a gradual
+    constriction.
+  - In g, escape τ (7.2 s) and dilation τ (9.6 s) still trade off; that is step 2 (two-phase dilation).
+- **Status:** steps 1 (transient) and 3 (two-stage constriction) done, both optional and off by default; steps 2
+  and 4 open.
 
 ## D. Paper text
 

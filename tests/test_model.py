@@ -64,3 +64,16 @@ def test_escape_transient_follows_brightening_only():
 def test_lowpass_starts_at_the_first_value():
     out = model.lowpass([5.0, 5.0, 5.0], fs=100, tau=0.5)
     assert out == pytest.approx([5.0, 5.0, 5.0])
+
+
+def test_two_stage_constriction_starts_gradually_and_dilates_as_one():
+    fs = 1000
+    down = np.concatenate([np.ones(fs), np.zeros(3 * fs)])
+    one = model.attack_release(down, fs, attack=3.0, release=0.2)
+    two = model.attack_release(down, fs, attack=3.0, release=0.2, stages=2)
+    speed = lambda y: -np.diff(y[fs:fs + 21]) * fs
+    assert speed(one)[0] == pytest.approx(1 / 0.2, rel=0.01)     # full speed at once
+    assert speed(two)[0] < 0.1 * speed(one)[0] and speed(two)[-1] > speed(two)[0]   # S-shaped
+    assert two[fs + int(0.2 * fs)] == pytest.approx(1 - (1 - (1 + 1) * np.exp(-1)), abs=0.01)
+    up = 1 - down
+    assert model.attack_release(up, fs, 3.0, 0.2, stages=2) == pytest.approx(model.attack_release(up, fs, 3.0, 0.2))

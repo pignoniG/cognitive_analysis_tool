@@ -91,7 +91,10 @@ class Parameters:
     delay: float = 0.5                   # s, always applied
     dynamics: bool = False
     attack: float = 6.0                  # s, dilation
-    release: float = 0.5                 # s, constriction
+    release: float = 0.5                 # s, constriction (per stage)
+    # 1: constriction starts at full speed (one-pole); 2: it starts gradually (two poles, S-shaped),
+    # so ``delay`` is the latency to the first movement rather than absorbing the slow start.
+    constriction_stages: int = 1
     # Transient constriction after brightening ("pupillary escape"): the pupil constricts beyond its new
     # steady state and re-dilates within seconds. Applied whenever transient > 0.
     transient: float = 0.0               # mm, largest transient constriction (saturating in the step size)

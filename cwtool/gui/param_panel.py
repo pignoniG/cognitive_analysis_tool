@@ -68,6 +68,7 @@ BOOLS = {
 CHOICES = {
     "eye": ("Pupil", ["both", "left", "right"]),
     "eyes": ("Eyes viewing", [2, 1]),
+    "constriction_stages": ("Constriction stages", [1, 2]),
     "alignment": ("Alignment", ["recording", "baseline", "fixed", "none"]),
     "camera_exposure": ("Camera exposure", ["auto", "fixed"]),
 }
@@ -84,7 +85,7 @@ GROUPS = [
     ("Lux sensor (Pupil devices)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
     ("Scene camera without lux log (Pupil devices)",
      ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
-    ("Dynamics", ["delay", "dynamics", "attack", "release", "transient", "escape"]),
+    ("Dynamics", ["delay", "dynamics", "attack", "release", "constriction_stages", "transient", "escape"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]
 VIDEO_GROUP = ("Video analysis (re-run to apply)",

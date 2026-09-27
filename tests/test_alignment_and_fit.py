@@ -177,3 +177,30 @@ def test_fit_turns_the_transient_off_when_there_is_none(tmp_path):
     rec, video = _load(folder)
     fit = fit_calibration(rec, video, params, start=0.0, end=t[-1], fit_transient=True)
     assert fit.transient == 0.0 and any("No transient" in n for n in fit.notes)
+
+
+def test_two_stage_constriction_keeps_the_true_latency(tmp_path):
+    """With a gradual (two-stage) constriction the measured onset comes later than the latency; the fit
+    corrects for the model's own onset bias, so ``delay`` is the latency."""
+    from cwtool import calibration
+    params = Parameters(constriction_stages=2)
+    colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191]
+    step, rate = 8, 100
+    true = dict(delay=0.3, attack=3.0, release=0.25)
+    t = np.arange(len(colours) * step * rate) / rate
+    level = np.array([colours[min(int(x // step), len(colours) - 1)] for x in t])
+    L = luminance.absolute_luminance(luminance.to_linear(np.stack([level] * 3, axis=1), params.gamma),
+                                     params.l_min, params.l_max)
+    pd = pipeline.dynamic_pupil(model.watson_yellott(L, params.age, varjo.PROFILE.field_area), L, rate,
+                                **true, stages=2)
+    folder = write_varjo_recording(tmp_path / "cal", colours, seconds_per_level=step,
+                                   pupil_mm=lambda x: pd[min(int(x * rate), len(t) - 1)] / 2)
+    rec, video = _load(folder)
+    seq = calibration.Sequence(tuple(calibration.Step(i * step, (i + 1) * step, (c, c, c), str(c))
+                                     for i, c in enumerate(colours)), "test")
+    fit = fit_calibration(rec, video, params, start=0.0, sequence=seq)
+    assert fit.delay == pytest.approx(true["delay"], abs=0.04)
+    assert fit.release == pytest.approx(true["release"], rel=0.2)
+    assert fit.params.constriction_stages == 2
+    one = fit_calibration(rec, video, Parameters(), start=0.0, sequence=seq)
+    assert fit.rms_after < one.rms_after

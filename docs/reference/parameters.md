@@ -73,7 +73,8 @@ not in participant files.
 | `delay` | 0.5 s | response latency, always applied (fitted) |
 | `dynamics` | off | apply the attack/release filter |
 | `attack` | 6 s | dilation time constant (fitted) |
-| `release` | 0.5 s | constriction time constant (fitted) |
+| `release` | 0.5 s | constriction time constant, per stage (fitted) |
+| `constriction_stages` | 1 | 1: constriction starts at full speed; 2: gradually (S-shaped) |
 | `transient` | 0 mm | largest transient constriction after brightening, 0 = off (fitted optionally) |
 | `escape` | 2 s | re-dilation time constant of the transient (fitted optionally) |
 
