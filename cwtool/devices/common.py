@@ -20,18 +20,22 @@ def find(folder: Path, name: str) -> Path | None:
 
 
 def read_event_log(folder: Path, epoch_start: float) -> list[Event]:
-    """Read ``*event_log*.csv``: one row per consecutive event with columns
-    id, start time (only the first row's is used), -, duration (s)."""
+    """Read ``*event_log*.csv``: one row per event with columns label, start time (ISO 8601), end time,
+    duration (s). Each event starts at its own start time, so gaps between events are kept; a row
+    whose start cannot be read follows the previous event directly (as 1.x assumed for all rows)."""
     path = find(folder, "event_log")
     if path is None:
         return []
     with open(path, newline="") as f:
         rows = [r for r in list(csv.reader(f))[1:] if r]
-    if not rows:
-        return []
-    t = datetime.fromisoformat(rows[0][1]).timestamp() - epoch_start
     events = []
+    t = None
     for r in rows:
+        try:
+            t = datetime.fromisoformat(r[1].strip()).timestamp() - epoch_start
+        except (ValueError, IndexError):
+            if t is None:
+                continue          # no start time to count from yet
         duration = float(r[3])
         events.append(Event(label=r[0], start=t, end=t + duration))
         t += duration

@@ -267,9 +267,11 @@ is revised; they remain in the git history of this file.
   analysis, so events shift by hours when analysed elsewhere. Events are also assumed to be back-to-back
   (only the first start time is read; the rest are accumulated durations).
 - **Proposal:** store event times with a zone or as unix time, and read each event's own start.
-- **2.0:** `tools/event_logger.py` now writes times with the UTC offset, which the reader handles. Logs made with
-  the old logger are still read in the local zone, and events are still assumed back-to-back.
-- **Status:** partly fixed.
+- **2.0:** `tools/event_logger.py` now writes times with the UTC offset, which the reader handles. Each event starts
+  at its own start time (September 2026), so gaps between events are kept; a row without a readable start follows the
+  previous event. Logs made with the old logger, without a zone, are still read in the local zone of the analysing
+  computer.
+- **Status:** partly fixed (old logs without a zone).
 
 ### 23. Lux sensor conversion constants are undocumented
 - **Where:** `data_tools.readLux` (`1.706061 * x + 0.66935`, then `/ 2.2`, time × 0.001, one file per local hour).
@@ -302,9 +304,22 @@ is revised; they remain in the git history of this file.
   (pupil foreshortening; Hayes & Petrov 2016, Petersch & Dierkes 2021, cited by Eckert et al. 2022). With fixed eye
   cameras this adds a gaze-dependent error to the measured PD, which could be mistaken for workload in tasks with
   systematic gaze shifts.
-- **Proposal:** check its size on Varjo data (ΔPD against gaze eccentricity during steady light); if relevant, add a
-  per-device correction as a function of gaze angle, or report gaze distributions per condition.
-- **Status:** open.
+- **Checked on the seven Varjo calibration recordings (September 2026):** during the settled part of each step
+  (uniform full field, so the light does not depend on gaze), the pupil relative to the step's median against gaze
+  direction. Gaze direction explains 1–10 % of the pupil's variance, and the effect over the gaze range used is
+  0.07–0.23 mm per eye. But gaze hardly moves on a uniform field: its 5–95 % range spans only 5–14° per participant,
+  where a cosine foreshortening predicts about 0.1 mm, consistent with what is seen. These data therefore cannot
+  show the effect at the larger angles of real tasks (a cosine law gives about 3 % at 15°, 13 % at 30°, i.e. up to
+  0.8 mm on a 6 mm pupil).
+- **Observation:** in all seven recordings the combined gaze sits 3–20° to the right of the left-view image centre
+  (median about 13°) while participants face a uniform field, where straight ahead would be expected near the
+  centre. Each eye's view in a headset is off-centre (more temporal than nasal field), so straight ahead may well map
+  right of centre in the left view; this should be confirmed with a fixation target, since it also decides where the
+  gaze circle falls in the video analysis.
+- **Proposal:** a short recording with fixation targets at known angles (e.g. 0, ±10, ±20, ±30° horizontally and
+  vertically) on a uniform background would measure the foreshortening per device and check where straight ahead
+  falls in the video; a per-device correction as a function of gaze angle could then be added.
+- **Status:** needs data.
 
 ### 29. Master combines the lux sensor and camera differently from the 2021 paper
 - **Where:** master `lum_analysis.py` (`useCamera`): Lmin = lux / (10 · frame + 1), Lmax = 11 · Lmin, and the

@@ -34,6 +34,19 @@ def test_event_log_with_utc_offset_is_zone_independent(tmp_path):
     assert [(e.label, e.start, e.end) for e in events] == [("Riposo", 5, 65), ("Task", 65, 95)]
 
 
+def test_event_log_keeps_gaps_between_events(tmp_path):
+    # A pause between two phases (e.g. the operator pressed Enter late) is kept, not closed up.
+    start = datetime(2026, 2, 10, 10, 0, 0, tzinfo=timezone(timedelta(hours=1)))
+    (tmp_path / "x_event_log.csv").write_text(
+        "Event,Start Time,End Time,Duration (s)\n"
+        f"Riposo,{start.isoformat()},x,60.000\n"
+        f"Task,{(start + timedelta(seconds=75)).isoformat()},x,30.000\n"
+        "Recovery,not a time,x,10.000\n")
+    events = varjo.read_event_log(tmp_path, epoch_start=start.timestamp())
+    assert [(e.label, e.start, e.end) for e in events] == [("Riposo", 0, 60), ("Task", 75, 105),
+                                                          ("Recovery", 105, 115)]
+
+
 def test_lux_logger_imports_only_with_pyserial():
     pytest.importorskip("serial")
     assert load_tool("lux_logger").KNOWN_BOARDS
