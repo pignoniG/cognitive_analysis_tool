@@ -224,7 +224,7 @@ class MainWindow(QMainWindow):
 
         self.preview = VideoPreview()
         self.preview.time_changed.connect(self.plots.set_cursor)
-        self.plots.cursor_changed.connect(self.preview.show_time)
+        self.plots.cursor_changed.connect(self.preview.request_time)
         dock = QDockWidget("Video preview", self)
         dock.setObjectName("video_preview")
         dock.setWidget(self.preview)

@@ -76,8 +76,10 @@ def test_video_preview_follows_cursor(app, varjo_folder):
     w = MainWindow()
     w.open_recording(varjo_folder)
     assert wait_for(app, lambda: w.result is not None)
-    w.plots.cursor_changed.emit(1.5)
+    w.plots.cursors[0].setValue(1.5)                    # drag the bar
     assert "frame 15" in w.preview.time_label.text()  # 10 fps test video
+    assert w.plots.cursors[1].value() == pytest.approx(1.5)
+    assert wait_for(app, lambda: "fixation" in w.preview.info.text() and w.preview._pending is None)
     import re
     fixation_r = int(re.search(r"fixation</span> RGB (\d+)", w.preview.info.text()).group(1))
     assert fixation_r == pytest.approx(128, abs=4)  # MJPG compression
@@ -258,3 +260,17 @@ def test_video_and_dynamics_settings_are_drop_downs_next_to_their_controls(app, 
     assert editors["transient"].isEnabled() and editors["constriction_stages"].isEnabled()
     assert panel.params().dynamics
     w.close()
+
+
+def test_preview_reads_the_same_frame_forward_as_by_seeking(app, varjo_folder):
+    from cwtool import devices
+    from cwtool.gui.video_preview import VideoPreview
+    from cwtool.params import VideoSettings
+    rec = devices.load(varjo_folder)
+    forward, seeking = VideoPreview(), VideoPreview()
+    for p in (forward, seeking):
+        p.set_recording(rec, VideoSettings().for_recording(rec))
+    for idx in (3, 5, 9, 2, 7):            # forward steps, then a step back (seek)
+        a = forward._read(idx).copy()
+        seeking._frame_cache = None
+        assert np.array_equal(a, seeking._read(idx))

@@ -7,7 +7,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
@@ -41,6 +41,11 @@ class VideoPreview(QWidget):
         self._n_frames = 0
         self._time = 0.0
         self._frame_cache: tuple[int, np.ndarray] | None = None
+        # Scrubbing: requests arrive faster than frames decode; only the latest is shown.
+        self._pending: Optional[float] = None
+        self._pending_timer = QTimer(self)
+        self._pending_timer.setSingleShot(True)
+        self._pending_timer.timeout.connect(self._show_pending)
 
         self.image = QLabel("Open a recording and click on the plot to preview the video.")
         self.image.setAlignment(Qt.AlignCenter)
@@ -109,10 +114,32 @@ class VideoPreview(QWidget):
             self.show_time((self._clock.time(idx) + self._clock.time(idx + 1)) / 2)
             self.time_changed.emit(self._time)
 
+    def request_time(self, t: float) -> None:
+        """Show the frame at ``t`` as soon as the current one is drawn; while scrubbing, requests that
+        arrive in the meantime replace each other, so the preview keeps up with the bar."""
+        self._pending = t
+        if self._cap is not None:
+            idx = int(np.clip(self._clock.index(t), 0, max(self._n_frames - 1, 0)))
+            self.time_label.setText(f"{t:.2f} s  ·  frame {idx}")
+        if not self._pending_timer.isActive():
+            self._pending_timer.start(0)
+
+    def _show_pending(self) -> None:
+        if self._pending is not None:
+            t, self._pending = self._pending, None
+            self.show_time(t)
+
+    FORWARD_READ = 30   # frames; a short step forward is decoded in sequence rather than by seeking
+
     def _read(self, idx: int) -> Optional[np.ndarray]:
-        if self._frame_cache is not None and self._frame_cache[0] == idx:
+        cached = self._frame_cache[0] if self._frame_cache is not None else None
+        if cached == idx:
             return self._frame_cache[1]
-        self._cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        if cached is not None and 0 < idx - cached <= self.FORWARD_READ:
+            for _ in range(idx - cached - 1):    # the capture is positioned just after the cached frame
+                self._cap.grab()
+        else:
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ok, frame = self._cap.read()
         if not ok:
             return None

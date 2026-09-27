@@ -66,7 +66,9 @@ Dynamics drop-down.
   plots) shows all the data again: the whole recording and the range of the measured, expected and ΔPD curves. The calibration overlay, events and reference
   lines never stretch it.
 - Right-click for pyqtgraph's view menu (e.g. export an image).
-- A click places the red cursor, which moves the video preview; the cursor can also be dragged.
+- The red bar marks the current video frame; its time is shown at its top. Click on either plot to move it, or drag it to
+  scrub the video: the preview follows while dragging, skipping frames if decoding cannot keep up. **◀ Frame / Frame ▶**
+  in the preview move it frame by frame.
 - The dashed blue lines are the expected pupil at the display's black and white points: the range the model can
   explain on that device.
 - Events from the event log are shaded orange and labelled in the ΔPD plot.

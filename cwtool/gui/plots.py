@@ -80,10 +80,18 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self._sequence_visible = False
         self._sequence = calibration.DEFAULT
 
-        # Preview cursor: click on either plot to place it, or drag it.
-        cursor_pen = pg.mkPen((214, 39, 40), width=1, style=pg.QtCore.Qt.DotLine)
-        self.cursors = [pg.InfiniteLine(angle=90, movable=True, pen=cursor_pen) for _ in range(2)]
+        # Current frame: a red bar on both plots. Click on either plot to place it, or drag it to scrub
+        # the video; the time is shown at the top of the pupil plot.
+        red = (214, 39, 40)
+        self._moving_cursor = False
+        self.cursors = [pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(red, width=2),
+                                        hoverPen=pg.mkPen(red, width=4)) for _ in range(2)]
+        self.cursors[0].label = pg.InfLineLabel(self.cursors[0], text="{value:.2f} s", position=0.97,
+                                                anchors=[(0, 0), (0, 0)], color=red,
+                                                fill=pg.mkBrush(255, 255, 255, 200))
         for plot, line in zip((self.pupil, self.cw), self.cursors):
+            line.setZValue(20)                  # above the curves and overlays, so it can always be grabbed
+            line.setCursor(pg.QtCore.Qt.SizeHorCursor)
             plot.addItem(line, ignoreBounds=True)
             line.sigPositionChanged.connect(self._cursor_dragged)
         self.scene().sigMouseClicked.connect(self._clicked)
@@ -96,12 +104,17 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.reset_button.move(self.width() - self.reset_button.width() - 12, 8)
 
     def set_cursor(self, t: float) -> None:
-        for line in self.cursors:
-            line.blockSignals(True)
-            line.setValue(t)
-            line.blockSignals(False)
+        """Move the bar without reporting it (the caller already knows the time)."""
+        self._moving_cursor = True
+        try:
+            for line in self.cursors:
+                line.setValue(t)
+        finally:
+            self._moving_cursor = False
 
     def _cursor_dragged(self, line) -> None:
+        if self._moving_cursor:
+            return
         t = float(line.value())
         self.set_cursor(t)
         self.cursor_changed.emit(t)
