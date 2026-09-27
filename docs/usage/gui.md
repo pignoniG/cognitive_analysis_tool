@@ -54,8 +54,12 @@ circles, so sizes can be checked before re-running.
 
 ## Plots
 
-- Drag with the left mouse button to pan, use the wheel to zoom, right-click for the view menu (auto-range,
-  export an image).
+- The view fits the data when a recording opens and follows it while you change parameters. Drag with the left
+  mouse button to pan and use the wheel to zoom; after that the view stays where you put it.
+- **Fit view** (toolbar, **View** menu, Ctrl+0, or a double-click on the plots) shows all the data again: the whole
+  recording and the range of the measured, expected and ΔPD curves. The calibration overlay, events and reference
+  lines never stretch it.
+- Right-click for pyqtgraph's view menu (e.g. export an image).
 - A click places the red cursor, which moves the video preview; the cursor can also be dragged.
 - The dashed blue lines are the expected pupil at the display's black and white points: the range the model can
   explain on that device.

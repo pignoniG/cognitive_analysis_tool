@@ -69,12 +69,17 @@ class MainWindow(QMainWindow):
                   self.save_params_as_action, None, self.export_action, None, quit_action):
             file_menu.addSeparator() if a is None else file_menu.addAction(a)
 
+        self.fit_action = action("Fit view", lambda: self.plots.fit_to_data(), QKeySequence("Ctrl+0"))
+        self.fit_action.setToolTip("Show all the data (Ctrl+0, or double-click the plots)")
         self.view_menu = self.menuBar().addMenu("&View")
+        self.view_menu.addAction(self.fit_action)
+        self.view_menu.addSeparator()
 
         toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
-        for a in (self.open_action, self.load_params_action, self.save_params_action, self.export_action):
-            toolbar.addAction(a)
+        for a in (self.open_action, self.load_params_action, self.save_params_action, self.export_action, None,
+                  self.fit_action):
+            toolbar.addSeparator() if a is None else toolbar.addAction(a)
 
     def _build_ui(self) -> None:
         # Left: recording, video, calibration and parameters.

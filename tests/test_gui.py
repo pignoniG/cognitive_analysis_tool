@@ -1,6 +1,7 @@
 import os
 import time
 
+import numpy as np
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -126,3 +127,42 @@ def test_options_follow_the_recording(app, varjo_folder, tmp_path):
     w.params_panel.set_params(p)
     assert shown("camera_white") and not shown("l_max")
     w.close()
+
+
+def test_view_fits_the_data(app, varjo_folder, tmp_path):
+    from conftest import write_neon_recording
+    from test_neon import FRAME_TIMES, GRAYS
+    from cwtool.gui.plots import data_range
+    w = MainWindow()
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None)
+    vb = w.plots.pupil.vb
+    in_view = lambda: (vb.viewRange()[0][0] <= w.result.time[0] and vb.viewRange()[0][1] >= w.result.time[-1]
+                       and vb.viewRange()[1][0] <= np.nanmedian(w.result.measured) <= vb.viewRange()[1][1])
+    assert in_view()
+
+    # Overlays far from the data do not stretch the view.
+    w.sequence_check.setChecked(True)
+    w.sequence_start.setValue(500)
+    w.fit_action.trigger()
+    assert vb.viewRange()[0][1] < 100 and in_view()
+
+    # Once the user pans away, parameter changes keep the view; Fit view brings the data back.
+    vb.translateBy(x=1000, y=50)
+    w.plots._moved_by_user()
+    w.params_panel.set_params(Parameters(l_max=500))
+    assert wait_for(app, lambda: w.result.expected_white != 0) and not in_view()
+    w.fit_action.trigger()
+    assert in_view()
+
+    # A new recording is always fitted, even after panning.
+    vb.translateBy(x=1000)
+    w.plots._moved_by_user()
+    w.open_recording(write_neon_recording(tmp_path / "neon", GRAYS, FRAME_TIMES))
+    assert wait_for(app, lambda: w.result is not None and w.recording.device == "pupil_neon")
+    assert in_view() and vb.viewRange()[0][1] < 10
+    w.close()
+
+    assert data_range([1.0, np.nan, 3.0]) == pytest.approx((1.0, 3.0))
+    assert data_range([np.nan]) == (None, None)
+    assert data_range(np.r_[np.full(999, 3.0), 50.0], trim=0.5) == pytest.approx((2.9, 3.1))  # trimmed spike
