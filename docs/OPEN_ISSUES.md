@@ -521,15 +521,46 @@ is revised; they remain in the git history of this file.
     than a flat level.
 - **Status:** open; part of the dynamics model (issue 43) and the new calibration sequence.
 
-### 42. The sensitivity prior breaks the display–sensitivity equivalence slightly
-- **Where:** 2.0 `photometry.fit_light_response`; `tests/test_photometry.py::test_display_error_is_absorbed_by_the_sensitivity`,
-  which fails on `v2.0` (September 2026).
-- **Problem:** the docs state that doubling the datasheet luminance halves the fitted sensitivity and leaves the
-  predictions unchanged. The prior on log sensitivity is centred on 1, so it pulls the two fits differently: on the
-  synthetic participant the sensitivities are 2.735 and 1.417 (ratio 1.93) and the predictions differ by up to
-  0.021 mm, just over the test's 0.02 mm. Without the prior the ratio is 2.000 and the predictions are identical.
-- **Proposal:** state the equivalence as approximate (exact only when the data determine the sensitivity), or centre
-  the prior on the sensitivity that the display photometry implies, e.g. from a pooled fit (issue 36).
+### 42. The sensitivity prior breaks the display–sensitivity equivalence
+- **Where:** 2.0 `photometry.fit_light_response` (`PRIOR_LOG_SENSITIVITY`);
+  `tests/test_photometry.py::test_display_error_is_absorbed_by_the_sensitivity`, which fails on `v2.0`.
+- **The equivalence:** the model sees luminance only through `sensitivity · L`, and `L` scales with the display
+  photometry (Lmin, Lmax). Doubling the datasheet luminance and halving the sensitivity gives identical predictions,
+  so the data alone cannot tell them apart. The docs rely on this: "doubling the datasheet luminance halves the
+  fitted sensitivity and leaves the predictions unchanged", which is why sensitivities absorb any common error of
+  the display photometry and are comparable between participants measured with the same photometry.
+- **What breaks it:** the fit adds a weak prior, `log(sensitivity) / log(10)`, to keep poorly determined values
+  near 1. The centre, sensitivity 1, means "the display photometry is right", so it depends on what the user enters:
+  with the luminance doubled the same participant is pulled towards a different effective luminance. The fit is
+  then no longer equivariant, and the prior shifts the sensitivity by different amounts at the two photometries.
+- **Size:** on the synthetic test participant the ratio is 1.93 instead of 2 and the predictions differ by up to
+  0.021 mm (tolerance 0.02 mm). On the seven calibration recordings (default photometry against doubled):
+
+  | | with prior: s, ratio, max Δ prediction | flat: s, ratio | steady-state RMS, prior → flat |
+  |---|---|---|---|
+  | a | 38.1 / 19.9, 1.92, 0.024 mm | 48.5 / 24.3, 2.00 | 0.368 → 0.342 mm |
+  | b | 0.0049 / 0.0027, 1.80, 0.060 mm | 0.0022 / 0.0011, 2.00 | 1.098 → 0.906 mm |
+  | c | 8.03 / 4.22, 1.90, 0.028 mm | 9.46 / 4.73, 2.00 | 0.377 → 0.363 mm |
+  | d | 0.522 / 0.277, 1.88, 0.037 mm | 0.491 / 0.246, 2.00 | 0.607 → 0.608 mm |
+  | e | 7.35 / 3.92, 1.88, 0.037 mm | 9.04 / 4.52, 2.00 | 0.750 → 0.723 mm |
+  | f | 39.0 / 20.8, 1.87, 0.033 mm | 57.2 / 28.6, 2.00 | 0.752 → 0.678 mm |
+  | g | 0.053 / 0.027, 1.97, 0.011 mm | 0.049 / 0.024, 2.00 | 0.501 → 0.496 mm |
+
+  (d with its current video analysis, scene circle radius 0.95.) The prediction differences are small, but the prior
+  also moves the sensitivity itself by up to a factor of 2.2 (b) and 1.5 (f), always towards 1, so a participant's
+  value depends on the datasheet luminance through the prior as well as through the equivalence. With a flat prior
+  the equivalence is exact, every fit stays inside its range (none reaches the 0.001–1000 limits), and the fit to the
+  steady states is as good or better.
+- **Options:**
+  1. **Flat prior on the sensitivity** (keep the range and the "reached the limit" note): exact equivalence, the
+     test passes as written. Sensitivities then rest on the data alone, which issue 36 shows are weak for some
+     participants (b, d); their values are uncertain either way, and the reported interval says so.
+  2. **Keep the prior, state the equivalence as approximate:** relax the test and the docs. Sensitivities stay
+     shrunk towards "the datasheet is right", by an amount that depends on the datasheet.
+  3. **Centre the prior on the headset, not on 1:** e.g. on the median sensitivity of the other participants
+     calibrated with the same display photometry (the pooled fit proposed in issue 36). The centre scales with the
+     photometry, so the equivalence is exact, and weak fits are still stabilised, by a meaningful value.
+- **Recommendation:** 1 now, 3 when the pooled fit exists.
 - **Status:** open (the test fails until decided).
 
 ### 43. The dynamic model cannot describe the measured step responses
