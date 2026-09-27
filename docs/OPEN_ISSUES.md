@@ -15,6 +15,9 @@ Several of these interact. Issues 1, 2, 4, 9 and 12 in particular all change the
 expected or measured pupil, and the calibrated values in Table 2a (Lmax 1500–6500 cd/m²) may be absorbing
 them rather than describing the headset or the participant.
 
+Issues about the paper text only (10, 24, 25, 28, 31) were removed in September 2026, to be taken up when the paper
+is revised; they remain in the git history of this file.
+
 ---
 
 ## A. Pupil model and signal
@@ -135,14 +138,6 @@ them rather than describing the headset or the participant.
 - **Proposal:** apply the normalisation to the Lmax term only:
   L_px = Σ_C w_C · (Lmax · (c_C / c̄) · C_lin + Lmin · (1 − C_lin)).
 - **Status:** open.
-
-### 10. Table 2a "channel Lmax" columns do not follow the equations
-- **Where:** paper, Table 2a.
-- **Problem:** for participant a (Lmax 5000, gains 5 / 1.5 / 3), "Red Lmax" is 2631.6 = 5000 · 5 / 9.5,
-  i.e. Lmax · r_C / (r_C + g_C + b_C). From the equations, red's contribution at full red is
-  Lmax · r_C · 0.2126 / c̄ ≈ 1678 cd/m².
-- **Proposal:** recompute the columns from the equations, or relabel them as "share of Lmax".
-- **Status:** open (paper).
 
 ### 11. Which code produced the pilot results?
 - **Where:** legacy `colour_tools.manualRGBtoLuminanceClac`, used by `readCdm2Varjo`.
@@ -311,13 +306,6 @@ them rather than describing the headset or the participant.
   per-device correction as a function of gaze angle, or report gaze distributions per condition.
 - **Status:** open.
 
-### 28. ΔPD is relative, not absolute
-- **Where:** interpretation of results.
-- **Note:** Eckert et al. (2022) also conclude that PLR-corrected pupil sizes only show relative changes and require a
-  baseline without task load. This supports "baseline" alignment and reporting in SD units, and is worth citing where
-  the paper discusses absolute vs relative ΔPD.
-- **Status:** open (paper).
-
 ### 29. Master combines the lux sensor and camera differently from the 2021 paper
 - **Where:** master `lum_analysis.py` (`useCamera`): Lmin = lux / (10 · frame + 1), Lmax = 11 · Lmin, and the
   result is halved.
@@ -332,15 +320,6 @@ them rather than describing the headset or the participant.
 - **2.0:** eyes are kept separate (eye0 = right, eye1 = left) and combined per sample; the 3D model's diameter in mm
   is used when available, pixels (scaled by the 2021 ratio method) otherwise.
 - **Status:** changed in 2.0 (results differ from 1.x).
-
-### 31. Calibration step length differs from the paper
-- **Where:** the Varjo sample recording (April 2026).
-- **Observation:** the 20-step sequence uses 10 s steps (200 s, starting 16.4 s into the recording), and the last
-  blue step stays on for another 26 s; the paper describes 6 s steps (120 s). Recorded colour levels are also below
-  nominal (grey 255 → 253, red 255 → 231) because of the capture pipeline and compression.
-- **2.0:** "Find in recording" locates the sequence from the analysed video, rescales its timing to the recording's
-  step length and sets the start. The paper should state the step length used.
-- **Status:** open (paper).
 
 ### 32. The Neon reader is written from the documentation only
 - **Where:** `cwtool/devices/neon.py`, from the Pupil Labs data format page and `pl-neon-recording` (September 2026).
@@ -624,16 +603,3 @@ them rather than describing the headset or the participant.
 - **2.0:** `model.REFERENCE_AGE`; removed from the parameters and the panel. Parameter files that still carry
   `reference_age` load (the field is ignored); only a file with a value other than 28.58 would give different results.
 - **Status:** fixed in 2.0.
-
-## D. Paper text
-
-### 24. Dynamics section: filter placement and stage count
-- The text says the luminance signal is pre-filtered, then that the filter "acts on the luminance, after it is
-  fed to the Watson and Yellott formula". The code filters the expected pupil diameter (after the formula),
-  which matches the attack/release description.
-- "Three stages are applied in sequence" but two are described (delay, attack/release). The third is presumably
-  the min–max normalisation, which is only a rescaling (the filter is unaffected by it).
-
-### 25. Default settings in Table 2b
-- The "default" stage uses Lmax = 200 cd/m² with unit gains, while the legacy defaults are gains 0.4 / 0.0 / 0.2
-  and Lmin = 0.02. State exactly which defaults the baseline used (2.0 uses unit gains).

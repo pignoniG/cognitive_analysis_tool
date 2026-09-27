@@ -35,7 +35,8 @@ empty.
 | ΔPD in SD units | ΔPD / SD, exported next to ΔPD in mm |
 
 Absolute ΔPD in mm depends on the light sensitivity, the display photometry and the offset. Reporting changes relative to a baseline,
-or in SD units, compares better across participants (see [open issue 28](../OPEN_ISSUES.md)).
+or in SD units, compares better across participants; Eckert et al. (2022) reach the same conclusion for
+PLR-corrected pupil sizes.
 
 ## Events
 
