@@ -107,6 +107,10 @@ class MainWindow(QMainWindow):
         rec_layout.addWidget(self.recording_label)
         side_layout.addWidget(rec_box)
 
+        self.params_panel = ParameterPanel()
+        self.params_panel.params_changed.connect(self._params_edited)
+        self.params_panel.video_settings_changed.connect(self._video_settings_edited)
+
         video_box = QGroupBox("Scene video")
         video_layout = QVBoxLayout(video_box)
         self.video_label = QLabel("–")
@@ -131,10 +135,17 @@ class MainWindow(QMainWindow):
                                       "without a lux log")
         self.camera_button.clicked.connect(self.calibrate_camera)
         video_layout.addWidget(self.camera_button)
+        video_layout.addWidget(self.params_panel.video_section)
         side_layout.addWidget(video_box)
 
+        # Sequence controls (display devices) and, for every device, the dynamics settings.
         self.cal_box = cal_box = QGroupBox("Calibration sequence")
-        cal_layout = QFormLayout(cal_box)
+        cal_box_layout = QVBoxLayout(cal_box)
+        self.sequence_controls = QWidget()
+        cal_layout = QFormLayout(self.sequence_controls)
+        cal_layout.setContentsMargins(0, 0, 0, 0)
+        cal_box_layout.addWidget(self.sequence_controls)
+        cal_box_layout.addWidget(self.params_panel.dynamics_section)
         self.sequence_check = QCheckBox("Show sequence overlay")
         self.sequence_check.toggled.connect(self._sequence_changed)
         self.sequence_start = QDoubleSpinBox()
@@ -188,10 +199,6 @@ class MainWindow(QMainWindow):
         cal_layout.addRow(self.fit_transient_check)
         cal_layout.addRow(self.fit_button)
         side_layout.addWidget(cal_box)
-
-        self.params_panel = ParameterPanel()
-        self.params_panel.params_changed.connect(self._params_edited)
-        self.params_panel.video_settings_changed.connect(self._video_settings_edited)
         side_layout.addWidget(self.params_panel)
 
         scroll = QScrollArea()
@@ -325,7 +332,9 @@ class MainWindow(QMainWindow):
             self.load_display(Path(remembered), quiet=True)   # the last photometry used with this device
         if not on_display:
             self.sequence_check.setChecked(False)
-        self.cal_box.setVisible(on_display)
+        # Without a display there is no calibration sequence, but the dynamics still apply.
+        self.sequence_controls.setVisible(on_display)
+        self.cal_box.setTitle("Calibration sequence" if on_display else "Pupil dynamics")
         self.preview.set_recording(rec, self.params_panel.video_settings())
         if len(rec.time):
             self.plots.set_cursor(float(rec.time[0]))

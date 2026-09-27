@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import fields, replace
 
-from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox,
-                               QLineEdit, QSpinBox, QVBoxLayout, QWidget)
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox, QLabel,
+                               QLineEdit, QSizePolicy, QSpinBox, QToolButton, QVBoxLayout, QWidget)
 
 from cwtool.params import Parameters, VideoSettings, unused_parameters
 
@@ -84,11 +84,42 @@ GROUPS = [
     ("Lux sensor (Pupil devices)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
     ("Scene camera without lux log (Pupil devices)",
      ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
-    ("Dynamics", ["delay", "dynamics", "attack", "release", "constriction_stages", "transient", "escape"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]
-VIDEO_GROUP = ("Video analysis (re-run to apply)",
-               ["fixation_radius_deg", "field_radius", "background_excludes_fixation", "analysis_width"])
+# Shown in drop-down sections next to the controls they belong to (see ParameterPanel).
+DYNAMICS_GROUP = (None, ["delay", "dynamics", "attack", "release", "constriction_stages", "transient", "escape"])
+VIDEO_GROUP = (None, ["fixation_radius_deg", "field_radius", "background_excludes_fixation", "analysis_width"])
+
+
+class Collapsible(QWidget):
+    """A header button that shows or hides its content (collapsed by default)."""
+
+    def __init__(self, title: str, content: QWidget, parent=None):
+        super().__init__(parent)
+        self.header = QToolButton()
+        self.header.setText(title)
+        self.header.setCheckable(True)
+        self.header.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.header.setArrowType(Qt.RightArrow)
+        self.header.setStyleSheet("QToolButton { border: none; font-weight: bold; padding: 2px 0; }")
+        self.header.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.header.toggled.connect(self.set_expanded)
+        self.content = content
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.addWidget(self.header)
+        layout.addWidget(content)
+        content.setVisible(False)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.header.blockSignals(True)
+        self.header.setChecked(expanded)
+        self.header.blockSignals(False)
+        self.header.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self.content.setVisible(expanded)
+
+    def is_expanded(self) -> bool:
+        return self.header.isChecked()
 
 
 class _Form(QWidget):
@@ -104,8 +135,10 @@ class _Form(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         for title, names in groups:
-            box = QGroupBox(title)
+            box = QGroupBox(title) if title else QWidget()    # untitled: inside a drop-down section
             form = QFormLayout(box)
+            if not title:
+                form.setContentsMargins(0, 0, 0, 0)
             for name in names:
                 editor, label = self._make(name)
                 self._editors[name] = editor
@@ -127,6 +160,9 @@ class _Form(QWidget):
     def is_shown(self, name: str) -> bool:
         box = next(b for b, _, names in self._boxes if name in names)
         return not box.isHidden() and not self._editors[name].isHidden()
+
+    def updates(self) -> dict:
+        return {name: getattr(self.value(), name) for name in self._editors}
 
     def _make(self, name):
         if name in NUMBERS:
@@ -194,6 +230,10 @@ class _Form(QWidget):
 
 
 class ParameterPanel(QWidget):
+    """All editable settings. Most are laid out in the panel itself; the video analysis settings
+    and the dynamics are drop-down sections (``video_section``, ``dynamics_section``) that the
+    window places next to the controls they belong to."""
+
     params_changed = Signal()
     video_settings_changed = Signal()
 
@@ -202,23 +242,36 @@ class ParameterPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._params = _Form(GROUPS, Parameters())
+        self._dynamics = _Form([DYNAMICS_GROUP], Parameters())
         self._video = _Form([VIDEO_GROUP], VideoSettings())
         self._recording = None
-        self._params.changed.connect(self._update_visible)
-        self._params.changed.connect(self.params_changed)
+        for form in (self._params, self._dynamics):
+            form.changed.connect(self._update_visible)
+            form.changed.connect(self.params_changed)
         self._video.changed.connect(self.video_settings_changed)
         layout.addWidget(self._params)
-        layout.addWidget(self._video)
         layout.addStretch(1)
-        covered = {n for _, names in GROUPS for n in names}
+
+        video = QWidget()
+        video_layout = QVBoxLayout(video)
+        video_layout.setContentsMargins(0, 0, 0, 0)
+        note = QLabel("Reanalyse the video to apply changes; the preview shows them at once.")
+        note.setWordWrap(True)
+        note.setStyleSheet("font-style: italic;")
+        video_layout.addWidget(self._video)
+        video_layout.addWidget(note)
+        self.video_section = Collapsible("Video analysis settings", video)
+        self.dynamics_section = Collapsible("Dynamics", self._dynamics)
+        covered = {n for _, names in GROUPS + [DYNAMICS_GROUP] for n in names}
         missing = {f.name for f in fields(Parameters)} - covered - {"version"}
         assert not missing, f"Parameters without an editor: {missing}"
 
     def params(self) -> Parameters:
-        return self._params.value()
+        return replace(self._params.value(), **self._dynamics.updates())
 
     def set_params(self, p: Parameters) -> None:
         self._params.set_value(p)
+        self._dynamics.set_value(p)
         self._update_visible()
         self.params_changed.emit()
 
@@ -228,13 +281,14 @@ class ParameterPanel(QWidget):
         self._update_visible()
 
     def is_shown(self, name: str) -> bool:
-        form = self._video if name in self._video._editors else self._params
+        """Whether the option applies to the loaded recording (a collapsed section counts as shown)."""
+        form = next(f for f in (self._video, self._dynamics, self._params) if name in f._editors)
         return form.is_shown(name)
 
     def _update_visible(self) -> None:
-        hidden = unused_parameters(self._recording, self._params.value())
-        self._params.hide_fields(hidden)
-        self._video.hide_fields(hidden)
+        hidden = unused_parameters(self._recording, self.params())
+        for form in (self._params, self._dynamics, self._video):
+            form.hide_fields(hidden)
 
     def video_settings(self) -> VideoSettings:
         return self._video.value()

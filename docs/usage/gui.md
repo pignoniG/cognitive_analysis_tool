@@ -31,15 +31,20 @@ The video is analysed automatically when a recording is opened, unless a cached 
 video, settings, frame timestamps and gaze exists. **Reanalyse video** (**Analyse video** before any analysis) runs
 it again, for example after changing the video analysis settings; **Cancel**, shown while it runs, stops it.
 
+**Video analysis settings** (drop-down under the buttons: gaze circle radius, scene circle, background, analysis
+width) change what is measured in the video: after editing them, click **Reanalyse video**. The video preview
+already draws the new circles, so sizes can be checked before re-running.
+
 **Calibrate camera from lux** (Pupil recordings with a lux log): measures the luminance that saturates a
 fixed-exposure scene camera, for recordings of the same exposure without a lux log (see
 [Luminance](../processing/luminance.md#calibrating-the-camera-from-a-lux-log)).
 
 ## Parameters
 
-Parameters are grouped as in [Parameters](../reference/parameters.md): Participant, Display photometry, Participant light response,
-Pupil signal, Lux sensor, Scene camera without lux log, Dynamics, ΔPD. Every change re-runs the analysis from the cached video pass, so the
-plots follow instantly.
+Parameters are grouped as in [Parameters](../reference/parameters.md): Participant, Display photometry, Participant
+light response, Pupil signal, Lux sensor, Scene camera without lux log, ΔPD, with Dynamics in a drop-down under the
+calibration controls and the video analysis settings in one under the scene video buttons. Every change re-runs the
+analysis from the cached video pass, so the plots follow instantly.
 
 Only the options that affect the loaded recording are shown (all of them before a recording is opened); hidden
 options keep their values and are still saved in the parameter file:
@@ -50,9 +55,8 @@ options keep their values and are still saved in the parameter file:
 | Pupil Core / Neon with a lux log | Lmin, Lmax, Scene camera without lux log, Calibration sequence, scene circle radius |
 | Pupil Core / Neon without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
 
-The **Video analysis** group (gaze circle radius, scene circle, background, analysis width) changes what is
-measured in the video: after editing it, click **Reanalyse video**. The video preview already draws the new
-circles, so sizes can be checked before re-running.
+Without a calibration sequence (Pupil devices) the calibration box is titled **Pupil dynamics** and holds only the
+Dynamics drop-down.
 
 ## Plots
 
@@ -81,6 +85,8 @@ See [Participant calibration](calibration.md) for the procedure.
   result window showing each step's steady-state pupil against the model.
 - **2. Fit latency, scale and offset**: the participant's timing, pupil scale and offset, optionally with the
   transient constriction after brightening (pupillary escape).
+- **Dynamics** (drop-down): latency, dilation and constriction time constants, constriction stages, transient and
+  escape τ, as fitted or set by hand.
 
 ## Video preview
 

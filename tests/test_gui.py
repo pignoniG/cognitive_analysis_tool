@@ -1,3 +1,4 @@
+from dataclasses import replace
 import os
 import time
 
@@ -125,12 +126,13 @@ def test_options_follow_the_recording(app, varjo_folder, tmp_path):
 
     w.open_recording(varjo_folder)
     assert wait_for(app, lambda: w.result is not None)
-    assert shown("l_max") and shown("field_radius") and not w.cal_box.isHidden()
+    assert shown("l_max") and shown("field_radius") and not w.sequence_controls.isHidden()
     assert not shown("lux_gain") and not shown("camera_exposure")
 
     w.open_recording(write_neon_recording(tmp_path / "lux", GRAYS, FRAME_TIMES, lux=lambda t: 300.0))
     assert wait_for(app, lambda: w.result is not None and w.recording.device == "pupil_neon")
-    assert shown("lux_gain") and shown("gamma") and w.cal_box.isHidden()
+    assert shown("lux_gain") and shown("gamma") and w.sequence_controls.isHidden()
+    assert not w.cal_box.isHidden() and w.cal_box.title() == "Pupil dynamics" and shown("attack")
     assert not shown("l_max") and not shown("camera_exposure") and not shown("field_radius")
 
     w.open_recording(write_neon_recording(tmp_path / "nolux", GRAYS, FRAME_TIMES))
@@ -232,4 +234,20 @@ def test_analyse_button_becomes_reanalyse_and_reset_view_is_on_the_plots(app, va
     app.processEvents()
     b = w.plots.reset_button
     assert b.isVisible() and b.x() + b.width() > w.plots.width() - 40 and b.y() < 30
+    w.close()
+
+
+def test_video_and_dynamics_settings_are_drop_downs_next_to_their_controls(app, varjo_folder):
+    w = MainWindow()
+    panel = w.params_panel
+    video, dynamics = panel.video_section, panel.dynamics_section
+    assert video.parent() is not None and video.parentWidget().title() == "Scene video"
+    assert dynamics.parentWidget() is w.cal_box
+    assert not video.is_expanded() and not dynamics.is_expanded()
+    dynamics.header.click()
+    assert dynamics.is_expanded() and not dynamics.content.isHidden()
+    # Edits in a section reach the parameters like any other.
+    p = replace(panel.params(), release=0.25, constriction_stages=2, l_max=80.0)
+    panel.set_params(p)
+    assert panel.params() == p
     w.close()
