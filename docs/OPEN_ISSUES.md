@@ -397,7 +397,38 @@ them rather than describing the headset or the participant.
   reproduce their results.
 - **Open:** if the headset can be measured later, the sensitivities become absolute; a pooled fit over several
   participants could also estimate a common display correction.
-- **Status:** decided (display photometry separate, sensitivity per participant); paper text to follow.
+- **First real recording (Varjo XR-4, April 2026, default display photometry Lmin 0.02, Lmax 70 cd/m², γ 2.2):**
+  - sequence at 16.4 s with 10 s steps; ΔPD RMS in the sequence 0.517 mm with defaults, 0.358 mm with the old fit
+    alone (latency 0 s), **0.146 mm** with light sensitivity, then latency from onsets, time constants, scale and
+    offset;
+  - latency 0.32 s (interquartile range 0.27–0.34 s, 10 onsets), constriction τ 0.20 s, dilation τ 3.7 s;
+  - light sensitivity about 40 (95 % interval roughly 9–150), channel weights R 1.55, G 0.41, B 1.04, pupil scale
+    correction about 0.63 (so diameter ≈ 1.26 × the reported value, rather than 2 ×);
+  - the whole-trace fit clearly prefers high sensitivity: after fitting timing, scale and offset, the sequence RMS is
+    0.436 mm at sensitivity 1, 0.337 at 3, 0.249 at 10 and 0.167 at 45 (photopic weights). The pupil is near its
+    smallest from grey 73 upwards, which the model reproduces only in its saturated range. Sensitivity and pupil
+    scale still trade off (sensitivity 10 with scale 0.94 gives 0.21 mm), so the absolute split between them is
+    uncertain; ΔPD in SD units or relative to rest is unaffected.
+  - The saturated colour steps constrict the pupil almost as much as white (blue 255: 2.74 mm, where photopic
+    luminance predicts 3.67 mm), consistent with the melanopsin-driven pupil response; hence the wide colour prior.
+- **Status:** decided (display photometry separate, sensitivity per participant); needs more participants to see how
+  consistent sensitivities are; paper text to follow.
+
+### 37. Pupil scale fitted by regressing the model on the measurement
+- **Where:** 2.0 `fit.fit_calibration` (and the first version of the light sensitivity fit).
+- **Problem:** fitting `k · measured + b ≈ expected` biases the scale towards zero whenever the measured pupil varies
+  in ways the model does not (regression dilution): 0.40 instead of 0.62 on the April 2026 recording. In the light
+  fit it also let an extreme sensitivity compress both sides.
+- **2.0:** both fits map the model onto the measurement (`measured ≈ c · expected + d`, k = 1/c).
+- **Status:** fixed in 2.0.
+
+### 38. Latency fitted to 0 s
+- **Where:** 2.0 `fit.fit_calibration` on the April 2026 Varjo recording (and synthetic data with re-dilation).
+- **Problem:** the fit error hardly depends on latency, and re-dilation after each constriction, which the model does
+  not describe, pushed the fitted latency to the lower limit.
+- **2.0:** with the sequence, the latency is measured from constriction onsets (20–50 % line extended to baseline):
+  0.32 s on that recording.
+- **Status:** fixed in 2.0. The model's lack of re-dilation remains (it limits how well any response shape fits).
 
 ## D. Paper text
 

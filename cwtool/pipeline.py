@@ -351,13 +351,13 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         scale = float(np.nanmean(expected[valid]) / np.nanmean(prep.pupil)) * params.pupil_correction
     measured = prep.pupil * scale
     measured_raw = prep.pupil_fast * scale
-    median = float(np.nanmedian(measured))
-    if not PLAUSIBLE_MM[0] <= median <= PLAUSIBLE_MM[1]:
-        notes.append(f"Median measured pupil is {median:.2f} mm, outside {PLAUSIBLE_MM[0]:g}–"
-                     f"{PLAUSIBLE_MM[1]:g} mm: check the pupil scale correction.")
     offset = alignment_offset(expected, measured, valid, params, time, rec.events, notes)
     measured += offset
     measured_raw += offset
+    median = float(np.nanmedian(measured))     # as plotted and exported, after the offset
+    if not PLAUSIBLE_MM[0] <= median <= PLAUSIBLE_MM[1]:
+        notes.append(f"Median measured pupil is {median:.2f} mm, outside {PLAUSIBLE_MM[0]:g}–"
+                     f"{PLAUSIBLE_MM[1]:g} mm: check the pupil scale correction and offset.")
 
     window_n = max(int(round(params.cw_window * fs)), 1)
     cw_time, cw = windowed_difference(time, measured, expected, window_n)

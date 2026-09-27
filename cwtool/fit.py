@@ -74,16 +74,20 @@ class _Problem:
         return pd[self.offset_in:][self.use]
 
     def solve(self, delay, attack, release) -> tuple[float, float, float]:
-        """Best k, b with k·measured + b ≈ expected; returns (rms, k, b)."""
+        """Best k, b with k·measured + b ≈ expected; returns (rms, k, b).
+
+        The noisy side is the measurement, so the model is mapped onto it (measured ≈ c·expected + d,
+        k = 1/c, b = −d/c) and the RMS is in measured millimetres. Regressing the model on the
+        measurement instead would bias k towards zero whenever the pupil varies in ways the model
+        does not (re-dilation, fluctuations)."""
         e = self.expected(delay, attack, release)
-        k = 1.0
-        if self.fit_scale:
-            A = np.column_stack([self.measured, np.ones_like(self.measured)])
-            (k, _), *_ = np.linalg.lstsq(A, e, rcond=None)
-            if not SCALE_RANGE[0] <= k <= SCALE_RANGE[1]:
-                k = 1.0  # implausible: keep the device scale, fit the offset only
-        b = float(np.mean(e - k * self.measured))
-        rms = float(np.sqrt(np.mean((k * self.measured + b - e) ** 2)))
+        k, b = 1.0, float(np.mean(e - self.measured))
+        if self.fit_scale and np.std(e) > 1e-6:
+            A = np.column_stack([e, np.ones_like(e)])
+            (c, d), *_ = np.linalg.lstsq(A, self.measured, rcond=None)
+            if c > 0 and SCALE_RANGE[0] <= 1 / c <= SCALE_RANGE[1]:
+                k, b = float(1 / c), float(-d / c)
+        rms = float(np.sqrt(np.mean((self.measured - (e - b) / k) ** 2)))
         return rms, float(k), float(b)
 
 
@@ -93,11 +97,60 @@ def _best_delay(problem: _Problem, attack, release, step: float) -> float:
     return float(delays[int(np.argmin(costs))])
 
 
+MIN_ONSETS = 3            # brightening steps needed to measure the latency from onsets
+MIN_CONSTRICTION = 0.3    # mm, smallest constriction whose onset is measured
+ONSET_SEARCH = (-0.2, 1.5)  # s around the video change searched for the constriction
+
+
+def onset_latency(prep: Prepared, video: VideoResult, params: Parameters, start: float,
+                  sequence: calibration.Sequence) -> list[float]:
+    """Response latencies (s) at the sequence's brightening steps, from the video change to the onset
+    of the constriction: the line through the points where the pupil has made 20 % and 50 % of its
+    constriction, extended back to the level of the second before the change. Only constrictions of
+    at least MIN_CONSTRICTION count. Onsets are sharp, unlike the shape of the whole response, which
+    depends on the participant's light response and re-dilation, so they pin the latency far better
+    than a fit of the whole trace."""
+    vt = video.time - params.timelag
+    vy = video.fixation_rgb.mean(axis=1)
+    mm = prep.pupil_fast * (prep.scale or 1.0)
+    t = prep.time
+    out = []
+    for before, step in zip(sequence.steps[:-1], sequence.steps[1:]):
+        if sum(step.rgb) <= 1.2 * sum(before.rgb) + 5:      # only clearly brighter steps constrict
+            continue
+        nominal = start + step.start
+        near = np.flatnonzero((vt > nominal - 1.0) & (vt < nominal + 1.0))
+        jumps = near[:-1][np.abs(np.diff(vy[near])) > 4] if len(near) > 1 else []
+        if not len(jumps):
+            continue
+        change = vt[jumps[0] + 1]
+        base = (t > change - 1.0) & (t < change) & np.isfinite(mm)
+        after = (t >= change + ONSET_SEARCH[0]) & (t < change + ONSET_SEARCH[1]) & np.isfinite(mm)
+        if base.sum() < 10 or after.sum() < 10:
+            continue
+        level = mm[base].mean()
+        ta, drop = t[after], level - mm[after]
+        lowest = int(np.argmax(drop))
+        total = drop[lowest]
+        if total < MIN_CONSTRICTION:
+            continue
+        i20 = np.flatnonzero(drop[:lowest + 1] >= 0.2 * total)
+        i50 = np.flatnonzero(drop[:lowest + 1] >= 0.5 * total)
+        if not len(i20) or not len(i50) or ta[i50[0]] <= ta[i20[0]]:
+            continue
+        t20, t50 = ta[i20[0]], ta[i50[0]]
+        out.append(float(t20 - (t50 - t20) * 0.2 / 0.3 - change))
+    return out
+
+
 def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, start: float,
                     end: Optional[float] = None, fit_dynamics: bool = True,
-                    cancelled: Optional[Callable[[], bool]] = None) -> FitResult:
-    """Fit on the window [start, end] (default: the built-in sequence's duration)."""
-    end = start + calibration.DEFAULT.duration if end is None else end
+                    cancelled: Optional[Callable[[], bool]] = None,
+                    sequence: Optional[calibration.Sequence] = None) -> FitResult:
+    """Fit on the window [start, end] (default: the sequence's duration). With the ``sequence``, the
+    latency is measured from the constriction onsets at its brightening steps and held fixed;
+    otherwise (or with too few onsets) it is fitted with the time constants."""
+    end = start + (sequence or calibration.DEFAULT).duration if end is None else end
     prep = prepare(rec, video, params)
     if prep.scale is None:
         raise ValueError("The calibration fit needs a device with a known pupil scale (not pixel data)")
@@ -106,9 +159,26 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
 
     attack = params.attack if (params.dynamics or fit_dynamics) else None
     release = params.release if attack is not None else None
-    delay = _best_delay(problem, attack, release, step)
+    onsets = onset_latency(prep, video, params, start, sequence) if sequence is not None else []
+    fixed_delay = len(onsets) >= MIN_ONSETS
+    delay = float(np.clip(np.median(onsets), *DELAY_RANGE)) if fixed_delay else _best_delay(problem, attack, release, step)
 
-    if fit_dynamics:
+    if fit_dynamics and fixed_delay:
+        def cost(x):
+            if cancelled and cancelled():
+                raise InterruptedError("fit cancelled")
+            return problem.solve(delay, float(np.clip(np.exp(x[0]), *ATTACK_RANGE)),
+                                 float(np.clip(np.exp(x[1]), *RELEASE_RANGE)))[0]
+
+        best = None
+        for release0 in (0.3, 1.0):
+            res = minimize(cost, [np.log(np.clip(params.attack, *ATTACK_RANGE)), np.log(release0)],
+                           method="Nelder-Mead", options={"xatol": 1e-3, "fatol": 1e-6, "maxiter": 400})
+            if best is None or res.fun < best.fun:
+                best = res
+        attack = float(np.clip(np.exp(best.x[0]), *ATTACK_RANGE))
+        release = float(np.clip(np.exp(best.x[1]), *RELEASE_RANGE))
+    elif fit_dynamics:
         # Latency and constriction speed trade off, so fit them jointly (starting from
         # the grid-search latency) rather than one after the other.
         def unpack(x):
@@ -133,7 +203,10 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     _, k, b = problem.solve(delay, attack, release)
     notes = []
     at_limit = []
-    for name, value, (lo, hi) in (("latency", delay, DELAY_RANGE),
+    if fixed_delay:
+        notes.append(f"Latency {delay:.2f} s measured from {len(onsets)} constriction onsets "
+                     f"(interquartile range {np.percentile(onsets, 25):.2f}–{np.percentile(onsets, 75):.2f} s).")
+    for name, value, (lo, hi) in (("latency", None if fixed_delay else delay, DELAY_RANGE),
                                   ("dilation τ", attack if attack is not None else None, ATTACK_RANGE),
                                   ("constriction τ", release if release is not None else None, RELEASE_RANGE)):
         if value is not None and (value <= lo * 1.02 + 1e-3 or value >= hi * 0.98):

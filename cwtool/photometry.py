@@ -33,10 +33,12 @@ from cwtool.video import GAMMA_RANGE, VideoResult, at_gamma
 
 COLOUR_SETTLE = 0.5         # s after a step change before the video colour is used
 MIN_STEP_SAMPLES = 20       # pupil samples a step needs to be used
-NOISE_MM = 0.05             # mm, floor on a step's uncertainty (pupil noise, model error)
+NOISE_MM = 0.1              # mm, floor on a step's uncertainty (pupil fluctuations, model error)
+SETTLED_MM = 0.1            # mm, change over the last 30 % of a step below which it has settled
+MAX_EXTRAPOLATION = 1.0     # mm, beyond the last second of a step
 # Prior standard deviations (natural log units for factors).
 PRIOR_LOG_SENSITIVITY = np.log(10.0)
-PRIOR_LOG_GAIN = 0.5
+PRIOR_LOG_GAIN = 1.5         # wide: the pupil's colour weighting departs strongly from photopic (blue)
 PRIOR_SCALE = 0.25
 PRIOR_GAMMA = 0.2
 SENSITIVITY_RANGE = (1e-3, 1e3)
@@ -76,22 +78,48 @@ class PhotometryFit:
 
 
 def step_asymptote(t: np.ndarray, y: np.ndarray) -> tuple[float, float, bool]:
-    """Steady-state value of a step response ``y(t)``: the asymptote of y = A + (y0 − A)·e^(−(t−t0)/τ).
-    Returns (A, its standard error, settled), settled meaning τ is short compared with the step."""
+    """Steady-state value of a step response ``y(t)``. Returns (value, uncertainty, settled).
+
+    If the last 30 % of the step is flat, its mean is the steady state. Otherwise the pupil is still
+    moving (slow dilation, or re-dilation after the initial constriction, "pupillary escape"): an
+    exponential y = A + (y0 − A)·e^(−(t−t0)/τ) is fitted from the turning point (the extreme value
+    before the final trend) to the end, and its asymptote is used. The extrapolation is limited to
+    MAX_EXTRAPOLATION beyond the last values, in the direction of the trend, and half of it is added to
+    the uncertainty, so extrapolated steps count less in the fit.
+    """
     t = t - t[0]
     span = t[-1] if len(t) > 1 else 0.0
-    tail = y[t >= 0.6 * span] if span > 0 else y
-    guess = float(np.mean(tail))
-    try:
-        (a, y0, tau), cov = curve_fit(lambda x, a, y0, tau: a + (y0 - a) * np.exp(-x / tau), t, y,
-                                      p0=(guess, float(y[0]), max(span / 4, 0.2)),
-                                      bounds=((0.5, 0.5, 0.05), (10.0, 10.0, 30.0)), maxfev=5000)
-        se = float(np.sqrt(cov[0, 0])) if np.all(np.isfinite(cov)) else float("inf")
-        if np.isfinite(se):
-            return float(a), se, bool(tau < span / 3)
-    except (RuntimeError, ValueError):
-        pass
-    return guess, float(np.std(tail) / np.sqrt(max(len(tail) / 10, 1)) + 0.1), False
+    tail_mask = t >= 0.7 * span if span > 0 else np.ones(len(t), bool)
+    tail_t, tail = t[tail_mask], y[tail_mask]
+    late = float(np.mean(tail))
+    # Samples are strongly autocorrelated: count about two independent values per second.
+    n_eff = max((tail_t[-1] - tail_t[0]) * 2.0, 1.0) if len(tail_t) > 1 else 1.0
+    noise = float(np.std(tail) / np.sqrt(n_eff))
+    slope = float(np.polyfit(tail_t, tail, 1)[0]) if len(tail_t) > 2 and np.ptp(tail_t) > 0 else 0.0
+    drift = slope * max(0.3 * span, 1e-9)            # change over the tail
+    if abs(drift) < SETTLED_MM:
+        return late, noise, True
+
+    rising = slope > 0
+    turn = int(np.argmin(y) if rising else np.argmax(y))
+    seg_t, seg = t[turn:] - t[turn], y[turn:]
+    value, se = late, float("inf")
+    if len(seg) >= MIN_STEP_SAMPLES and seg_t[-1] > 0:
+        try:
+            (a, _, _), cov = curve_fit(lambda x, a, y0, tau: a + (y0 - a) * np.exp(-x / tau), seg_t, seg,
+                                       p0=(late + drift, float(seg[0]), max(seg_t[-1] / 3, 0.2)),
+                                       bounds=((0.5, 0.5, 0.05), (10.0, 10.0, 60.0)), maxfev=5000)
+            value, se = float(a), float(np.sqrt(cov[0, 0])) if np.all(np.isfinite(cov)) else float("inf")
+        except (RuntimeError, ValueError):
+            pass
+    last = float(np.mean(y[t >= span - 1.0]))        # the last second
+    if not np.isfinite(se):                          # no usable fit: continue the late trend a little
+        value = last + drift
+    # The steady state lies beyond the last values in the direction of the trend, not too far.
+    lo, hi = (last, last + MAX_EXTRAPOLATION) if rising else (last - MAX_EXTRAPOLATION, last)
+    value = float(np.clip(value, lo, hi))
+    se = float(np.hypot(se if np.isfinite(se) else abs(drift), abs(value - last) / 2))
+    return value, float(np.hypot(se, noise)), False
 
 
 def step_levels(rec: Recording, video: VideoResult, params: Parameters, start: float,
@@ -141,36 +169,41 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
         sens = np.exp(x[i]); i += 1
         gains = np.exp(x[i:i + 3]) if fit_gains else gains0
         i += 3 if fit_gains else 0
-        k, b = x[i], x[i + 1]; i += 2
+        c, d = np.exp(x[i]), x[i + 1]; i += 2
         gamma = x[i] if fit_gamma else params.gamma
-        return sens, gains, k, b, gamma
+        return sens, gains, c, d, gamma
 
+    # The model is mapped onto the measurement (measured ≈ c·expected + d), so residuals are in
+    # measured millimetres: compressing the model's range (e.g. an extreme sensitivity that puts
+    # every step at the smallest pupil) cannot shrink them. The pupil scale correction is 1/c.
     def residuals(x):
-        sens, gains, k, b, gamma = unpack(x)
-        r = [(k * m + b - _expected(levels, params, area, sens, gains, gamma)) / sigma,
-             [np.log(sens) / PRIOR_LOG_SENSITIVITY, (k - 1) / PRIOR_SCALE]]
+        sens, gains, c, d, gamma = unpack(x)
+        r = [(m - (c * _expected(levels, params, area, sens, gains, gamma) + d)) / sigma,
+             [np.log(sens) / PRIOR_LOG_SENSITIVITY, np.log(c) / PRIOR_SCALE]]
         if fit_gains:
             r.append(np.log(gains) / PRIOR_LOG_GAIN)
         if fit_gamma:
             r.append([(gamma - 2.2) / PRIOR_GAMMA])
         return np.concatenate([np.ravel(v) for v in r])
 
-    lo = [np.log(SENSITIVITY_RANGE[0])] + ([np.log(GAIN_RANGE[0])] * 3 if fit_gains else []) + [SCALE_RANGE[0], -10]
-    hi = [np.log(SENSITIVITY_RANGE[1])] + ([np.log(GAIN_RANGE[1])] * 3 if fit_gains else []) + [SCALE_RANGE[1], 10]
+    # c = 1 / scale correction, so its range is the inverse of SCALE_RANGE.
+    lo = [np.log(SENSITIVITY_RANGE[0])] + ([np.log(GAIN_RANGE[0])] * 3 if fit_gains else []) + [-np.log(SCALE_RANGE[1]), -10]
+    hi = [np.log(SENSITIVITY_RANGE[1])] + ([np.log(GAIN_RANGE[1])] * 3 if fit_gains else []) + [-np.log(SCALE_RANGE[0]), 10]
     if fit_gamma:
         lo.append(GAMMA_RANGE[0])
         hi.append(GAMMA_RANGE[1])
     best = None
     # The pupil curve is S-shaped in log luminance: start from several sensitivities.
     for log_s in np.log([0.03, 0.3, 1.0, 3.0, 30.0]):
-        x0 = [log_s] + (list(np.log(np.clip(gains0, *GAIN_RANGE))) if fit_gains else []) + [1.0, 0.0]
+        x0 = [log_s] + (list(np.log(np.clip(gains0, *GAIN_RANGE))) if fit_gains else []) + [0.0, 0.0]
         if fit_gamma:
             x0.append(float(np.clip(params.gamma, *GAMMA_RANGE)))
         res = least_squares(residuals, x0, bounds=(lo, hi))
         if best is None or res.cost < best.cost:
             best = res
-    sens, gains, k, b, gamma = unpack(best.x)
+    sens, gains, c, d, gamma = unpack(best.x)
     gains = gains / gains.mean()
+    k, b = 1 / c, -d / c          # measured · k + b ≈ expected, as the pipeline applies it
 
     # Approximate 95 % interval of the sensitivity from the curvature at the solution.
     try:

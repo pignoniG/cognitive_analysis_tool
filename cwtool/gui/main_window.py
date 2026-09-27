@@ -419,10 +419,12 @@ class MainWindow(QMainWindow):
     def fit_sequence(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, dynamics = self.sequence_start.value(), self.fit_dynamics_check.isChecked()
-        end = start + self.sequence.duration
+        sequence = self.sequence
+        end = start + sequence.duration
 
         def work(progress, cancelled):
-            return fit_calibration(rec, video, params, start, end, fit_dynamics=dynamics, cancelled=cancelled)
+            return fit_calibration(rec, video, params, start, end, fit_dynamics=dynamics, cancelled=cancelled,
+                                   sequence=sequence)
 
         self._start_task(work, self._fit_done, "Fitting on the calibration sequence…")
 

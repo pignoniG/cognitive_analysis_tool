@@ -6,8 +6,10 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
-from cwtool.gui import plots  # noqa: F401  (the app's white plot style)
+from cwtool.gui.plots import data_range   # also sets the app's white plot style
 from cwtool.photometry import PhotometryFit
+
+MAX_BAR_MM = 0.5            # longest error bar drawn (each side)
 
 
 class PhotometryDialog(QDialog):
@@ -46,8 +48,12 @@ class PhotometryDialog(QDialog):
         pens = [pg.mkPen("k", width=1.5 if s.settled else 1, style=pg.QtCore.Qt.SolidLine if s.settled
                          else pg.QtCore.Qt.DotLine) for s in fit.steps]
         plot.addItem(pg.ScatterPlotItem(x, fit.measured_after, size=12, brush=brushes, pen=pens, name="Measured"))
-        plot.addItem(pg.ErrorBarItem(x=x, y=fit.measured_after, height=2 * fit.uncertainty_after,
-                                     pen=pg.mkPen((90, 90, 90))))
+        # Extrapolated steps can have very large uncertainties: cap the bars so they do not set the scale.
+        bars = np.minimum(fit.uncertainty_after, MAX_BAR_MM)
+        plot.addItem(pg.ErrorBarItem(x=x, y=fit.measured_after, height=2 * bars, pen=pg.mkPen((90, 90, 90))))
+        lo, hi = data_range(np.concatenate([fit.measured_after, fit.expected_after, fit.expected_before + offset]))
+        if lo is not None:
+            plot.setYRange(lo, hi, padding=0.15)
         layout.addWidget(plot, 1)
 
         hint = QLabel("Markers show the measured steady state of each step in its colour (dotted outline: "

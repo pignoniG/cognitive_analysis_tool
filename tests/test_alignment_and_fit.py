@@ -107,3 +107,28 @@ def test_fit_warns_when_a_parameter_hits_its_limit(tmp_path):
     rec, video = _load(folder)
     fit = fit_calibration(rec, video, params, start=0.0, end=t[-1], fit_dynamics=False)
     assert fit.delay < 0.05 and fit.notes and "limit" in fit.notes[0]
+
+
+def test_latency_from_constriction_onsets(tmp_path):
+    """With the sequence, the latency comes from the onsets at brightening steps, even when the
+    pupil re-dilates after constricting (which the model does not describe)."""
+    from cwtool import calibration
+    params = Parameters()
+    colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191]
+    step, rate, true_delay = 6, 100, 0.35
+    t = np.arange(len(colours) * step * rate) / rate
+    level = np.array([colours[min(int(x // step), len(colours) - 1)] for x in t])
+    L = luminance.absolute_luminance(luminance.to_linear(np.stack([level] * 3, axis=1), params.gamma),
+                                     params.l_min, params.l_max)
+    pd = model.watson_yellott(L, params.age, varjo.PROFILE.field_area)
+    pd = model.attack_release(model.delay(pd, rate, true_delay), rate, 3.0, 0.3)
+    since = (t - true_delay) % step          # time since the pupil started responding to the step
+    pd = pd + 0.25 * (1 - np.exp(-np.clip(since - 1.5, 0, None) / 2.0))   # re-dilation after each change
+    folder = write_varjo_recording(tmp_path / "cal", colours, seconds_per_level=step,
+                                   pupil_mm=lambda x: pd[min(int(x * rate), len(t) - 1)] / 2)
+    rec, video = _load(folder)
+    seq = calibration.Sequence(tuple(calibration.Step(i * step, (i + 1) * step, (c, c, c), str(c))
+                                     for i, c in enumerate(colours)), "test")
+    fit = fit_calibration(rec, video, params, start=0.0, sequence=seq)
+    assert fit.delay == pytest.approx(true_delay, abs=0.06)
+    assert any("constriction onsets" in n for n in fit.notes)
