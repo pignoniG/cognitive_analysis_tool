@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -29,6 +32,7 @@ from cwtool.params import VideoSettings
 CACHE_CSV = "cwtool_video.csv"
 CACHE_JSON = "cwtool_video.json"
 CACHE_FORMAT = 3
+MIN_CHUNK_FRAMES = 150   # frames per parallel chunk, at least
 
 GAMMA_GRID = np.round(np.arange(1.4, 3.0001, 0.2), 2)   # γ values the linear means are stored for
 GAMMA_RANGE = (float(GAMMA_GRID[0]), float(GAMMA_GRID[-1]))
@@ -195,15 +199,33 @@ def video_info(video: Path) -> tuple[float, int]:
     return fps, n
 
 
-def _frames_pyav(video: Path, wanted: set, last: int, width: int):
-    """Decode with PyAV (threaded), converting only wanted frames, scaled to ``width``
-    and to RGB in one step by FFmpeg (nearest-neighbour)."""
+def _frames_pyav(video: Path, wanted, first: int, last: int, width: int, decode_threads: int):
+    """Yield (frame number, RGB frame or None) for frames first..last, decoding with PyAV and
+    converting only wanted frames, scaled to ``width`` and to RGB in one FFmpeg step
+    (nearest-neighbour). Frame numbers come from the timestamps, so a chunk that starts
+    by seeking is aligned exactly with one that decodes from the beginning."""
     import av
 
     with av.open(str(video)) as container:
         stream = container.streams.video[0]
         stream.thread_type = "AUTO"
-        for n, frame in enumerate(container.decode(stream)):
+        stream.thread_count = decode_threads
+        rate = float(stream.average_rate or stream.guessed_rate)
+        tb = float(stream.time_base)
+        start = stream.start_time or 0
+        if first > 0:
+            # Seek to the keyframe at or before the chunk's first frame, then decode forward.
+            container.seek(int(first / rate / tb) + start, stream=stream, backward=True, any_frame=False)
+        n = first - 1 if first == 0 else None
+        for frame in container.decode(stream):
+            if frame.pts is not None:
+                n = int(round((frame.pts - start) * tb * rate))
+            elif n is not None:
+                n += 1
+            else:
+                continue
+            if n < first:
+                continue
             if n > last:
                 break
             if n in wanted:
@@ -213,11 +235,14 @@ def _frames_pyav(video: Path, wanted: set, last: int, width: int):
                 yield n, None
 
 
-def _frames_opencv(video: Path, wanted: set, last: int, settings: VideoSettings):
-    """Decode with OpenCV, converting only wanted frames."""
+def _frames_opencv(video: Path, wanted, first: int, last: int, settings: VideoSettings):
+    """Yield (frame number, RGB frame or None) for frames first..last with OpenCV,
+    converting only wanted frames."""
     cap = cv2.VideoCapture(str(video))
     try:
-        for n in range(last + 1):
+        if first > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, first)
+        for n in range(first, last + 1):
             if not cap.grab():
                 break
             if n in wanted:
@@ -237,16 +262,22 @@ def decoder_backend() -> str:
         return "opencv"
 
 
+def default_workers() -> int:
+    return max(os.cpu_count() or 1, 1)
+
+
 def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: VideoSettings,
                   progress: Optional[Callable[[float], None]] = None,
                   cancelled: Optional[Callable[[], bool]] = None,
-                  backend: str = "auto") -> VideoResult:
+                  backend: str = "auto", workers: int = 0) -> VideoResult:
     """Analyse ``video`` at each gaze sample. ``time`` is on the video clock (s),
     ``gaze`` is normalised (N, 2) with NaN for invalid samples, which are skipped.
 
     Every frame is decoded (compressed video needs it), but only frames with gaze samples
-    are converted and analysed. ``backend`` is "pyav" (fast, threaded), "opencv", or
-    "auto" (PyAV when installed).
+    are converted and analysed. The frame range is split into ``workers`` chunks (0: one per
+    CPU core) decoded in parallel threads; FFmpeg and OpenCV release the interpreter lock
+    while decoding, so the threads run concurrently. ``backend`` is "pyav" (fast), "opencv",
+    or "auto" (PyAV when installed). The result does not depend on the number of workers.
     """
     fps, _ = video_info(video)
     valid = np.isfinite(gaze).all(axis=1) & np.isfinite(time)
@@ -262,32 +293,52 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
     frames, starts = np.unique(frame_of, return_index=True)
     ends = np.r_[starts[1:], len(frame_of)]
     samples_of = {int(f): idx[a:b] for f, a, b in zip(frames, starts, ends)}
-    last = int(frames[-1])
+    first_frame, last_frame = int(frames[0]), int(frames[-1])
+    total = last_frame - first_frame + 1
 
+    workers = workers or default_workers()
+    # Short videos are not worth splitting: each chunk pays for a seek and a keyframe decode.
+    workers = int(max(1, min(workers, total // MIN_CHUNK_FRAMES)))
+    bounds = np.linspace(first_frame, last_frame + 1, workers + 1).astype(int)
     backend = decoder_backend() if backend == "auto" else backend
-    source = (_frames_pyav(video, samples_of.keys(), last, settings.analysis_width) if backend == "pyav"
-              else _frames_opencv(video, samples_of.keys(), last, settings))
+    decode_threads = max(1, default_workers() // workers)
 
-    times, fixes, bgs, fix_lins, bg_lins = [], [], [], [], []
-    mask = None
-    for n, small in source:
-        if small is not None:
-            h, w = small.shape[:2]
-            if mask is None:
-                mask = field_mask((h, w), settings)
-            sample = samples_of[n]
-            fix, bg, fix_lin, bg_lin = analyse_frame(small, gaze[sample] * [w, h], settings, mask)
-            times.append(time[sample])
-            fixes.append(fix)
-            bgs.append(bg)
-            fix_lins.append(fix_lin)
-            bg_lins.append(bg_lin)
-        if progress:
-            progress(min((n + 1) / (last + 1), 1.0))
-        if cancelled and cancelled():
-            break
+    done = [0]
+    lock = threading.Lock()
 
-    if not times:
+    def run_chunk(a: int, b: int):
+        source = (_frames_pyav(video, samples_of, a, b, settings.analysis_width, decode_threads)
+                  if backend == "pyav" else _frames_opencv(video, samples_of, a, b, settings))
+        out, mask, counted = [], None, 0
+        for n, small in source:
+            if small is not None:
+                h, w = small.shape[:2]
+                if mask is None:
+                    mask = field_mask((h, w), settings)
+                sample = samples_of[n]
+                out.append((sample,) + analyse_frame(small, gaze[sample] * [w, h], settings, mask))
+            counted += 1
+            if counted % 10 == 0:
+                with lock:
+                    done[0] += 10
+                    if progress:
+                        progress(min(done[0] / total, 1.0))
+            if cancelled and cancelled():
+                break
+        return out
+
+    chunks = [(int(a), int(b) - 1) for a, b in zip(bounds[:-1], bounds[1:]) if b > a]
+    if len(chunks) == 1:
+        parts = [run_chunk(*chunks[0])]
+    else:
+        with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
+            parts = list(pool.map(lambda c: run_chunk(*c), chunks))
+    if progress:
+        progress(1.0)
+
+    rows = [r for part in parts for r in part]
+    if not rows:
         return VideoResult.empty()
-    return VideoResult(np.concatenate(times), np.vstack(fixes), np.vstack(bgs),
-                       np.concatenate(fix_lins), np.concatenate(bg_lins))
+    sample = np.concatenate([r[0] for r in rows])
+    return VideoResult(time[sample], np.vstack([r[1] for r in rows]), np.vstack([r[2] for r in rows]),
+                       np.concatenate([r[3] for r in rows]), np.concatenate([r[4] for r in rows]))

@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--params", type=Path, help="participant parameters JSON")
     ap.add_argument("--out", type=Path, help="export folder (default: RECORDING/cwtool_export)")
     ap.add_argument("--reanalyse", action="store_true", help="ignore the cached video analysis")
+    ap.add_argument("--workers", type=int, default=0, help="parallel video chunks (default: one per CPU core)")
     ap.add_argument("--plot", action="store_true", help="save a PDF plot (needs matplotlib)")
     args = ap.parse_args(argv)
 
@@ -33,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     if video is None:
         print(f"Analysing {rec.scene_video.name} ...")
         video = analyse_video(rec.scene_video, rec.time, rec.gaze, settings,
-                              progress=lambda p: print(f"\r{p:5.0%}", end="", flush=True))
+                              progress=lambda p: print(f"\r{p:5.0%}", end="", flush=True), workers=args.workers)
         print()
         video.save(rec.folder, settings, rec.scene_video)
 

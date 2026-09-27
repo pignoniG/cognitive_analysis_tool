@@ -142,3 +142,24 @@ def test_backends_agree(varjo_folder, backend):
     assert np.allclose(res.fixation_rgb, ref.fixation_rgb, atol=3)   # colour conversion may differ by a code
     assert np.allclose(res.background_lin, ref.background_lin, atol=0.02)
 
+
+
+@pytest.mark.parametrize("backend", ["pyav", "opencv"])
+def test_parallel_chunks_give_identical_results(tmp_path, monkeypatch, backend):
+    if backend == "pyav":
+        pytest.importorskip("av")
+    import cwtool.video as V
+    from cwtool import devices
+    from conftest import write_varjo_recording
+    folder = write_varjo_recording(tmp_path / "rec", [0, 60, 120, 180, 240, 30, 90, 150], fps=10)
+    rec = devices.load(folder)
+    s = VideoSettings().for_recording(rec)
+    one = V.analyse_video(rec.scene_video, rec.time, rec.gaze, s, backend=backend, workers=1)
+    monkeypatch.setattr(V, "MIN_CHUNK_FRAMES", 5)       # force several chunks on a short video
+    seen = []
+    three = V.analyse_video(rec.scene_video, rec.time, rec.gaze, s, backend=backend, workers=3,
+                            progress=seen.append)
+    assert np.array_equal(one.time, three.time)
+    assert np.array_equal(one.fixation_lin, three.fixation_lin)
+    assert np.array_equal(one.background_rgb, three.background_rgb)
+    assert seen[-1] == 1.0 and all(0 <= p <= 1 for p in seen)
