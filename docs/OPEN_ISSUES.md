@@ -315,7 +315,11 @@ is revised; they remain in the git history of this file.
   which limits the time resolution of ΔPD far more than the paper suggests.
 - **2.0:** scene circle default changed to 0.8 (the old 0.5 covered only half of the visible Varjo disc, which the
   video preview makes obvious). The other defaults are unchanged; `cw_smoothing` is the equivalent of `pupilFiltering`.
-- **Status:** open.
+- **2.0 (September 2026):** dynamics are on by default, with two constriction stages (the combination that behaved
+  best on the calibration recordings, issue 43); the calibration fit sets the time constants per participant.
+  Parameter files written before the constriction stages existed load with one stage, as they were fitted.
+  `cw_smoothing` keeps its default of 1 (no extra smoothing of ΔPD beyond its 0.2 s windows).
+- **Status:** fixed in 2.0.
 
 ### 27. Pupil size depends on gaze angle
 - **Where:** all devices; not corrected anywhere.
@@ -731,8 +735,8 @@ is revised; they remain in the git history of this file.
   - Latency is 0.20–0.33 s with two stages instead of 0.29–0.38 s: the onset lies after the true start of a gradual
     constriction.
   - In g, escape τ (7.2 s) and dilation τ (9.6 s) still trade off; that is step 2 (two-phase dilation).
-- **Status:** steps 1 (transient) and 3 (two-stage constriction) done, both optional and off by default; steps 2
-  and 4 open.
+- **Status:** steps 1 (transient) and 3 (two-stage constriction) done; dynamics are on by default with two stages,
+  the transient 0 until fitted (issue 26); steps 2 and 4 wait for the new calibration sequence.
 - **What remains (September 2026)**, with two stages and the transient fitted on a–g:
   - after brightening, the mean residual is gone (within ±0.06 mm at every time from 0.5 to 9.5 s);
   - after darkening, the pupil still dilates later than the model: −0.12, −0.15 and −0.13 mm at 0.5, 1 and 1.5 s,

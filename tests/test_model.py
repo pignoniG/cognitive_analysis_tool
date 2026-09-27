@@ -88,4 +88,4 @@ def test_the_transient_is_switched_with_the_dynamics():
     no_transient = pipeline.expected_pupil(lum, fs, Parameters(dynamics=True), 9896)
     off = pipeline.expected_pupil(lum, fs, Parameters(dynamics=False, transient=1.0), 9896)
     assert (on < no_transient - 0.1).any()
-    assert off == pytest.approx(pipeline.expected_pupil(lum, fs, Parameters(), 9896))
+    assert off == pytest.approx(pipeline.expected_pupil(lum, fs, Parameters(dynamics=False), 9896))

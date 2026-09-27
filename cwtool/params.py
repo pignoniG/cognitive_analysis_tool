@@ -89,12 +89,14 @@ class Parameters:
     # Dynamics
     delay: float = 0.5                   # s, always applied
     # One switch for everything below: the attack/release filter, its constriction stages and the transient.
-    dynamics: bool = False
+    # On by default with two stages, the combination that behaved best on the Varjo calibration recordings
+    # (open issues 26 and 43); the calibration fit sets the time constants per participant.
+    dynamics: bool = True
     attack: float = 6.0                  # s, dilation
     release: float = 0.5                 # s, constriction (per stage)
     # 1: constriction starts at full speed (one-pole); 2: it starts gradually (two poles, S-shaped),
     # so ``delay`` is the latency to the first movement rather than absorbing the slow start.
-    constriction_stages: int = 1
+    constriction_stages: int = 2
     # Transient constriction after brightening ("pupillary escape"): the pupil constricts beyond its new
     # steady state and re-dilates within seconds. Applied with the dynamics when transient > 0.
     transient: float = 0.0               # mm, largest transient constriction (saturating in the step size)
@@ -154,6 +156,8 @@ class Parameters:
                     data[key] = data[key] * factor
             if "pupil_scale" in data and profile.pupil_scale:
                 data["pupil_correction"] = data.pop("pupil_scale") / profile.pupil_scale
+        # Files written before the constriction stages existed were fitted with one.
+        data.setdefault("constriction_stages", 1)
         data["version"] = PARAMS_VERSION   # versions 2 and 3 differ only in which fields a file holds
         known = {f.name for f in fields(cls)}
         values = asdict(base) if base is not None else {}

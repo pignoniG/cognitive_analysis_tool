@@ -70,10 +70,10 @@ not in participant files.
 | Name | Default | Meaning |
 |---|---|---|
 | `delay` | 0.5 s | response latency, always applied (fitted) |
-| `dynamics` | off | apply the dynamics: attack/release filter, constriction stages and transient |
+| `dynamics` | on | apply the dynamics: attack/release filter, constriction stages and transient |
 | `attack` | 6 s | dilation time constant (fitted) |
 | `release` | 0.5 s | constriction time constant, per stage (fitted) |
-| `constriction_stages` | 1 | 1: constriction starts at full speed; 2: gradually (S-shaped) |
+| `constriction_stages` | 2 | 1: constriction starts at full speed; 2: gradually (S-shaped); files without it load as 1 |
 | `transient` | 0 mm | largest transient constriction after brightening, with the dynamics; 0 = none (fitted) |
 | `escape` | 2 s | re-dilation time constant of the transient (fitted) |
 

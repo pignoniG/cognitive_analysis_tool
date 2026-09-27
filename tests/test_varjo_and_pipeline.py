@@ -25,7 +25,7 @@ def test_varjo_reader(varjo_folder):
 
 
 def test_pipeline_zero_cw_when_pupil_follows_model(tmp_path):
-    params = Parameters(delay=0.0)
+    params = Parameters(delay=0.0, dynamics=False)   # the pupil follows the steady state instantly
     grays = [0, 60, 120, 180, 240, 90]
 
     def lum_of(t):
@@ -136,3 +136,14 @@ def test_varjo_reader_uses_header_names_and_tolerates_nan(tmp_path):
     assert rec.pupil_right.tolist() == [1.6, 1.6, 1.6]
     assert rec.pupil_left[0] == 1.5 and np.isnan(rec.pupil_left[1])
     assert rec.time[1] == pytest.approx(0.005)
+
+
+def test_new_participants_have_dynamics_but_old_files_keep_one_stage(tmp_path):
+    # Open issue 26: dynamics on with two constriction stages by default; files written before the stages
+    # existed were fitted with one and keep it.
+    assert Parameters().dynamics and Parameters().constriction_stages == 2
+    import json
+    (tmp_path / "old.json").write_text(json.dumps({"version": 3, "dynamics": True, "release": 0.2}))
+    assert Parameters.load(tmp_path / "old.json").constriction_stages == 1
+    Parameters(constriction_stages=2).save(tmp_path / "new.json", participant_only=True)
+    assert Parameters.load(tmp_path / "new.json").constriction_stages == 2

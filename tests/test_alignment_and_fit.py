@@ -58,7 +58,7 @@ def test_old_align_mean_key_is_converted():
 
 def test_fit_recovers_latency_dynamics_scale_and_offset(tmp_path):
     true = dict(delay=0.3, attack=3.0, release=0.4, k=0.9, b=0.35)
-    params = Parameters()   # operator's photometric calibration assumed correct
+    params = Parameters(constriction_stages=1)   # photometry assumed correct; one-stage participant
     colours = [0] * 10 + [0, 255, 40, 200, 0, 128, 255, 60, 0, 180] * 2  # 6 s steps below
     step = 6
     rate = 100
@@ -113,7 +113,7 @@ def test_latency_from_constriction_onsets(tmp_path):
     """With the sequence, the latency comes from the onsets at brightening steps, even when the
     pupil re-dilates after constricting (which the model does not describe)."""
     from cwtool import calibration
-    params = Parameters()
+    params = Parameters(constriction_stages=1)
     colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191]
     step, rate, true_delay = 6, 100, 0.35
     t = np.arange(len(colours) * step * rate) / rate
@@ -139,7 +139,7 @@ def test_fit_recovers_the_transient(tmp_path):
     (pupillary escape): the transient and its escape time constant are recovered, and fitting them
     lowers the error."""
     from cwtool import calibration
-    params = Parameters()
+    params = Parameters(constriction_stages=1)
     colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191, 20, 230]
     step, rate = 8, 100
     true = dict(delay=0.3, attack=3.0, release=0.3, transient=0.6, escape=2.0)
@@ -163,7 +163,7 @@ def test_fit_recovers_the_transient(tmp_path):
 
 
 def test_fit_turns_the_transient_off_when_there_is_none(tmp_path):
-    params = Parameters()
+    params = Parameters(constriction_stages=1)
     colours = [0, 73, 146, 255, 0, 128, 255, 64]
     step, rate = 8, 100
     t = np.arange(len(colours) * step * rate) / rate
@@ -202,7 +202,7 @@ def test_two_stage_constriction_keeps_the_true_latency(tmp_path):
     assert fit.delay == pytest.approx(true["delay"], abs=0.04)
     assert fit.release == pytest.approx(true["release"], rel=0.2)
     assert fit.params.constriction_stages == 2
-    one = fit_calibration(rec, video, Parameters(), start=0.0, sequence=seq)
+    one = fit_calibration(rec, video, Parameters(constriction_stages=1), start=0.0, sequence=seq)
     assert fit.rms_after < one.rms_after
 
 
@@ -210,7 +210,7 @@ def test_anticipated_constrictions_are_left_out_of_the_latency(tmp_path):
     """Constrictions that start before the display changes (anticipation of regular steps) are not a
     reflex: they are left out of the latency, which stays that of the others, and a note says so."""
     from cwtool import calibration
-    params = Parameters()
+    params = Parameters(constriction_stages=1)
     colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191]
     step, rate, true_delay = 6, 100, 0.35
     t = np.arange(len(colours) * step * rate) / rate
