@@ -308,7 +308,26 @@ is revised; they remain in the git history of this file.
   editable as "lux sensor" parameters. For a uniform field seen by a sensor with half-angle θ, E = π·L·sin²θ
   (L ≈ E / 0.79 for the 60° sensor field of view in the 2021 paper), which differs from dividing by 2.2; the origin
   of the calibration line should still be documented.
-- **Status:** needs data.
+- **From the TSL2591 datasheet and the housing (September 2026):**
+  - the chip's angular response (datasheet Fig. 12) is close to a cosine: over a hemisphere it integrates to 3.10,
+    against π for an ideal cosine, so the bare chip is effectively an illuminance sensor and the geometry can be
+    computed rather than measured;
+  - the housing (`Lux Sensor/Mount Hardware/Adafruit Pupil lumiance sensor kit.stl`) has an aperture of 6.5 mm
+    (radius 3.25 mm) and a funnel widening to about 10.6 mm across at 7 mm from its base. Its rim limits the field to
+    a half-angle of 39–47°, depending on how far the photodiode sits below the aperture (2.6 to 1.0 mm), which the
+    model does not show. For a uniform field the average luminance is then E / 1.25 to E / 1.69 (datasheet response
+    integrated over that field), not E / 2.2: the current constant gives luminances 23–43 % low. 2.2 sr matches a
+    cone limited by the aperture alone, used as a solid angle instead of cosine-weighted;
+  - the datasheet gives responsivity only as irradiance (264 counts per µW/cm² for a 4000 K white LED, 1120–1510
+    counts between units, about ±15 %); lux comes from an empirical formula (Adafruit's library in the logger);
+  - effect on the model: in Watson & Yellott a luminance error of ×1.3 moves the pupil by 0.08, 0.04 and 0.02 mm at
+    10, 100 and 1000 cd/m² (×2: 0.21, 0.10, 0.04 mm), so the chip's absolute spread matters little and the geometry
+    more.
+- **Proposal (no reference meter needed):** measure the photodiode's depth below the aperture and compute the divisor
+  from the datasheet response and the housing; optionally check it by turning the sensor in front of a distant lamp in
+  10° steps (relative readings only). Keep the 1.706061 · lux + 0.66935 line only if it came from a reference meter;
+  otherwise use the chip's lux as reported.
+- **Status:** needs the photodiode depth and the origin of the calibration line.
 
 ---
 
