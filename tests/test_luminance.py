@@ -32,6 +32,15 @@ def test_unit_gains_equal_linear_mapping_of_relative_luminance():
     assert luminance.absolute_luminance(lin, 0.5, 300) == pytest.approx(expected)
 
 
+def test_gains_leave_the_black_point_and_scale_nothing():
+    # Open issue 9: only the white-point term is rebalanced by the gains.
+    for gains in ((1, 1, 10), (2, 2, 2), (0.3, 5, 1)):
+        assert luminance.absolute_luminance([0, 0, 0], 0.5, 300, gains) == pytest.approx(0.5)
+    lin = np.array([0.2, 0.5, 0.9])
+    assert luminance.absolute_luminance(lin, 0.5, 300, (1, 2, 3)) == pytest.approx(
+        luminance.absolute_luminance(lin, 0.5, 300, (10, 20, 30)))
+
+
 def test_gains_rebalance_channels():
     blue = [0, 0, 1]
     base = luminance.absolute_luminance(blue, 0, 1000)

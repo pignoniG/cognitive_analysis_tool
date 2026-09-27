@@ -27,12 +27,20 @@ For the Varjo, the capture shows what the display showed, so the colours map to 
 **display photometry** (the paper's per-channel extension of the WCAG 2.1 relative luminance):
 
 \[
-L = \frac{1}{\bar g}\sum_{c \in \{R,G,B\}} k_c \left( L_\text{max}\, g_c\, C_{w,c} + L_\text{min}\,(1 - C_{w,c}) \right)
+L = \sum_{c \in \{R,G,B\}} k_c \left( L_\text{max}\, \frac{g_c}{\bar g}\, C_{w,c} + L_\text{min}\,(1 - C_{w,c}) \right)
 \]
 
 - \(L_\text{min}\), \(L_\text{max}\): the panel's black and white points (cd/m²), parameters `l_min`, `l_max`;
-- \(g_c\): channel gains (`gain_r/g/b`), normalised by their mean \(\bar g\) so they act as a relative balance;
+- \(g_c\): channel gains (`gain_r/g/b`), divided by their mean \(\bar g\) so they act as a relative balance;
 - \(k_c\) = 0.2126, 0.7152, 0.0722: the photopic weights of the BT.709/sRGB primaries.
+
+**Change from the paper (September 2026).** The paper divides the whole sum by \(\bar g\), black-point term included:
+\(L = \frac{1}{\bar g}\sum_c k_c (L_\text{max} g_c C_{w,c} + L_\text{min}(1 - C_{w,c}))\). Black then maps to
+\(L_\text{min}/\bar g\) rather than \(L_\text{min}\) whenever the gains do not average 1, and the paper's statement that
+uniform gains reduce to the plain linear mapping holds only for gains of 1. In the calibration fit the gains are free,
+so their overall scale also changed the black level during the fit, and normalising the reported weights to a mean of
+1 afterwards changed it again. 2.0 applies the gains to the white-point term only: black is always \(L_\text{min}\),
+and scaling all gains by a constant changes nothing ([open issue 9](../OPEN_ISSUES.md)).
 
 With unit gains this is a linear mapping of relative luminance onto \([L_\text{min}, L_\text{max}]\). These are
 real luminances: the adapting field area comes from the device profile. \(L_\text{min}\), \(L_\text{max}\) and

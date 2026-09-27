@@ -27,12 +27,16 @@ def absolute_luminance(linear_rgb, l_min: float, l_max: float, gains=(1.0, 1.0, 
     """Map linear RGB (..., 3) to cd/m² between the panel black point
     ``l_min`` and white point ``l_max``.
 
-    Each channel is interpolated black-to-full-colour, scaled by its gain and
-    photopic weight; the sum is normalised by the mean gain so that gains act
-    as a relative channel balance. With unit gains this reduces to a linear
-    mapping of relative luminance onto [l_min, l_max].
+    Each channel is interpolated black-to-full-colour and weighted photopically;
+    the gains, divided by their mean so that they act as a relative channel
+    balance, scale the white-point term only. Black therefore maps to ``l_min``
+    whatever the gains, and multiplying all gains by a constant changes nothing.
+    With unit gains this is a linear mapping of relative luminance onto
+    [l_min, l_max]. (The paper divided the whole sum by the mean gain, which also
+    scaled the black point: open issue 9.)
     """
     lin = np.asarray(linear_rgb, dtype=float)
     gains = np.asarray(gains, dtype=float)
-    per_channel = (l_max * gains * lin + l_min * (1 - lin)) * SRGB_WEIGHTS
-    return per_channel.sum(axis=-1) / gains.mean()
+    balance = gains / gains.mean()
+    per_channel = (l_max * balance * lin + l_min * (1 - lin)) * SRGB_WEIGHTS
+    return per_channel.sum(axis=-1)

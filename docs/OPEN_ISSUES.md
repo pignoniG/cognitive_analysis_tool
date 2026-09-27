@@ -137,7 +137,26 @@ is revised; they remain in the git history of this file.
   The paper's claim that uniform gains reduce to the plain linear mapping only holds for gains of 1.
 - **Proposal:** apply the normalisation to the Lmax term only:
   L_px = Σ_C w_C · (Lmax · (c_C / c̄) · C_lin + Lmin · (1 − C_lin)).
-- **Status:** open.
+- **Also in the code:** in the calibration fit the gains are free, so their overall scale moved the black level
+  during the fit, and normalising the reported weights to a mean of 1 afterwards changed it again: the parameters
+  applied were not quite those fitted.
+- **2.0 (September 2026):** the proposal: gains scale the white-point term only, black is always Lmin, and scaling all
+  gains changes nothing (documented in the luminance page as a change from the paper). On the synthetic participant
+  the weights and scale are now recovered within 2 % and 1 % (the scale was 10 % high); the sensitivity comes out
+  4.0 for a true 3, inside its interval, because dark steps read small (issue 40). On a–g (light fit, then latency,
+  scale and offset with two stages and the transient), before → after:
+
+  | | sensitivity | step-level RMS | ΔPD RMS in sequence |
+  |---|---|---|---|
+  | a | 50.9 → 58.4 | 0.126 → 0.112 mm | 0.132 → 0.127 mm |
+  | b | 0.017 → 0.019 | 0.678 → 0.681 mm | 0.529 → 0.534 mm |
+  | c | 1.57 → 1.63 | 0.175 → 0.172 mm | 0.199 → 0.199 mm |
+  | d | 0.103 → 0.113 | 0.215 → 0.217 mm | 0.345 → 0.346 mm |
+  | e | 10.1 → 14.7 | 0.290 → 0.256 mm | 0.264 → 0.244 mm |
+  | f | 48.3 → 44.9 | 0.252 → 0.253 mm | 0.148 → 0.151 mm |
+  | g | 0.050 → 0.018 | 0.307 → 0.251 mm | 0.240 → 0.220 mm |
+
+- **Status:** fixed in 2.0; the paper's equation should be updated when the pipeline is described.
 
 ### 11. Which code produced the pilot results?
 - **Where:** legacy `colour_tools.manualRGBtoLuminanceClac`, used by `readCdm2Varjo`.

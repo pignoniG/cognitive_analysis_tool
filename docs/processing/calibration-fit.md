@@ -70,9 +70,9 @@ flag a wide interval (factor above 4), values at their limits, steps still dilat
 steps.
 
 **Synthetic check** (`tests/test_photometry.py`): a participant with sensitivity 3 and channel weights 1.5, 0.7, 0.8
-on the built-in sequence with 10 s steps, dilation τ 4 s and noise is recovered as sensitivity 2.6 (interval
-0.98–7.0), weights within 5 %; the scale comes out 10 % high (dilation after the darker steps is not finished by
-their end, and the latency fit refines it); doubling the datasheet luminance halves the fitted sensitivity exactly
+on the built-in sequence with 10 s steps, dilation τ 4 s and noise is recovered with weights within 2 % and the scale
+within 1 %; the sensitivity comes out 4.0 (interval 2.2–7.4): dilation after the darker steps is not finished by their
+end, so those steps read small, and the loosely determined sensitivity takes up the difference; doubling the datasheet luminance halves the fitted sensitivity exactly
 and leaves the predictions unchanged.
 
 **Real recording** (Varjo XR-4, April 2026, default display photometry): see
