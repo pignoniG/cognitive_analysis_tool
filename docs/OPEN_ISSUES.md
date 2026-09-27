@@ -358,9 +358,10 @@ them rather than describing the headset or the participant.
   the computer's clock, or the Arduino's real-time clock.
 - **Problem:** any offset between the clocks shifts the lux signal against the pupil. Pupil Core has the same issue
   (its system time comes from the recording computer, usually the same one that runs the logger).
-- **2.0:** compensate with the time lag parameter, as in 1.x. Neon's documentation recommends syncing the phone with
-  a time server; logging an event visible to both (a light switched on in front of the sensor and the camera) would
-  let the offset be measured.
+- **2.0:** compensate with the time lag parameter, as in 1.x. Pupil Labs recommend forcing a time server sync on the
+  phone and the computer before a session (offsets under 10 ms, drifting to about 1 s over 24 hours); the
+  procedure is in the Neon documentation page. Logging an event visible to both (a light switched on in front of
+  the sensor and the camera) would let the offset be measured.
 - **Status:** open.
 
 ## D. Paper text

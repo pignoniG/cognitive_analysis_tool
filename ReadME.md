@@ -3,11 +3,14 @@
 Version 2.0 is a rewrite. The analysis lives in the `cwtool` package, which runs without a GUI,
 and a cross-platform Qt GUI (`cwtool-gui`) sits on top. One recording is processed at a time, from any supported device.
 
+**Documentation:** https://pignonig.github.io/cognitive_analysis_tool/ (installation, usage, device formats and how
+the data is processed; source in `docs/`).
+
 | Device | Luminance source | Status |
 |---|---|---|
 | Varjo XR-4 | scene video (display) | supported |
 | Pupil Core | external lux sensor + scene video | supported (Pupil Player export) |
-| Pupil Neon | external lux sensor + scene video | planned |
+| Pupil Neon | external lux sensor + scene video | supported (Pupil Cloud export or native format; not yet tested on a real recording) |
 
 ```
 pip install -e ".[gui,dev]"

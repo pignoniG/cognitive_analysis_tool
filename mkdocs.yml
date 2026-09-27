@@ -1,0 +1,74 @@
+site_name: Cognitive Workload Tool
+site_description: Luminance-compensated pupillometry for cognitive workload, from Varjo, Pupil Core and Pupil Neon recordings
+site_url: https://pignonig.github.io/cognitive_analysis_tool/
+repo_url: https://github.com/pignoniG/cognitive_analysis_tool
+repo_name: pignoniG/cognitive_analysis_tool
+edit_uri: edit/v2.0/docs/
+copyright: Giovanni Pignoni
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle: { icon: material/brightness-7, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle: { icon: material/brightness-4, name: Light mode }
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.details
+  - pymdownx.arithmatex: { generic: true }
+  - pymdownx.superfences:
+      custom_fences:
+        - { name: mermaid, class: mermaid, format: !!python/name:pymdownx.superfences.fence_code_format }
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - First analysis: getting-started/first-analysis.md
+  - Using the tool:
+      - Desktop app: usage/gui.md
+      - Command line: usage/cli.md
+      - Participant calibration: usage/calibration.md
+      - Lux and event loggers: usage/tools.md
+  - Devices:
+      - Overview: devices/index.md
+      - Varjo XR-4: devices/varjo.md
+      - Pupil Core: devices/pupil-core.md
+      - Pupil Neon: devices/pupil-neon.md
+      - Lux sensor hardware: hardware/lux-sensor.md
+  - How data is processed:
+      - Pipeline overview: processing/overview.md
+      - Scene video analysis: processing/video.md
+      - Luminance: processing/luminance.md
+      - Pupil signal: processing/pupil-signal.md
+      - Expected pupil model: processing/model.md
+      - ΔPD and alignment: processing/delta-pd.md
+      - Calibration fit: processing/calibration-fit.md
+  - Reference:
+      - Parameters: reference/parameters.md
+      - Output files: reference/outputs.md
+      - Code map: reference/code-map.md
+      - Development: reference/development.md
+      - Open issues: OPEN_ISSUES.md
+      - References: reference/references.md
