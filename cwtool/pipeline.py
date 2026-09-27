@@ -158,18 +158,18 @@ def steady_pupil(lum, params: Parameters, field_area: float) -> np.ndarray:
 def dynamic_pupil(steady: np.ndarray, lum: np.ndarray, fs: float, delay: float, attack: Optional[float],
                   release: Optional[float], transient: float = 0.0, escape: float = 2.0,
                   stages: int = 1) -> np.ndarray:
-    """The steady-state pupil ``steady`` for luminance ``lum``, delayed, through the attack/release
-    filter (if ``attack`` is given) with ``stages`` constriction stages, minus the transient
-    constriction of ``transient`` mm at most. The transient has the same latency and, with the
-    filter, the same constriction stages."""
+    """The steady-state pupil ``steady`` for luminance ``lum``, delayed. With the dynamics (``attack``
+    given), it then goes through the attack/release filter with ``stages`` constriction stages, minus
+    the transient constriction of ``transient`` mm at most, which has the same latency and
+    constriction stages. Without them, the transient is not applied either."""
     pd = model.delay(steady, fs, delay)
-    if attack is not None:
-        pd = model.attack_release(pd, fs, attack, release, stages)
+    if attack is None:
+        return pd
+    pd = model.attack_release(pd, fs, attack, release, stages)
     if transient > 0:
         tr = model.delay(model.escape_transient(lum, fs, escape), fs, delay)
-        if attack is not None:
-            for _ in range(stages):
-                tr = model.lowpass(tr, fs, release)
+        for _ in range(stages):
+            tr = model.lowpass(tr, fs, release)
         pd = pd - transient * tr
     return pd
 

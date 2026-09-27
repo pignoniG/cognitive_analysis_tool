@@ -250,4 +250,11 @@ def test_video_and_dynamics_settings_are_drop_downs_next_to_their_controls(app, 
     p = replace(panel.params(), release=0.25, constriction_stages=2, l_max=80.0)
     panel.set_params(p)
     assert panel.params() == p
+    # One switch: the dynamics settings are greyed out while it is off; the delay always applies.
+    editors = panel._dynamics._editors
+    panel.set_params(replace(p, dynamics=False))
+    assert not editors["transient"].isEnabled() and not editors["attack"].isEnabled() and editors["delay"].isEnabled()
+    editors["dynamics"].setChecked(True)
+    assert editors["transient"].isEnabled() and editors["constriction_stages"].isEnabled()
+    assert panel.params().dynamics
     w.close()

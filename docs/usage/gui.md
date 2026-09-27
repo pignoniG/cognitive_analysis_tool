@@ -85,8 +85,8 @@ See [Participant calibration](calibration.md) for the procedure.
   result window showing each step's steady-state pupil against the model.
 - **2. Fit latency, scale and offset**: the participant's timing, pupil scale and offset, optionally with the
   transient constriction after brightening (pupillary escape).
-- **Dynamics** (drop-down): latency, dilation and constriction time constants, constriction stages, transient and
-  escape τ, as fitted or set by hand.
+- **Dynamics** (drop-down): the latency, always applied, and one switch for the rest: dilation and constriction time
+  constants, constriction stages, transient and escape τ (greyed out while the switch is off).
 
 ## Video preview
 

@@ -134,9 +134,10 @@ an early slow one), so they are fitted **jointly** rather than one after the oth
 
 ### Result
 
-The fitted parameters are the input parameters with `delay`, `attack`, `release`, `dynamics` = on, `transient` and
-`escape` (with the transient option), `pupil_correction` (multiplied by the fitted scale), `pupil_offset` and
-`alignment` = `fixed`. The ΔPD RMS in the
+The fitted parameters are the input parameters with `delay`, `pupil_correction` (multiplied by the fitted scale),
+`pupil_offset` and `alignment` = `fixed`, and with the dynamics `dynamics` = on, `attack`, `release`, `transient` and
+`escape`. The app fits the transient whenever it fits the dynamics; `fit_calibration(..., fit_transient=False)` leaves
+it out. The ΔPD RMS in the
 window before and after is reported. Saved with the participant's parameters, they apply unchanged to the
 participant's other recordings.
 

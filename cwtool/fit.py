@@ -195,7 +195,9 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
 
     attack = params.attack if (params.dynamics or fit_dynamics) else None
     release = params.release if attack is not None else None
-    transient, escape = params.transient, params.escape
+    # The transient belongs to the dynamics: without them it is neither applied nor fitted.
+    fit_transient = fit_transient and attack is not None
+    transient, escape = (params.transient if attack is not None else 0.0), params.escape
     onsets = onset_latency(prep, video, params, start, sequence) if sequence is not None else []
     fixed_delay = len(onsets) >= MIN_ONSETS
     stages = params.constriction_stages

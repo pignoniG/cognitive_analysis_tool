@@ -612,6 +612,9 @@ them rather than describing the headset or the participant.
   - In g, escape τ (7.2 s) and dilation τ (9.6 s) still trade off; that is step 2 (two-phase dilation).
 - **Status:** steps 1 (transient) and 3 (two-stage constriction) done, both optional and off by default; steps 2
   and 4 open.
+- **Switch (September 2026):** the transient is applied only with `dynamics` on, together with the time constants
+  and constriction stages, and the app fits it whenever it fits the dynamics (one option). A parameter file with
+  `transient` above 0 and `dynamics` off now leaves the transient out.
 
 ### 44. Reference age exposed as a participant setting
 - **Where:** 2.0 `Parameters.reference_age` and the parameter panel (until September 2026).

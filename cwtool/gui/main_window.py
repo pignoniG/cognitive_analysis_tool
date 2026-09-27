@@ -186,17 +186,16 @@ class MainWindow(QMainWindow):
         self.light_button.clicked.connect(self.fit_light)
         cal_layout.addRow(self.fit_gamma_check)
         cal_layout.addRow(self.light_button)
-        self.fit_dynamics_check = QCheckBox("Include dilation/constriction time constants")
+        self.fit_dynamics_check = QCheckBox("Include dynamics (time constants and transient)")
         self.fit_dynamics_check.setChecked(True)
-        self.fit_transient_check = QCheckBox("Include transient (pupillary escape)")
-        self.fit_transient_check.setToolTip("Also fit the constriction beyond the steady state after each "
-                                            "brightening step and the time constant of the re-dilation")
+        self.fit_dynamics_check.setToolTip("Also fit the dilation and constriction time constants and the "
+                                           "transient constriction after brightening (pupillary escape), and "
+                                           "turn the dynamics on")
         self.fit_button = QPushButton("2. Fit latency, scale and offset")
         self.fit_button.setToolTip("Fits the participant's latency, dilation/constriction time constants, pupil "
                                    "scale and offset on the sequence. Fit the light sensitivity first.")
         self.fit_button.clicked.connect(self.fit_sequence)
         cal_layout.addRow(self.fit_dynamics_check)
-        cal_layout.addRow(self.fit_transient_check)
         cal_layout.addRow(self.fit_button)
         side_layout.addWidget(cal_box)
         side_layout.addWidget(self.params_panel)
@@ -444,13 +443,12 @@ class MainWindow(QMainWindow):
     def fit_sequence(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, dynamics = self.sequence_start.value(), self.fit_dynamics_check.isChecked()
-        transient = self.fit_transient_check.isChecked()
         sequence = self.sequence
         end = start + sequence.duration
 
         def work(progress, cancelled):
             return fit_calibration(rec, video, params, start, end, fit_dynamics=dynamics, cancelled=cancelled,
-                                   sequence=sequence, fit_transient=transient)
+                                   sequence=sequence, fit_transient=dynamics)
 
         self._start_task(work, self._fit_done, "Fitting on the calibration sequence…")
 

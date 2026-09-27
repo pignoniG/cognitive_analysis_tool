@@ -77,3 +77,15 @@ def test_two_stage_constriction_starts_gradually_and_dilates_as_one():
     assert two[fs + int(0.2 * fs)] == pytest.approx(1 - (1 - (1 + 1) * np.exp(-1)), abs=0.01)
     up = 1 - down
     assert model.attack_release(up, fs, 3.0, 0.2, stages=2) == pytest.approx(model.attack_release(up, fs, 3.0, 0.2))
+
+
+def test_the_transient_is_switched_with_the_dynamics():
+    from cwtool import pipeline
+    from cwtool.params import Parameters
+    fs = 100
+    lum = np.where(np.arange(0, 20, 1 / fs) < 10, 1.0, 50.0)
+    on = pipeline.expected_pupil(lum, fs, Parameters(dynamics=True, transient=1.0), 9896)
+    no_transient = pipeline.expected_pupil(lum, fs, Parameters(dynamics=True), 9896)
+    off = pipeline.expected_pupil(lum, fs, Parameters(dynamics=False, transient=1.0), 9896)
+    assert (on < no_transient - 0.1).any()
+    assert off == pytest.approx(pipeline.expected_pupil(lum, fs, Parameters(), 9896))

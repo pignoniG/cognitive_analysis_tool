@@ -43,6 +43,9 @@ fitted per participant by the [calibration fit](calibration-fit.md).
 
 ## 3. Dynamics (optional)
 
+One switch, `dynamics`, turns on everything in this section: the attack/release filter, its constriction stages and
+the transient (4). The delay is applied either way.
+
 With `dynamics` on, a one-pole filter with different time constants for the two directions:
 
 \[
@@ -61,12 +64,12 @@ second stage with the same time constant `release` acts while the pupil constric
 directly while that rises), so the constriction is S-shaped, like that of a critically damped second-order system,
 and dilation is unchanged. `release` is then the time constant of each stage.
 
-## 4. Transient (optional)
+## 4. Transient (with the dynamics)
 
 After a brightening step the pupil constricts beyond its new steady state and then re-dilates towards it within a
 few seconds ("pupillary escape"). On the seven Varjo calibration recordings the model without it misses a dip of
-0.43 mm on average 1 s after a brightening step, which recovers with a time constant of 1–2 s. With `transient`
-above 0, the expected pupil is reduced by
+0.43 mm on average 1 s after a brightening step, which recovers with a time constant of 1–2 s. With `dynamics` on
+and `transient` above 0, the expected pupil is reduced by
 
 \[
 T(t) = \text{transient} \cdot \frac{h}{h + h_0}, \qquad h = \max\big(0,\; \log_{10} L - \mathrm{LP}_{\tau_\text{escape}}(\log_{10} L)\big)
@@ -76,8 +79,8 @@ where \(\mathrm{LP}_\tau\) is a one-pole low-pass with time constant `escape`: \
 over its recent level, jumping at a brightening step and decaying with `escape`. Darkening gives no transient. The
 response saturates with the step size (\(h_0\) = 0.2 log units, fixed: the measured re-dilation grew from 0.25 mm for a
 0.1 log unit step to 0.52 mm for a 1 log unit step), so `transient` is the largest transient constriction in mm. It
-has the same latency as the rest and, with `dynamics` on, passes through as many one-pole low-passes with the
-constriction time constant `release` as there are constriction stages.
+has the same latency as the rest and passes through as many one-pole low-passes with the constriction time constant
+`release` as there are constriction stages.
 
 ## Display range
 

@@ -60,7 +60,7 @@ INTS = {
     "analysis_width": ("Analysis width (px)", 100, 4000, "Frames are downscaled to this width"),
 }
 BOOLS = {
-    "dynamics": "Pupil dynamics (attack/release)",
+    "dynamics": "Dynamics on (time constants, constriction stages, transient)",
     "background_excludes_fixation": "Background excludes gaze area",
     "lux_use_video": "Distribute sensor luminance with the scene video",
 }
@@ -88,6 +88,7 @@ GROUPS = [
 ]
 # Shown in drop-down sections next to the controls they belong to (see ParameterPanel).
 DYNAMICS_GROUP = (None, ["delay", "dynamics", "attack", "release", "constriction_stages", "transient", "escape"])
+DYNAMICS_SWITCHED = ("attack", "release", "constriction_stages", "transient", "escape")
 VIDEO_GROUP = (None, ["fixation_radius_deg", "field_radius", "background_excludes_fixation", "analysis_width"])
 
 
@@ -286,9 +287,13 @@ class ParameterPanel(QWidget):
         return form.is_shown(name)
 
     def _update_visible(self) -> None:
-        hidden = unused_parameters(self._recording, self.params())
+        params = self.params()
+        hidden = unused_parameters(self._recording, params)
         for form in (self._params, self._dynamics, self._video):
             form.hide_fields(hidden)
+        # One switch: the dynamics settings apply only with it on (the delay always applies).
+        for name in DYNAMICS_SWITCHED:
+            self._dynamics._editors[name].setEnabled(params.dynamics)
 
     def video_settings(self) -> VideoSettings:
         return self._video.value()
