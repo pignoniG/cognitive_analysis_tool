@@ -207,7 +207,8 @@ them rather than describing the headset or the participant.
   (`tests/test_video.py::test_channels_are_in_rgb_order`); the preview converts OpenCV's BGR to RGB; the cache,
   channel gains, photopic weights and calibration sequence all use R, G, B. The April 2026 Varjo capture shows green
   at 170 s and blue at 230 s, where the built-in order (greys, red, green, blue) puts them given the located start
-  and 10 s steps.
+  and 10 s steps. The calibration scene plays the colours in R, G, B order (confirmed by the author), so the
+  capture, the sequence and the analysis agree.
 
 ### 17. Fixation circle size is not defined in visual angle
 - **Where:** legacy `magicwand` (radius = scene radius / 8); 2.0 `VideoSettings.fixation_ratio`.
