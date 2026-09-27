@@ -54,10 +54,14 @@ Riposo,30
 ```
 
 Start the logger with the recording, press Enter to begin, and follow the prompts. The log is saved as
-`<date>_event_log.csv` with columns `Event, Start Time, End Time, Duration (s)`. Times are ISO 8601 with the UTC
-offset, so the file reads the same on any computer. Copy it into the recording folder.
+`<date>_event_log.csv` with columns `Event, Start Time, End Time, Duration (s), Start (unix s), End (unix s)`. Times are
+ISO 8601 with the UTC offset and also Unix time, so the file reads the same on any computer. Copy it into the
+recording folder.
 
-The reader uses the first start time and the durations: phases are consecutive.
+Each phase starts at its own logged time, so pauses between phases are kept. The reader takes the Unix start when
+present, else the ISO time. Logs from the older logger have ISO times without a zone: for Varjo recordings they are
+read in the zone of the computer that recorded (from Varjo Base's file name, which is in local time), for other devices
+in the zone of the computer running the analysis.
 
 !!! note "Neon events"
     Events marked in the Neon Companion app or in Pupil Cloud are read directly from the recording; see

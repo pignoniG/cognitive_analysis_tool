@@ -8,8 +8,9 @@ analysis can shade and average ΔPD per event.
 
     python tools/event_logger.py tools/example_protocol.csv [--out FOLDER]
 
-Output columns: Event, Start Time, End Time, Duration (s). Times are ISO 8601
-with the UTC offset, so the log reads the same on any computer.
+Output columns: Event, Start Time, End Time, Duration (s), Start (unix s), End (unix s).
+Times are ISO 8601 with the UTC offset, and also Unix time, which the analysis reads
+first, so the log reads the same on any computer.
 """
 
 from __future__ import annotations
@@ -58,14 +59,15 @@ def main() -> int:
             time.sleep(duration)
         end_ts = time.time()
         end = datetime.fromtimestamp(end_ts).astimezone()
-        log.append((name, start, end, end_ts - start_ts))
+        log.append((name, start, end, end_ts - start_ts, start_ts, end_ts))
         print(f"Finished '{name}' ({end_ts - start_ts:.2f} s)\n")
 
     with open(output, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["Event", "Start Time", "End Time", "Duration (s)"])
-        for name, start, end, elapsed in log:
-            w.writerow([name, start.isoformat(), end.isoformat(), f"{elapsed:.3f}"])
+        w.writerow(["Event", "Start Time", "End Time", "Duration (s)", "Start (unix s)", "End (unix s)"])
+        for name, start, end, elapsed, start_ts, end_ts in log:
+            w.writerow([name, start.isoformat(), end.isoformat(), f"{elapsed:.3f}", f"{start_ts:.3f}",
+                        f"{end_ts:.3f}"])
     print(f"Log saved to {output}")
     return 0
 

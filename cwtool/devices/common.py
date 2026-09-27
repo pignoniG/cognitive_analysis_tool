@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import math
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -19,20 +19,38 @@ def find(folder: Path, name: str) -> Path | None:
     return matches[0] if matches else None
 
 
-def read_event_log(folder: Path, epoch_start: float) -> list[Event]:
-    """Read ``*event_log*.csv``: one row per event with columns label, start time (ISO 8601), end time,
-    duration (s). Each event starts at its own start time, so gaps between events are kept; a row
-    whose start cannot be read follows the previous event directly (as 1.x assumed for all rows)."""
+def read_event_log(folder: Path, epoch_start: float, utc_offset: float | None = None) -> list[Event]:
+    """Read ``*event_log*.csv``: one row per event with columns label, start time, end time, duration (s),
+    and from ``tools/event_logger.py`` also the start as Unix time.
+
+    Each event starts at its own time, taken from the Unix column when present (unambiguous), else from
+    the ISO start time. ISO times without a zone (logs from the old logger) are read at ``utc_offset``
+    (seconds east of UTC, the zone of the computer that recorded, when the device reveals it), else in
+    the analysing computer's zone. A row whose start cannot be read follows the previous event."""
     path = find(folder, "event_log")
     if path is None:
         return []
     with open(path, newline="") as f:
-        rows = [r for r in list(csv.reader(f))[1:] if r]
+        rows = [r for r in csv.reader(f) if r]
+    if not rows:
+        return []
+    header = [h.strip().lower() for h in rows[0]]
+    unix_col = next((i for i, h in enumerate(header) if "unix" in h and "start" in h), None)
+    zone = timezone(timedelta(seconds=utc_offset)) if utc_offset is not None else None
+
+    def start_of(r) -> float:
+        if unix_col is not None and unix_col < len(r) and r[unix_col].strip():
+            return float(r[unix_col])
+        when = datetime.fromisoformat(r[1].strip())
+        if when.tzinfo is None and zone is not None:
+            when = when.replace(tzinfo=zone)
+        return when.timestamp()
+
     events = []
     t = None
-    for r in rows:
+    for r in rows[1:]:
         try:
-            t = datetime.fromisoformat(r[1].strip()).timestamp() - epoch_start
+            t = start_of(r) - epoch_start
         except (ValueError, IndexError):
             if t is None:
                 continue          # no start time to count from yet
@@ -40,6 +58,18 @@ def read_event_log(folder: Path, epoch_start: float) -> list[Event]:
         events.append(Event(label=r[0], start=t, end=t + duration))
         t += duration
     return events
+
+
+def utc_offset_from_name(local_name: str, fmt: str, epoch: float) -> float | None:
+    """UTC offset (s) of the computer that named a file with its local time ``local_name`` (parsed with
+    ``fmt``) at Unix time ``epoch``, rounded to 15 minutes; None if the name does not parse or the
+    offset is implausible."""
+    try:
+        local = datetime.strptime(local_name, fmt).replace(tzinfo=timezone.utc).timestamp()
+    except ValueError:
+        return None
+    offset = round((local - epoch) / 900) * 900
+    return float(offset) if abs(offset) <= 14 * 3600 else None
 
 
 # "<label>.begin" / "<label>.end", "<label>_start" / "<label>_stop", "<label> onset" / ...

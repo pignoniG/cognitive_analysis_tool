@@ -290,11 +290,13 @@ is revised; they remain in the git history of this file.
   analysis, so events shift by hours when analysed elsewhere. Events are also assumed to be back-to-back
   (only the first start time is read; the rest are accumulated durations).
 - **Proposal:** store event times with a zone or as unix time, and read each event's own start.
-- **2.0:** `tools/event_logger.py` now writes times with the UTC offset, which the reader handles. Each event starts
-  at its own start time (September 2026), so gaps between events are kept; a row without a readable start follows the
-  previous event. Logs made with the old logger, without a zone, are still read in the local zone of the analysing
-  computer.
-- **Status:** partly fixed (old logs without a zone).
+- **2.0:** `tools/event_logger.py` writes times with the UTC offset and as Unix time, which the reader prefers. Each
+  event starts at its own start time, so gaps between events are kept; a row without a readable start follows the
+  previous event. Logs without a zone (old logger) are read in the zone of the computer that recorded when the device
+  reveals it: Varjo Base names the gaze file with local time and stores UTC inside, which gives UTC+2 on the seven
+  calibration recordings (CEST, April 2026). Pupil Core and Neon logs without a zone are still read in the analysing
+  computer's zone.
+- **Status:** fixed in 2.0 (Varjo); Pupil devices to check on a sample recording.
 
 ### 23. Lux sensor conversion constants are undocumented
 - **Where:** `data_tools.readLux` (`1.706061 * x + 0.66935`, then `/ 2.2`, time × 0.001, one file per local hour).

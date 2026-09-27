@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cwtool.devices.common import find as _find, read_event_log
+from cwtool.devices.common import find as _find, read_event_log, utc_offset_from_name
 from cwtool.recording import DeviceProfile, Recording
 
 NAME = "varjo"
@@ -108,6 +108,11 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
 
     time = relative_ns / 1e9
     epoch_start = epoch_ns[0] / 1e9 - time[0]
+    # Varjo Base names the file with the recording computer's local time of the first video frame, and
+    # the timestamps inside are UTC: together they give that computer's zone, so event logs without a
+    # zone read the same wherever they are analysed (open issue 22).
+    stamp = gaze_file.stem.replace("varjo_gaze_output_", "")[:19]
+    utc_offset = utc_offset_from_name(stamp, "%Y-%m-%d_%H-%M-%S", epoch_start)
 
     return Recording(
         name=folder.name,
@@ -119,7 +124,7 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
         pupil_right=pupil("right_pupil"),
         gaze=gaze,
         scene_video=_find(folder, "varjo_capture_"),
-        events=read_event_log(folder, epoch_start),
+        events=read_event_log(folder, epoch_start, utc_offset),
     )
 
 
