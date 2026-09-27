@@ -13,7 +13,6 @@ from cwtool.params import Parameters, VideoSettings, unused_parameters
 # name: (label, min, max, step, decimals, tooltip)
 NUMBERS = {
     "age": ("Age (years)", 1, 120, 1, 0, "Participant age"),
-    "reference_age": ("Reference age", 1, 120, 0.1, 2, "Watson & Yellott reference age"),
     "l_min": ("Lmin (cd/m²)", 0, 1000, 0.1, 3, "Panel black point"),
     "l_max": ("Lmax (cd/m²)", 0.1, 100000, 50, 1, "Panel white point"),
     "sensitivity": ("Light sensitivity (×)", 0.001, 1000, 0.1, 3,
@@ -77,7 +76,7 @@ TEXTS = {
 }
 
 GROUPS = [
-    ("Participant", ["age", "reference_age", "eyes", "eye"]),
+    ("Participant", ["age", "eyes", "eye"]),
     ("Display photometry (datasheet)", ["l_min", "l_max", "gamma"]),
     ("Participant light response", ["sensitivity", "gain_r", "gain_g", "gain_b", "fixation_weight"]),
     ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",

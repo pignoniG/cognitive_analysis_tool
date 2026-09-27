@@ -613,6 +613,15 @@ them rather than describing the headset or the participant.
 - **Status:** steps 1 (transient) and 3 (two-stage constriction) done, both optional and off by default; steps 2
   and 4 open.
 
+### 44. Reference age exposed as a participant setting
+- **Where:** 2.0 `Parameters.reference_age` and the parameter panel (until September 2026).
+- **Problem:** \(y_0\) = 28.58 years in Watson & Yellott's age correction is the mean age of the observers behind the
+  Stanley & Davies formula, a constant of the model; 1.x hard-codes it. Exposing it invited changing it per
+  participant.
+- **2.0:** `model.REFERENCE_AGE`; removed from the parameters and the panel. Parameter files that still carry
+  `reference_age` load (the field is ignored); only a file with a value other than 28.58 would give different results.
+- **Status:** fixed in 2.0.
+
 ## D. Paper text
 
 ### 24. Dynamics section: filter placement and stage count

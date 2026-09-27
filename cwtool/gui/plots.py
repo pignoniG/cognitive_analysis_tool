@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QToolButton
 
 from cwtool import calibration
 from cwtool.pipeline import Result, residual_rms
@@ -18,7 +19,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
     The view follows the data (:meth:`fit_to_data`) until the user pans or zooms; after
     that it stays put until :meth:`fit_to_data` is called again (double-click, or the
-    window's Fit view action). Overlays never enter the fitted range."""
+    Reset view button in the top right corner). Overlays never enter the fitted range."""
 
     sequence_start_changed = Signal(float)
     cursor_changed = Signal(float)
@@ -43,7 +44,16 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.pupil.setLabel("left", "Pupil diameter (mm)")
         self.cw.setLabel("left", "ΔPD (mm)")
         self.cw.setLabel("bottom", "Time (s)")
-        self.pupil.addLegend(offset=(-10, 10), brush=pg.mkBrush(255, 255, 255, 210))
+        self.pupil.addLegend(offset=(-10, 44), brush=pg.mkBrush(255, 255, 255, 210))   # below Reset view
+
+        self.reset_button = QToolButton(self)
+        self.reset_button.setText("Reset view")
+        self.reset_button.setToolTip("Show all the data again (Ctrl+0, or double-click the plots)")
+        self.reset_button.setStyleSheet(
+            "QToolButton { font-size: 13px; padding: 5px 12px; border: 1px solid #999; border-radius: 5px;"
+            " background: rgba(255, 255, 255, 230); color: #222; }"
+            "QToolButton:hover { background: #eef3fa; }")
+        self.reset_button.clicked.connect(self.fit_to_data)
 
         self.raw_curve = self.pupil.plot(pen=pg.mkPen((160, 160, 160), width=1), name="Measured (raw)", connect="finite")
         self.measured_curve = self.pupil.plot(pen=pg.mkPen("k", width=1.5), name="Measured", connect="finite")
@@ -77,6 +87,13 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             plot.addItem(line, ignoreBounds=True)
             line.sigPositionChanged.connect(self._cursor_dragged)
         self.scene().sigMouseClicked.connect(self._clicked)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if not hasattr(self, "reset_button"):     # resized while the base class is being built
+            return
+        self.reset_button.adjustSize()
+        self.reset_button.move(self.width() - self.reset_button.width() - 12, 8)
 
     def set_cursor(self, t: float) -> None:
         for line in self.cursors:

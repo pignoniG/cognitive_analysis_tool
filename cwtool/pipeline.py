@@ -152,7 +152,7 @@ def steady_pupil(lum, params: Parameters, field_area: float) -> np.ndarray:
     """Light-adapted pupil (mm) for luminance ``lum`` (cd/m²): Watson & Yellott with the
     participant's light sensitivity applied to the luminance."""
     return model.watson_yellott(np.asarray(lum, dtype=float) * params.sensitivity, params.age, field_area,
-                                params.eyes, params.reference_age)
+                                params.eyes)
 
 
 def dynamic_pupil(steady: np.ndarray, lum: np.ndarray, fs: float, delay: float, attack: Optional[float],

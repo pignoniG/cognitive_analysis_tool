@@ -74,17 +74,25 @@ class MainWindow(QMainWindow):
                   self.export_action, None, quit_action):
             file_menu.addSeparator() if a is None else file_menu.addAction(a)
 
-        self.fit_action = action("Fit view", lambda: self.plots.fit_to_data(), QKeySequence("Ctrl+0"))
-        self.fit_action.setToolTip("Show all the data (Ctrl+0, or double-click the plots)")
+        self.fit_action = action("Reset view", lambda: self.plots.fit_to_data(), QKeySequence("Ctrl+0"))
+        self.fit_action.setToolTip("Show all the data again (Ctrl+0, or double-click the plots)")
         self.view_menu = self.menuBar().addMenu("&View")
         self.view_menu.addAction(self.fit_action)
         self.view_menu.addSeparator()
 
         toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
-        for a in (self.open_action, self.load_params_action, self.save_params_action, self.export_action, None,
-                  self.fit_action):
-            toolbar.addSeparator() if a is None else toolbar.addAction(a)
+        toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        # Framed, padded buttons: plain text actions are easy to miss.
+        toolbar.setStyleSheet(
+            "QToolBar { spacing: 8px; padding: 6px; }"
+            "QToolButton { font-size: 14px; padding: 7px 16px; border: 1px solid palette(mid);"
+            " border-radius: 6px; background: palette(button); }"
+            "QToolButton:hover { background: palette(light); }"
+            "QToolButton:pressed { background: palette(midlight); }"
+            "QToolButton:disabled { color: palette(mid); }")
+        for a in (self.open_action, self.load_params_action, self.save_params_action, self.export_action):
+            toolbar.addAction(a)
 
     def _build_ui(self) -> None:
         # Left: recording, video, calibration and parameters.
@@ -232,6 +240,9 @@ class MainWindow(QMainWindow):
         busy = self._task is not None and self._task.isRunning()
         has_rec = self.recording is not None
         self.analyse_button.setEnabled(has_rec and not busy and self.recording.scene_video is not None)
+        self.analyse_button.setText("Reanalyse video" if self.video is not None else "Analyse video")
+        self.analyse_button.setToolTip("Analyse the scene video again, ignoring the saved analysis"
+                                       if self.video is not None else "Analyse the scene video")
         self.cancel_button.setEnabled(busy)
         self.open_action.setEnabled(not busy)
         self.export_action.setEnabled(self.result is not None)
@@ -349,12 +360,13 @@ class MainWindow(QMainWindow):
         self.video = video
         self.video_label.setText(f"{self.recording.scene_video.name}: {len(video.time)} samples ({how})")
         self.recompute()
+        self._update_state()
 
     def _video_settings_edited(self) -> None:
         if self.recording is not None:
             self.preview.set_settings(self.params_panel.video_settings().for_recording(self.recording))
         if self.video is not None:
-            self.video_label.setText("Video settings changed: press Analyse video to apply.")
+            self.video_label.setText("Video settings changed: press Reanalyse video to apply.")
 
     # Tasks
 

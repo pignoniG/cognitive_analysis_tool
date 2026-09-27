@@ -161,7 +161,7 @@ def test_view_fits_the_data(app, varjo_folder, tmp_path):
     w.fit_action.trigger()
     assert vb.viewRange()[0][1] < 100 and in_view()
 
-    # Once the user pans away, parameter changes keep the view; Fit view brings the data back.
+    # Once the user pans away, parameter changes keep the view; Reset view brings the data back.
     vb.translateBy(x=1000, y=50)
     w.plots._moved_by_user()
     w.params_panel.set_params(Parameters(l_max=500))
@@ -212,4 +212,18 @@ def test_light_sensitivity_button_applies_the_fit(app, varjo_folder, monkeypatch
     w.light_button.click()
     assert wait_for(app, lambda: w.params_panel.params() != before)
     assert w.params_panel.params().l_max == before.l_max     # the display photometry is not fitted
+    w.close()
+
+
+def test_analyse_button_becomes_reanalyse_and_reset_view_is_on_the_plots(app, varjo_folder):
+    w = MainWindow()
+    assert w.analyse_button.text() == "Analyse video"
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None)
+    assert w.analyse_button.text() == "Reanalyse video" and w.analyse_button.isEnabled()
+    w.resize(1200, 800)
+    w.show()
+    app.processEvents()
+    b = w.plots.reset_button
+    assert b.isVisible() and b.x() + b.width() > w.plots.width() - 40 and b.y() < 30
     w.close()

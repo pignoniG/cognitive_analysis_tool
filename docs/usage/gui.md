@@ -28,8 +28,8 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 ## Scene video
 
 The video is analysed automatically when a recording is opened, unless a cached analysis made with the same
-video, settings, frame timestamps and gaze exists. **Analyse video** runs it again (for example after changing the
-video analysis settings), **Cancel** stops it.
+video, settings, frame timestamps and gaze exists. **Reanalyse video** (**Analyse video** before any analysis) runs
+it again, for example after changing the video analysis settings; **Cancel** stops it.
 
 **Calibrate camera from lux** (Pupil recordings with a lux log): measures the luminance that saturates a
 fixed-exposure scene camera, for recordings of the same exposure without a lux log (see
@@ -51,15 +51,15 @@ options keep their values and are still saved in the parameter file:
 | Pupil Core / Neon without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
 
 The **Video analysis** group (gaze circle radius, scene circle, background, analysis width) changes what is
-measured in the video: after editing it, click **Analyse video**. The video preview already draws the new
+measured in the video: after editing it, click **Reanalyse video**. The video preview already draws the new
 circles, so sizes can be checked before re-running.
 
 ## Plots
 
 - The view fits the data when a recording opens and follows it while you change parameters. Drag with the left
   mouse button to pan and use the wheel to zoom; after that the view stays where you put it.
-- **Fit view** (toolbar, **View** menu, Ctrl+0, or a double-click on the plots) shows all the data again: the whole
-  recording and the range of the measured, expected and ΔPD curves. The calibration overlay, events and reference
+- **Reset view** (button in the top right corner of the plots, **View** menu, Ctrl+0, or a double-click on the
+  plots) shows all the data again: the whole recording and the range of the measured, expected and ΔPD curves. The calibration overlay, events and reference
   lines never stretch it.
 - Right-click for pyqtgraph's view menu (e.g. export an image).
 - A click places the red cursor, which moves the video preview; the cursor can also be dragged.

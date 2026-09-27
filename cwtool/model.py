@@ -16,8 +16,13 @@ def eyes_attenuation(eyes: int) -> float:
     return {1: 0.1, 2: 1.0}.get(eyes, 0.0)
 
 
+# Mean age of the observers behind the Stanley & Davies formula: a constant of Watson & Yellott's
+# age correction, not a participant setting.
+REFERENCE_AGE = 28.58
+
+
 def watson_yellott(luminance, age: float, field: float, eyes: int = 2,
-                   reference_age: float = 28.58) -> np.ndarray:
+                   reference_age: float = REFERENCE_AGE) -> np.ndarray:
     """Watson & Yellott (2012) unified formula for light-adapted pupil size (mm).
 
     ``luminance`` in cd/m², ``field`` is the adapting field size passed through

@@ -32,7 +32,6 @@ class VideoSettings:
 class Parameters:
     # Participant / Watson & Yellott
     age: float = 25.0
-    reference_age: float = 28.58
     eyes: int = 2
     eye: str = "both"                    # pupil used: "left", "right" or "both"
 

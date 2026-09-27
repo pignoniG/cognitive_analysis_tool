@@ -20,7 +20,8 @@ the number of eyes adapted (`eyes`). The sensitivity is fitted on the calibratio
 D_{SD} = 7.75 - 5.75 \, \frac{(F/846)^{0.41}}{(F/846)^{0.41} + 2}
 \]
 
-corrected for age \(y\) against the reference age \(y_0\) (`age`, `reference_age`, default 28.58):
+corrected for the participant's age \(y\) (`age`) against the reference age \(y_0\) = 28.58 years, the mean age of the
+observers behind the Stanley & Davies formula (a constant of the model, not a setting):
 
 \[
 D = D_{SD} + (y - y_0)(0.02132 - 0.009562\, D_{SD})

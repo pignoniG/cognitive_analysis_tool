@@ -11,7 +11,6 @@ Two sets, both in `cwtool/params.py`.
 | Name | Default | Meaning |
 |---|---|---|
 | `age` | 25 | participant's age (years), for Watson & Yellott |
-| `reference_age` | 28.58 | reference age of the formula |
 | `eyes` | 2 | eyes adapted to the light (1 or 2) |
 | `eye` | both | pupil analysed: `left`, `right` or `both` |
 
