@@ -201,6 +201,13 @@ them rather than describing the headset or the participant.
 - **Problem:** the two swaps cancel, so luminance is correct, but `outputFromVideo.csv` is mislabelled for
   anyone reading it directly.
 - **Status:** fixed in 2.0 (new cache format, RGB order).
+- **Checked again (September 2026) for a green/blue swap:** none in either version. In 1.x only red and green are
+  swapped, twice, which cancels; blue is never moved, and the whole-frame average weights the channels equally. In
+  2.0 both decoders (PyAV, OpenCV) return pure red, green and blue H.264 frames as R, G, B
+  (`tests/test_video.py::test_channels_are_in_rgb_order`); the preview converts OpenCV's BGR to RGB; the cache,
+  channel gains, photopic weights and calibration sequence all use R, G, B. The April 2026 Varjo capture shows green
+  at 170 s and blue at 230 s, where the built-in order (greys, red, green, blue) puts them given the located start
+  and 10 s steps.
 
 ### 17. Fixation circle size is not defined in visual angle
 - **Where:** legacy `magicwand` (radius = scene radius / 8); 2.0 `VideoSettings.fixation_ratio`.

@@ -163,3 +163,26 @@ def test_parallel_chunks_give_identical_results(tmp_path, monkeypatch, backend):
     assert np.array_equal(one.fixation_lin, three.fixation_lin)
     assert np.array_equal(one.background_rgb, three.background_rgb)
     assert seen[-1] == 1.0 and all(0 <= p <= 1 for p in seen)
+
+
+@pytest.mark.parametrize("backend", ["pyav", "opencv"])
+def test_channels_are_in_rgb_order(tmp_path, backend):
+    """Pure red, green and blue H.264 frames (the Varjo capture's codec) come out as R, G, B."""
+    av = pytest.importorskip("av")
+    path = tmp_path / "rgb.mp4"
+    colours = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 128, 0)]
+    with av.open(str(path), "w") as c:
+        s = c.add_stream("libx264", rate=10)
+        s.width, s.height, s.pix_fmt = 64, 48, "yuv420p"
+        for rgb in colours:
+            for _ in range(10):
+                frame = av.VideoFrame.from_ndarray(np.full((48, 64, 3), rgb, np.uint8), format="rgb24")
+                for packet in s.encode(frame):
+                    c.mux(packet)
+        for packet in s.encode():
+            c.mux(packet)
+    t = np.arange(0, len(colours), 0.1) + 0.05
+    res = analyse_video(path, t, np.full((len(t), 2), 0.5), VideoSettings(), backend=backend, workers=1)
+    for i, rgb in enumerate(colours):
+        got = res.fixation_rgb[np.argmin(np.abs(res.time - (i + 0.5)))]
+        assert got == pytest.approx(rgb, abs=6)
