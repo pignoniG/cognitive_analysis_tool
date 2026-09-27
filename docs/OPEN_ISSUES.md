@@ -475,19 +475,50 @@ is revised; they remain in the git history of this file.
 - **Status:** fixed in 2.0.
 
 ### 40. Step levels extrapolated from unsettled steps are unstable
-- **Where:** 2.0 `photometry.step_asymptote`.
-- **Problem:** on the seven calibration recordings (issue 36), 11–18 of 20 steps per participant count as not settled
-  (a change of more than 0.1 mm over the last 30 %, common with 10 s steps). Their exponential asymptotes are often
-  implausible: on a, grey 36 gets 2.59 mm while its last values are 3.66 mm and grey 73 gets 3.40 mm, and
-  uncertainties reach tens of millimetres (±39 mm), which silently drops the step. The light-fit RMS is 0.37–1.11 mm
-  with the asymptotes and 0.13–0.62 mm with the mean of each step's last 30 %.
-- **2.0:** asymptote fitted from the turning point, limited to 1 mm beyond the last second.
-- **Proposal:** use the mean of the step's end, or constrain the time constant of the extrapolation to a physiological
-  range (the fitted dilation τ is 1.6–5.4 s) and extrapolate only when the fit is well determined; either way, report
-  steps that are dropped by their uncertainty. A new calibration sequence, being defined, may make most steps settle
-  (longer steps, or an order in which a step rarely follows a much darker or brighter one), which would make the
-  extrapolation rarely needed.
-- **Status:** open; revisit with the new calibration sequence.
+- **Where:** 2.0 `photometry.step_asymptote`, which gives the light sensitivity fit one level per step.
+- **What it does:** a step counts as settled when the pupil changes by less than 0.1 mm over its last 30 %; its level
+  is then the mean of that part. Otherwise an exponential is fitted from the step's turning point to its end and its
+  asymptote used, capped at 1 mm beyond the last second, with half the extrapolated distance added to the step's
+  uncertainty.
+- **On the seven calibration recordings** (September 2026, current code, no sensitivity prior):
+  - 104 of 137 steps (76 %) count as unsettled: all first steps, 82 of 109 after a brighter step, 15 of 21 after a
+    darker one;
+  - the direction does not follow the physiology: after brightening, 40 unsettled steps are still dilating and 42
+    still constricting, where re-dilation (issue 43) would make most of them dilate. The 0.1 mm criterion is at the
+    level of the pupil's own fluctuation within a step (0.08–0.24 mm RMS, issue 43), so a random wobble over the
+    last 3 s is often taken for a trend and extrapolated;
+  - the extrapolation reaches a median 0.34 mm beyond the last second, and 35 % of unsettled steps hit the 1 mm cap;
+    the extrapolated levels differ from the end-of-step means by a median 0.41 mm;
+  - 33 of 137 steps (2–7 per participant, 7 of 20 in f and g) get an uncertainty above 1 mm, which silently drops
+    them from the fit;
+  - grey levels go the wrong way (a brighter grey with a larger level, by more than 0.05 mm) 11 times, against 6
+    with end-of-step means.
+- **Effect on the light fit** (extrapolated levels → mean of each step's last 30 %):
+
+  | | sensitivity (95 %) | steady-state RMS | weights R/G/B | scale k |
+  |---|---|---|---|---|
+  | a | 48.5 (11–210) → 52.7 (14–190) | 0.342 → 0.123 mm | 1.55/0.41/1.04 → 1.45/0.56/0.99 | 0.60 → 0.61 |
+  | b | 0.0022 (0.0004–0.013) → 1.0 (0.18–5.6) | 0.906 → 0.605 mm | 0.55/0.08/2.37 → 0.67/0.09/2.24 | 0.92 → 1.15 |
+  | c | 9.5 (2.1–42) → 3.2 (0.91–11) | 0.363 → 0.149 mm | 0.31/0.19/2.49 → 0.48/0.28/2.25 | 0.60 → 0.75 |
+  | d | 0.49 (0.11–2.1) → 0.078 (0.029–0.21) | 0.608 → 0.207 mm | 0.25/0.25/2.50 → 0.42/0.16/2.41 | 0.92 → 0.98 |
+  | e | 9.0 (2.0–41) → 9.9 (2.3–44) | 0.723 → 0.297 mm | 0.69/0.04/2.27 → 0.36/0.05/2.59 | 0.93 → 0.91 |
+  | f | 57 (11–300) → 142 (33–610) | 0.678 → 0.160 mm | 0.53/0.41/2.06 → 0.48/0.26/2.26 | 0.81 → 0.57 |
+  | g | 0.049 (0.010–0.23) → 0.031 (0.009–0.10) | 0.496 → 0.278 mm | 0.38/0.42/2.20 → 0.47/0.31/2.22 | 0.56 → 0.58 |
+
+  The model fits the end-of-step levels much better (33–78 % lower RMS) and the channel weights hardly change (blue
+  still dominant). The sensitivity moves by up to a factor of 460 (b) and still spreads over four orders of
+  magnitude (0.03–142): the estimator adds noise but is not what makes sensitivities incomparable (issue 36).
+- **What the end-of-step mean gives up:** a step that really had not settled (slow dilation after darkening, dilation
+  τ 2.7–9.6 s in issue 43) is read short of its steady state, biased towards the previous level. With 10 s steps
+  and τ above 3 s this is a real bias, but a consistent and bounded one, unlike the extrapolation.
+- **Proposal:**
+  - now: use the mean of the step's end (e.g. the last 30 %), and flag steps whose trend is both beyond the noise
+    and in the direction the dynamics predict (dilating after darkening) instead of extrapolating them;
+  - with the new calibration sequence: longer steps, or a dark/dim step before each measured one, so that the end of
+    a step is near its steady state; the extrapolation then becomes unnecessary;
+  - later, with step 4 of issue 43: fit the light response on the whole trace with the dynamics, which needs no
+    per-step levels at all.
+- **Status:** open; the estimator change is small and could be made before the new sequence.
 
 ### 41. Negative constriction onsets are accepted
 - **Where:** 2.0 `fit.onset_latency`.
