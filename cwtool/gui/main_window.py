@@ -243,7 +243,7 @@ class MainWindow(QMainWindow):
         self.analyse_button.setText("Reanalyse video" if self.video is not None else "Analyse video")
         self.analyse_button.setToolTip("Analyse the scene video again, ignoring the saved analysis"
                                        if self.video is not None else "Analyse the scene video")
-        self.cancel_button.setEnabled(busy)
+        self.cancel_button.setVisible(busy)   # only while an analysis or fit runs
         self.open_action.setEnabled(not busy)
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)

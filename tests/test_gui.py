@@ -221,6 +221,12 @@ def test_analyse_button_becomes_reanalyse_and_reset_view_is_on_the_plots(app, va
     w.open_recording(varjo_folder)
     assert wait_for(app, lambda: w.result is not None)
     assert w.analyse_button.text() == "Reanalyse video" and w.analyse_button.isEnabled()
+    assert w.cancel_button.isHidden()                  # nothing running
+    w.analyse(use_cache=False)
+    assert not w.cancel_button.isHidden()              # shown while the analysis runs
+    assert wait_for(app, lambda: not (w._task and w._task.isRunning()))
+    app.processEvents()
+    assert w.cancel_button.isHidden()
     w.resize(1200, 800)
     w.show()
     app.processEvents()

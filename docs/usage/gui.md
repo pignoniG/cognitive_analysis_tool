@@ -29,7 +29,7 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 
 The video is analysed automatically when a recording is opened, unless a cached analysis made with the same
 video, settings, frame timestamps and gaze exists. **Reanalyse video** (**Analyse video** before any analysis) runs
-it again, for example after changing the video analysis settings; **Cancel** stops it.
+it again, for example after changing the video analysis settings; **Cancel**, shown while it runs, stops it.
 
 **Calibrate camera from lux** (Pupil recordings with a lux log): measures the luminance that saturates a
 fixed-exposure scene camera, for recordings of the same exposure without a lux log (see
