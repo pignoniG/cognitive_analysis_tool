@@ -11,9 +11,9 @@ step match the model:
 - optionally gamma, from the spacing of the grey steps;
 - a pupil scale correction and offset, which the latency fit (:mod:`cwtool.fit`) refines next.
 
-Each step contributes its steady-state pupil, the asymptote of an exponential fitted to the step
-(dilation can take longer than a step to settle), and its colour as measured in the video, so the
-calibration sees exactly what the analysis sees. Weak priors keep poorly constrained values near
+Each step contributes its level, the mean pupil over its last 30 %, and its colour as measured in the
+video, so the calibration sees exactly what the analysis sees. Steps are not extrapolated: on real
+recordings the apparent trend at the end of a step is mostly the pupil's own fluctuation (open issue 40). Weak priors keep poorly constrained values near
 sensible ones: gains around 1, scale correction around 1, gamma around 2.2. The sensitivity has none:
 a prior centred on 1 would mean "the datasheet is right", making the fit depend on the datasheet
 luminance beyond the exact trade-off between the two (open issue 42).
@@ -25,7 +25,7 @@ from dataclasses import dataclass, replace
 from typing import Optional
 
 import numpy as np
-from scipy.optimize import curve_fit, least_squares
+from scipy.optimize import least_squares
 
 from cwtool import calibration, luminance
 from cwtool.params import Parameters
@@ -37,7 +37,7 @@ COLOUR_SETTLE = 0.5         # s after a step change before the video colour is u
 MIN_STEP_SAMPLES = 20       # pupil samples a step needs to be used
 NOISE_MM = 0.1              # mm, floor on a step's uncertainty (pupil fluctuations, model error)
 SETTLED_MM = 0.1            # mm, change over the last 30 % of a step below which it has settled
-MAX_EXTRAPOLATION = 1.0     # mm, beyond the last second of a step
+TAIL = 0.3                  # share of the step (after the latency) whose mean is the step's level
 # Prior standard deviations (natural log units for factors). None on the sensitivity (see the module text).
 PRIOR_LOG_GAIN = 1.5         # wide: the pupil's colour weighting departs strongly from photopic (blue)
 PRIOR_SCALE = 0.25
@@ -53,9 +53,9 @@ class StepLevel:
     rgb: tuple               # nominal colour
     start: float             # s, recording time
     end: float
-    measured: float          # mm, steady-state pupil (asymptote), with the input scale correction
+    measured: float          # mm, mean pupil over the step's end, with the input scale correction
     uncertainty: float       # mm
-    settled: bool            # the exponential reached its asymptote within the step
+    settled: bool            # False: still dilating at its end after a darker step, so short of steady state
     colour: np.ndarray       # (G, 3) mean weighted linear colour per gamma of the video's grid
 
 
@@ -78,49 +78,29 @@ class PhotometryFit:
     notes: list
 
 
-def step_asymptote(t: np.ndarray, y: np.ndarray) -> tuple[float, float, bool]:
-    """Steady-state value of a step response ``y(t)``. Returns (value, uncertainty, settled).
+def step_level(t: np.ndarray, y: np.ndarray, after_darker: bool) -> tuple[float, float, bool]:
+    """Level of a step response ``y(t)``: the mean of its last TAIL. Returns (value, uncertainty, settled).
 
-    If the last 30 % of the step is flat, its mean is the steady state. Otherwise the pupil is still
-    moving (slow dilation, or re-dilation after the initial constriction, "pupillary escape"): an
-    exponential y = A + (y0 − A)·e^(−(t−t0)/τ) is fitted from the turning point (the extreme value
-    before the final trend) to the end, and its asymptote is used. The extrapolation is limited to
-    MAX_EXTRAPOLATION beyond the last values, in the direction of the trend, and half of it is added to
-    the uncertainty, so extrapolated steps count less in the fit.
+    The end of a step is not extrapolated. On the Varjo calibration recordings a trend of more than
+    SETTLED_MM over the step's end was as often a constriction as a dilation after brightening, i.e.
+    mostly the pupil's own fluctuation, and extrapolating it moved levels by 0.34 mm (median) and made
+    the fit worse (open issue 40). The one trend expected from the physiology is slow dilation after a
+    darker step (``after_darker``), which can outlast a step: such a step is flagged as not settled
+    (its level is short of the steady state) and half of the trend is added to its uncertainty.
     """
     t = t - t[0]
     span = t[-1] if len(t) > 1 else 0.0
-    tail_mask = t >= 0.7 * span if span > 0 else np.ones(len(t), bool)
+    tail_mask = t >= (1 - TAIL) * span if span > 0 else np.ones(len(t), bool)
     tail_t, tail = t[tail_mask], y[tail_mask]
-    late = float(np.mean(tail))
+    value = float(np.mean(tail))
     # Samples are strongly autocorrelated: count about two independent values per second.
     n_eff = max((tail_t[-1] - tail_t[0]) * 2.0, 1.0) if len(tail_t) > 1 else 1.0
-    noise = float(np.std(tail) / np.sqrt(n_eff))
+    se = float(np.std(tail) / np.sqrt(n_eff))
     slope = float(np.polyfit(tail_t, tail, 1)[0]) if len(tail_t) > 2 and np.ptp(tail_t) > 0 else 0.0
-    drift = slope * max(0.3 * span, 1e-9)            # change over the tail
-    if abs(drift) < SETTLED_MM:
-        return late, noise, True
-
-    rising = slope > 0
-    turn = int(np.argmin(y) if rising else np.argmax(y))
-    seg_t, seg = t[turn:] - t[turn], y[turn:]
-    value, se = late, float("inf")
-    if len(seg) >= MIN_STEP_SAMPLES and seg_t[-1] > 0:
-        try:
-            (a, _, _), cov = curve_fit(lambda x, a, y0, tau: a + (y0 - a) * np.exp(-x / tau), seg_t, seg,
-                                       p0=(late + drift, float(seg[0]), max(seg_t[-1] / 3, 0.2)),
-                                       bounds=((0.5, 0.5, 0.05), (10.0, 10.0, 60.0)), maxfev=5000)
-            value, se = float(a), float(np.sqrt(cov[0, 0])) if np.all(np.isfinite(cov)) else float("inf")
-        except (RuntimeError, ValueError):
-            pass
-    last = float(np.mean(y[t >= span - 1.0]))        # the last second
-    if not np.isfinite(se):                          # no usable fit: continue the late trend a little
-        value = last + drift
-    # The steady state lies beyond the last values in the direction of the trend, not too far.
-    lo, hi = (last, last + MAX_EXTRAPOLATION) if rising else (last - MAX_EXTRAPOLATION, last)
-    value = float(np.clip(value, lo, hi))
-    se = float(np.hypot(se if np.isfinite(se) else abs(drift), abs(value - last) / 2))
-    return value, float(np.hypot(se, noise)), False
+    drift = slope * max(TAIL * span, 1e-9)            # change over the tail
+    if after_darker and drift > SETTLED_MM:
+        return value, float(np.hypot(se, drift / 2)), False
+    return value, se, True
 
 
 def step_levels(rec: Recording, video: VideoResult, params: Parameters, start: float,
@@ -135,13 +115,18 @@ def step_levels(rec: Recording, video: VideoResult, params: Parameters, start: f
     weighted = w * video.fixation_lin + (1 - w) * video.background_lin     # (N, G, 3)
     skip = params.delay + 0.1           # latency before the pupil starts to respond
     levels = []
+    previous = None
     for step in sequence.steps:
+        # The first step follows whatever was shown before the sequence (the built-in one starts black, so
+        # the pupil dilates from the room): count it as after a darker one.
+        after_darker = sum(step.rgb) < sum(previous.rgb) if previous is not None else True
+        previous = step
         a, b = start + step.start, start + step.end
         inside = (prep.time >= a + skip) & (prep.time < b) & np.isfinite(mm)
         colour = (vt >= a + COLOUR_SETTLE) & (vt < b)
         if inside.sum() < MIN_STEP_SAMPLES or not colour.any():
             continue
-        value, se, settled = step_asymptote(prep.time[inside], mm[inside])
+        value, se, settled = step_level(prep.time[inside], mm[inside], after_darker)
         levels.append(StepLevel(step.label, step.rgb, a, b, value, se, settled, weighted[colour].mean(axis=0)))
     return levels
 
@@ -228,9 +213,10 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     if np.isclose(k, SCALE_RANGE, rtol=0.02).any():
         notes.append("The pupil scale correction reached the limit of its range.")
     unsettled = sum(not lv.settled for lv in levels)
-    if unsettled > len(levels) / 3:
-        notes.append(f"The pupil had not settled by the end of {unsettled} of {len(levels)} steps; their "
-                     "steady state is extrapolated. Longer steps would make the fit more reliable.")
+    if unsettled:
+        notes.append(f"{unsettled} of {len(levels)} steps were still dilating at their end after a darker step, "
+                     "so their level is short of the steady state. Longer steps, or dimmer steps between "
+                     "bright ones, would make the fit more reliable.")
     if len(levels) < len(sequence.steps):
         notes.append(f"{len(sequence.steps) - len(levels)} steps had too little pupil data and were skipped.")
 

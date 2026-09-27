@@ -37,13 +37,13 @@ PD = WY(s \cdot L)
 
 Any error of the display photometry common to all participants is absorbed by \(s\).
 
-**Steady state per step.** After the current latency, the lightly smoothed pupil of each step is examined. If its
-last 30 % is flat (change below 0.1 mm), the mean of that part is the steady state. Otherwise the pupil is still
-moving: dilation can take longer than a step to settle, and after a brightening step the pupil often constricts and
-then re-dilates slowly ("pupillary escape"). An exponential \(y = A + (y_0 - A)\,e^{-(t - t_0)/\tau}\) is then fitted
-from the turning point (the extreme value before the final trend) to the end, and its asymptote \(A\) is used, limited
-to 1 mm beyond the last second in the direction of the trend. Half the extrapolated distance is added to the step's
-uncertainty, so extrapolated steps count less. Each step's colour is its mean weighted gaze/background colour in the
+**Level per step.** After the current latency, the level of each step is the mean of the lightly smoothed pupil over
+its last 30 %. It is not extrapolated: on the seven Varjo calibration recordings the apparent trend at the end of a
+step was as often a constriction as a dilation after brightening, i.e. mostly the pupil's own fluctuation, and
+extrapolating it moved levels by 0.34 mm (median) and silently dropped a quarter of the steps
+([open issue 40](../OPEN_ISSUES.md)). The one trend the physiology predicts is slow dilation after a darker step, which
+can outlast a step: a step still dilating by more than 0.1 mm over its end after a darker one is flagged, its level
+is short of the steady state, and half of that trend is added to its uncertainty. Each step's colour is its mean weighted gaze/background colour in the
 video (after the first 0.5 s), so the fit sees the same, below-nominal levels as the analysis.
 
 **Fit.** With the step luminances \(L_s\) from the display photometry and channel weights, the model is mapped onto
@@ -66,12 +66,13 @@ datasheet values and break the exact trade-off between the two ([open issue 42](
 curve is S-shaped in log luminance, the fit starts from five sensitivities (0.03 to 30) and keeps the best. The weights are reported normalised to a mean of 1.
 
 **Uncertainty and warnings.** An approximate 95 % interval of \(s\) comes from the curvature at the solution. Notes
-flag a wide interval (factor above 4), values at their limits, more than a third of the steps unsettled, and
-skipped steps.
+flag a wide interval (factor above 4), values at their limits, steps still dilating at their end, and skipped
+steps.
 
 **Synthetic check** (`tests/test_photometry.py`): a participant with sensitivity 3 and channel weights 1.5, 0.7, 0.8
-on the built-in sequence with 10 s steps, dilation τ 4 s and noise is recovered as sensitivity 2.9 (interval
-0.96–8.7), weights within 8 %, scale within 3 %; doubling the datasheet luminance halves the fitted sensitivity exactly
+on the built-in sequence with 10 s steps, dilation τ 4 s and noise is recovered as sensitivity 2.6 (interval
+0.98–7.0), weights within 5 %; the scale comes out 10 % high (dilation after the darker steps is not finished by
+their end, and the latency fit refines it); doubling the datasheet luminance halves the fitted sensitivity exactly
 and leaves the predictions unchanged.
 
 **Real recording** (Varjo XR-4, April 2026, default display photometry): see

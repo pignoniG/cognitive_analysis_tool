@@ -55,8 +55,8 @@ The overlay turns on and the start is set. Adjust it by dragging the grey line i
 ## 2. Fit the light sensitivity
 
 Click **1. Fit light sensitivity** (tick *Also fit gamma* only if the datasheet gamma clearly fails). For every step
-the fit estimates the steady-state pupil (extrapolated when the pupil had not settled by the end of the step) and
-finds the values that make the model match them:
+the fit takes the pupil's level at the end of the step (the mean of its last 30 %) and finds the values that make
+the model match them:
 
 | Parameter | Determined by |
 |---|---|
@@ -65,9 +65,9 @@ finds the values that make the model match them:
 | **Gamma** (optional) | the spacing of the grey steps |
 | Pupil scale and offset | the overall size of the responses (refined by the next fit) |
 
-The result window plots the steady-state pupil of each step in its colour against the model before and after,
-with the sensitivity's 95 % interval and warnings (e.g. when many steps had not settled, or when the sensitivity is
-weakly determined). **Apply** sets the values.
+The result window plots the level of each step in its colour against the model before and after, with the
+sensitivity's 95 % interval and warnings (e.g. when steps were still dilating at their end, or when the sensitivity
+is weakly determined). **Apply** sets the values.
 
 A sensitivity of 2 means this participant's pupil responds to the display as the standard observer would to twice
 the luminance, or equally that the display is twice as bright as its photometry says. Compare sensitivities only

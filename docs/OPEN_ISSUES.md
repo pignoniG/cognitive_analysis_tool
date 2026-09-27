@@ -518,7 +518,29 @@ is revised; they remain in the git history of this file.
     a step is near its steady state; the extrapolation then becomes unnecessary;
   - later, with step 4 of issue 43: fit the light response on the whole trace with the dynamics, which needs no
     per-step levels at all.
-- **Status:** open; the estimator change is small and could be made before the new sequence.
+- **2.0 (September 2026):** the level is the mean of the step's last 30 %, never extrapolated; only a step still
+  dilating by more than 0.1 mm at its end after a darker step is flagged (its level is short of the steady state),
+  with half that trend added to its uncertainty. On a–g 1–3 steps per participant are flagged, all darkening steps
+  (grey 0 and the first, dimmest step of each hue).
+- **Effect on the whole calibration** (same data and fits, old estimator → new; ΔPD RMS in the sequence after both
+  fits, two constriction stages without and with the transient):
+
+  | | sensitivity | two stages | two stages + transient |
+  |---|---|---|---|
+  | a | 48.5 → 50.9 | 0.140 → 0.142 | 0.132 → 0.132 |
+  | b | 0.0022 → 0.017 | 0.382 → 0.583 | 0.348 → 0.529 |
+  | c | 9.46 → 1.57 | 0.209 → 0.239 | 0.182 → 0.199 |
+  | d | 0.491 → 0.103 | 0.502 → 0.427 | 0.424 → 0.345 |
+  | e | 9.04 → 10.1 | 0.333 → 0.308 | 0.296 → 0.264 |
+  | f | 57.2 → 48.3 | 0.165 → 0.174 | 0.142 → 0.148 |
+  | g | 0.0489 → 0.0499 | 0.334 → 0.305 | 0.270 → 0.240 |
+
+  Better for d, e and g, equal for a, worse for c, f and markedly for b, the participant the model fits worst
+  (0.68 mm on its step levels). The light fit is judged on the step levels and the result on the whole trace, and
+  while the model misses the step levels by 0.2–0.7 mm (issue 43) a cleaner level estimate does not guarantee a
+  better whole-trace fit; the extrapolation's wins look accidental (it fitted fluctuations). Kept for being
+  principled and robust; step 4 of issue 43 (fitting on the whole trace) would remove the mismatch.
+- **Status:** fixed in 2.0 (estimator); longer or dark-preceded steps in the new sequence remain useful.
 
 ### 41. Negative constriction onsets are accepted
 - **Where:** 2.0 `fit.onset_latency`.
