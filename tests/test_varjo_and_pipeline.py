@@ -13,7 +13,7 @@ from conftest import write_varjo_recording
 def test_varjo_reader(varjo_folder):
     assert devices.detect(varjo_folder) == "varjo"
     rec = devices.load(varjo_folder)
-    assert rec.profile.native_rate == 100
+    assert rec.profile.native_rate == 200
     assert rec.measured_rate == pytest.approx(100)
     assert len(rec.time) == 400
     assert rec.time[1] == pytest.approx(0.01)
@@ -108,3 +108,31 @@ def test_pupil_range_and_scale_warning(tmp_path):
     assert np.nanmax(r.measured) < 4.5 and not r.warnings
     r = pipeline.run(rec, video, Parameters(alignment="none", pupil_correction=0.4))
     assert r.warnings and "pupil scale" in r.warnings[0]
+
+
+def test_varjo_reader_uses_header_names_and_tolerates_nan(tmp_path):
+    from conftest import VARJO_HEADER
+    folder = tmp_path / "shuffled"
+    folder.mkdir()
+    # Columns in a different order than the pilot export, with a Windows NaN in a used column.
+    order = list(reversed(VARJO_HEADER))
+    col = {h: i for i, h in enumerate(order)}
+    rows = []
+    for i in range(3):
+        r = ["0"] * len(order)
+        r[col["relative_to_unix_epoch_timestamp"]] = str(1_700_000_000 * 10**9 + i * 5_000_000)
+        r[col["relative_to_video_first_frame_timestamp"]] = str(i * 5_000_000)
+        for c in ("status", "left_status", "right_status"):
+            r[col[c]] = "2"
+        r[col["left_pupil_diameter_in_mm"]] = "-nan(ind)" if i == 1 else "1.5"
+        r[col["right_pupil_diameter_in_mm"]] = "1.6"
+        rows.append(r)
+    import csv as _csv
+    with open(folder / "varjo_gaze_output_x.csv", "w", newline="") as f:
+        w = _csv.writer(f)
+        w.writerow(order)
+        w.writerows(rows)
+    rec = devices.load(folder)
+    assert rec.pupil_right.tolist() == [1.6, 1.6, 1.6]
+    assert rec.pupil_left[0] == 1.5 and np.isnan(rec.pupil_left[1])
+    assert rec.time[1] == pytest.approx(0.005)

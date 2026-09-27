@@ -133,6 +133,16 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
 
     _, k, b = problem.solve(delay, attack, release)
     notes = []
+    at_limit = []
+    for name, value, (lo, hi) in (("latency", delay, DELAY_RANGE),
+                                  ("dilation τ", attack if attack is not None else None, ATTACK_RANGE),
+                                  ("constriction τ", release if release is not None else None, RELEASE_RANGE)):
+        if value is not None and (value <= lo * 1.02 + 1e-3 or value >= hi * 0.98):
+            at_limit.append(name)
+    if at_limit:
+        notes.append(f"{', '.join(at_limit)} reached the limit of the search range: the model probably does "
+                     "not match the measured pupil yet. Adjust Lmin, Lmax, gains and gamma on the sequence "
+                     "first, then fit again.")
     if not problem.fit_scale:
         notes.append("The pupil barely varies in the window, so only the offset was fitted.")
     elif k == 1.0:

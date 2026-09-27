@@ -35,7 +35,10 @@ them rather than describing the headset or the participant.
   pixel data has no default and is scaled by the 2021 ratio method). Participants get a `pupil_correction`
   multiplier (fitted from the calibration sequence in the next step). The 1–9 mm validity range is applied after
   scaling, and a warning is shown when the median diameter is outside 2–8 mm.
-- **Status:** fixed in 2.0 (correction fit pending, see issue 2/3 work).
+- **Varjo sample:** `left_iris_diameter_in_mm` is exactly 6.04 mm in every sample, half of a typical 11–12 mm iris,
+  which supports the radius explanation. Being a constant, it cannot serve as an independent per-session scale check.
+  Eye tracking runs at 200 Hz (the device profile now says so).
+- **Status:** fixed in 2.0.
 
 ### 2. Measured pupil is shifted to match the expected mean
 - **Where:** `lum_analysis.py` (`coeff = meanLux - meanRec`); 2.0 `Parameters.align_mean = True`.
@@ -220,7 +223,10 @@ them rather than describing the headset or the participant.
 - **Problem:** columns 1, 2, 6, 24–26, 34–36, 39, 43 are hardcoded. A Varjo Base update that adds or reorders
   columns would silently read the wrong data.
 - **Proposal:** read by header name once a sample export is available.
-- **Status:** needs data.
+- **2.0:** columns are found by header name (checked against a Varjo Base export from April 2026, which matches the
+  old positions), with the old positions as a fallback. Varjo Base on Windows writes missing values as `-nan(ind)`,
+  which the reader now treats as missing (the first run on real data failed on it).
+- **Status:** fixed in 2.0.
 
 ### 19. Only the left pupil was range-checked
 - **Where:** `processPupilVarjo` (checks column 39 only).
@@ -233,7 +239,10 @@ them rather than describing the headset or the participant.
   of both eyes. Varjo also exports a combined gaze.
 - **Proposal:** use the combined gaze by default; check the vertical flip and the mapping onto the
   3840 × 3744 frame (paper: "only monocular view shown" in Fig. 2) against a sample.
-- **Status:** kept, needs data.
+- **Checked on the Varjo sample:** the capture shows the left eye's view. The left eye's projection and the combined
+  gaze projected to the left view coincide; the right eye's projection is offset (it is in the right view).
+  2.0 now uses the combined gaze (both eyes) by default; "left" and "right" remain options.
+- **Status:** fixed in 2.0.
 
 ### 21. Video frame index assumes constant frame rate
 - **Where:** `readGazeVarjo` (`frame_n = int(t / (1 / fps))`); 2.0 `video.analyse_video`.
@@ -245,7 +254,9 @@ them rather than describing the headset or the participant.
   assigned every gaze sample to the wrong frame, by up to 24 frames (0.8 s).
 - **2.0:** readers can supply recorded frame timestamps; gaze samples are then matched to the nearest frame, which
   agrees with Pupil Player's `world_index` for 100 % of the sample's gaze samples. Varjo still uses the frame rate.
-- **Status:** fixed for Pupil Core; needs a Varjo sample to check.
+- **Varjo sample:** H.264 at a steady 30 fps (all frame intervals 33.33 ms), and gaze timestamps are relative to the
+  first video frame, so frame-rate timing is correct for Varjo.
+- **Status:** fixed in 2.0.
 
 ### 22. Event log times depend on the computer's time zone
 - **Where:** `data_tools.readEvents` (dateutil parse of a naive timestamp); 2.0 `varjo.read_event_log`.
@@ -313,6 +324,15 @@ them rather than describing the headset or the participant.
 - **2.0:** eyes are kept separate (eye0 = right, eye1 = left) and combined per sample; the 3D model's diameter in mm
   is used when available, pixels (scaled by the 2021 ratio method) otherwise.
 - **Status:** changed in 2.0 (results differ from 1.x).
+
+### 31. Calibration step length differs from the paper
+- **Where:** the Varjo sample recording (April 2026).
+- **Observation:** the 20-step sequence uses 10 s steps (200 s, starting 16.4 s into the recording), and the last
+  blue step stays on for another 26 s; the paper describes 6 s steps (120 s). Recorded colour levels are also below
+  nominal (grey 255 → 253, red 255 → 231) because of the capture pipeline and compression.
+- **2.0:** "Find in recording" locates the sequence from the analysed video, rescales its timing to the recording's
+  step length and sets the start. The paper should state the step length used.
+- **Status:** open (paper).
 
 ## D. Paper text
 

@@ -32,14 +32,14 @@ def main(argv: list[str] | None = None) -> int:
         print("No scene video found", file=sys.stderr)
         return 1
     video = None if args.reanalyse else VideoResult.load_cached(rec.folder, settings, rec.scene_video,
-                                                                      rec.scene_frame_times)
+                                                                      rec.scene_frame_times, rec.gaze)
     if video is None:
         print(f"Analysing {rec.scene_video.name} ...")
         video = analyse_video(rec.scene_video, rec.time, rec.gaze, settings,
                               progress=lambda p: print(f"\r{p:5.0%}", end="", flush=True), workers=args.workers,
                               frame_times=rec.scene_frame_times)
         print()
-        video.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times)
+        video.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze)
 
     result = pipeline.run(rec, video, params)
     print(f"ΔPD RMS: {result.cw_rms:.3f} mm, SD: {result.cw_sd:.3f} mm "

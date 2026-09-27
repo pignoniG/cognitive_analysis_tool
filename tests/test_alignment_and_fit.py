@@ -82,6 +82,7 @@ def test_fit_recovers_latency_dynamics_scale_and_offset(tmp_path):
     assert fit.pupil_offset == pytest.approx(true["b"], abs=0.1)
     assert fit.rms_after < fit.rms_before / 3
     assert fit.params.alignment == "fixed" and fit.params.dynamics
+    assert not fit.notes
 
 
 def test_fit_on_flat_pupil_fits_offset_only(varjo_folder):
@@ -89,3 +90,20 @@ def test_fit_on_flat_pupil_fits_offset_only(varjo_folder):
     fit = fit_calibration(rec, video, Parameters(), start=0.0, fit_dynamics=False)
     assert fit.pupil_correction == 1.0 and fit.notes
     assert np.isfinite(fit.rms_after)
+
+
+def test_fit_warns_when_a_parameter_hits_its_limit(tmp_path):
+    # No response delay at all in the synthetic participant: latency ends on the lower limit.
+    params = Parameters()
+    colours = [0, 255, 40, 200, 0, 128] * 2
+    rate, step = 100, 6
+    t = np.arange(len(colours) * step * rate) / rate
+    level = np.array([colours[int(x // step)] for x in t])
+    L = luminance.absolute_luminance(luminance.to_linear(np.stack([level] * 3, axis=1), params.gamma),
+                                     params.l_min, params.l_max)
+    pd = model.watson_yellott(L, params.age, varjo.PROFILE.field_area)
+    folder = write_varjo_recording(tmp_path / "cal", colours, seconds_per_level=step,
+                                   pupil_mm=lambda x: pd[min(int(x * rate), len(t) - 1)] / 2)
+    rec, video = _load(folder)
+    fit = fit_calibration(rec, video, params, start=0.0, end=t[-1], fit_dynamics=False)
+    assert fit.delay < 0.05 and fit.notes and "limit" in fit.notes[0]

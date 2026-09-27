@@ -7,6 +7,8 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 STEP_SECONDS = 6.0
 
 
@@ -112,3 +114,71 @@ def load_sequence(path: str | Path) -> Sequence:
             else f"RGB {rgb[0]}, {rgb[1]}, {rgb[2]}"
         steps.append(Step(s, e, rgb, label))
     return Sequence(tuple(steps), path.name)
+
+
+def scaled(sequence: Sequence, factor: float) -> Sequence:
+    """The sequence with every step's timing multiplied by ``factor``."""
+    if abs(factor - 1.0) < 1e-6:
+        return sequence
+    steps = tuple(Step(s.start * factor, s.end * factor, s.rgb, s.label) for s in sequence.steps)
+    return Sequence(steps, f"{sequence.name} ×{factor:.3g}")
+
+
+@dataclass(frozen=True)
+class Location:
+    start: float          # s, recording time of the sequence start
+    sequence: Sequence    # possibly rescaled to the recording's step length
+    error: float          # relative RMS error of the colour match (0 = perfect)
+
+
+def _change_points(time, rgb, threshold=8.0, min_gap=0.3):
+    jumps = np.flatnonzero(np.abs(np.diff(rgb, axis=0)).max(axis=1) > threshold)
+    out = []
+    for i in jumps:
+        if not out or time[i + 1] - out[-1] > min_gap:
+            out.append(time[i + 1])
+    return np.asarray(out)
+
+
+def locate(time: np.ndarray, rgb: np.ndarray, sequence: Sequence, gamma: float = 2.2) -> Location | None:
+    """Find ``sequence`` in a recording from the measured scene colour ``rgb`` (N, 3, code
+    values) at ``time`` (s). Step changes in the colour give candidate starts and the step
+    length; each candidate is scored by how well the sequence's colours, with one gain per
+    channel (recorded levels are lower than nominal), explain the measured colours."""
+    order = np.argsort(time)
+    t, c = np.asarray(time)[order], np.asarray(rgb, dtype=float)[order]
+    changes = _change_points(t, c)
+    if len(changes) < 3 or not sequence.steps:
+        return None
+    lengths = np.array([s.end - s.start for s in sequence.steps])
+    factors = {1.0}
+    if np.allclose(lengths, lengths[0], rtol=0.02):
+        gaps = np.diff(changes)
+        typical = np.median(gaps[gaps > 0.5]) if (gaps > 0.5).any() else lengths[0]
+        factors.add(round(float(typical / lengths[0]), 3))
+
+    grid = np.arange(t[0], t[-1], 0.1)
+    measured = (np.stack([np.interp(grid, t, c[:, k]) for k in range(3)], axis=1) / 255.0) ** gamma
+    best = None
+    for factor in factors:
+        seq = scaled(sequence, factor)
+        starts_rel = np.array([s.start for s in seq.steps])
+        colours = (np.array([s.rgb for s in seq.steps], dtype=float) / 255.0) ** gamma
+        for change in changes:
+            for rel in starts_rel:
+                start = change - rel
+                inside = (grid >= start) & (grid < start + seq.duration)
+                if inside.sum() < 10:
+                    continue
+                # Skip the first half second of every step: the video changes a frame late.
+                phase = grid[inside] - start
+                k = np.clip(np.searchsorted(starts_rel, phase, side="right") - 1, 0, len(starts_rel) - 1)
+                settled = phase - starts_rel[k] > 0.5
+                exp, mea = colours[k][settled], measured[inside][settled]
+                if len(exp) < 10:
+                    continue
+                gain = (exp * mea).sum(axis=0) / np.maximum((exp * exp).sum(axis=0), 1e-9)
+                err = np.sqrt(np.mean((mea - exp * gain) ** 2)) / max(np.sqrt(np.mean(mea ** 2)), 1e-9)
+                if best is None or err < best.error:
+                    best = Location(float(start), seq, float(err))
+    return best

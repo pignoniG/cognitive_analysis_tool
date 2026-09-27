@@ -40,12 +40,16 @@ _CODES = np.arange(256, dtype=float)
 _LUT = (_CODES / 255.0)[None, :] ** GAMMA_GRID[:, None]   # (G, 256)
 
 
+def _array_key(values: Optional[np.ndarray]) -> str:
+    if values is None:
+        return ""
+    import hashlib
+    return hashlib.sha1(np.ascontiguousarray(values, dtype=np.float64).tobytes()).hexdigest()[:16]
+
+
 def _clock_key(frame_times: Optional[np.ndarray]) -> str:
     """Identifies how gaze samples were matched to frames, for the cache check."""
-    if frame_times is None:
-        return "fps"
-    import hashlib
-    return "times:" + hashlib.sha1(np.asarray(frame_times, dtype=np.float64).tobytes()).hexdigest()[:16]
+    return "fps" if frame_times is None else "times:" + _array_key(frame_times)
 
 
 def _histograms(pixels: np.ndarray) -> np.ndarray:
@@ -93,7 +97,7 @@ class VideoResult:
                    np.empty((0, g, 3)))
 
     def save(self, folder: Path, settings: VideoSettings, video: Path,
-             frame_times: Optional[np.ndarray] = None) -> None:
+             frame_times: Optional[np.ndarray] = None, gaze: Optional[np.ndarray] = None) -> None:
         lin_cols = [f"{area}_lin{g:.1f}_{c}" for area in ("fix", "bg", "frame") for g in GAMMA_GRID for c in "rgb"]
         n = len(self.time)
         with open(folder / CACHE_CSV, "w", newline="") as f:
@@ -105,21 +109,22 @@ class VideoResult:
             for row in table:
                 w.writerow([f"{v:.6g}" for v in row])
         meta = {"format": CACHE_FORMAT, "gammas": GAMMA_GRID.tolist(), "settings": asdict(settings),
-                "video": video.name, "frame_clock": _clock_key(frame_times)}
+                "video": video.name, "frame_clock": _clock_key(frame_times), "gaze": _array_key(gaze)}
         (folder / CACHE_JSON).write_text(json.dumps(meta, indent=2))
 
     @classmethod
     def load_cached(cls, folder: Path, settings: VideoSettings, video: Path,
-                    frame_times: Optional[np.ndarray] = None) -> Optional["VideoResult"]:
-        """Return the cached result if it was made from the same video, settings, frame clock
-        and format."""
+                    frame_times: Optional[np.ndarray] = None,
+                    gaze: Optional[np.ndarray] = None) -> Optional["VideoResult"]:
+        """Return the cached result if it was made from the same video, settings, frame clock,
+        gaze samples and format."""
         meta_path, csv_path = folder / CACHE_JSON, folder / CACHE_CSV
         if not (meta_path.exists() and csv_path.exists()):
             return None
         meta = json.loads(meta_path.read_text())
         if (meta.get("format") != CACHE_FORMAT or meta.get("gammas") != GAMMA_GRID.tolist()
                 or meta.get("settings") != asdict(settings) or meta.get("video") != video.name
-                or meta.get("frame_clock") != _clock_key(frame_times)):
+                or meta.get("frame_clock") != _clock_key(frame_times) or meta.get("gaze") != _array_key(gaze)):
             return None
         data = np.loadtxt(csv_path, delimiter=",", skiprows=1, ndmin=2)
         g = len(GAMMA_GRID)

@@ -38,3 +38,24 @@ def test_bad_files_are_rejected(tmp_path):
         calibration.load_sequence(write(tmp_path, "when,colour\n0,red\n"))
     with pytest.raises(ValueError):
         calibration.load_sequence(write(tmp_path, "0,0,0,0\n0,1,1,1\n"))
+
+
+def test_locate_finds_start_and_step_length():
+    import numpy as np
+    seq = calibration.DEFAULT                    # 6 s steps
+    start, factor = 12.3, 10 / 6                 # recording used 10 s steps
+    t = np.arange(0, 230, 0.01)
+    rgb = np.full((len(t), 3), 30.0)             # a dim scene before and after
+    for s in calibration.scaled(seq, factor).steps:
+        sel = (t >= start + s.start) & (t < start + s.end)
+        rgb[sel] = np.array(s.rgb) * 0.9         # recorded levels are lower than nominal
+    loc = calibration.locate(t, rgb, seq)
+    assert loc.start == pytest.approx(start, abs=0.05)
+    assert loc.sequence.duration == pytest.approx(200, abs=0.5)
+    assert loc.error < 0.05
+
+
+def test_locate_gives_up_without_changes():
+    import numpy as np
+    t = np.arange(0, 10, 0.1)
+    assert calibration.locate(t, np.full((len(t), 3), 100.0), calibration.DEFAULT) is None

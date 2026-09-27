@@ -52,6 +52,9 @@ def test_cache_depends_on_frame_times(tmp_path):
     assert VideoResult.load_cached(rec.folder, s, rec.scene_video, rec.scene_frame_times) is not None
     assert VideoResult.load_cached(rec.folder, s, rec.scene_video, None) is None
     assert VideoResult.load_cached(rec.folder, s, rec.scene_video, rec.scene_frame_times + 0.01) is None
+    _video(rec).save(rec.folder, s, rec.scene_video, rec.scene_frame_times, rec.gaze)
+    assert VideoResult.load_cached(rec.folder, s, rec.scene_video, rec.scene_frame_times, rec.gaze) is not None
+    assert VideoResult.load_cached(rec.folder, s, rec.scene_video, rec.scene_frame_times, rec.gaze + 0.01) is None
 
 
 def test_2d_pixels_fall_back_to_fitted_scale(tmp_path):

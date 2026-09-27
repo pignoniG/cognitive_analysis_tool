@@ -5,7 +5,19 @@ import cv2
 import numpy as np
 import pytest
 
-from cwtool.devices import varjo
+
+
+# Header of a Varjo Base eye tracking export (April 2026).
+VARJO_HEADER = (
+    "raw_timestamp,relative_to_unix_epoch_timestamp,relative_to_video_first_frame_timestamp,focus_distance,"
+    "frame_number,stability,status,gaze_forward_x,gaze_forward_y,gaze_forward_z,gaze_origin_x,gaze_origin_y,"
+    "gaze_origin_z,gaze_projected_to_left_view_x,gaze_projected_to_left_view_y,gaze_projected_to_right_view_x,"
+    "gaze_projected_to_right_view_y,left_forward_x,left_forward_y,left_forward_z,left_origin_x,left_origin_y,"
+    "left_origin_z,left_pupil_size,left_status,left_projected_x,left_projected_y,right_forward_x,right_forward_y,"
+    "right_forward_z,right_origin_x,right_origin_y,right_origin_z,right_pupil_size,right_status,right_projected_x,"
+    "right_projected_y,inter_pupillary_distance_in_mm,left_iris_diameter_in_mm,left_pupil_diameter_in_mm,"
+    "left_pupil_iris_diameter_ratio,left_eye_openness,right_iris_diameter_in_mm,right_pupil_diameter_in_mm,"
+    "right_pupil_iris_diameter_ratio,right_eye_openness").split(",")
 
 
 def write_varjo_recording(folder: Path, grays, seconds_per_level=1.0, fps=10, size=(64, 48),
@@ -22,20 +34,24 @@ def write_varjo_recording(folder: Path, grays, seconds_per_level=1.0, fps=10, si
     writer.release()
 
     n = int(len(grays) * seconds_per_level * rate)
+    col = {h: i for i, h in enumerate(VARJO_HEADER)}
     with open(folder / "varjo_gaze_output_test.csv", "w", newline="") as f:
         wr = csv.writer(f)
-        wr.writerow([f"c{i}" for i in range(varjo.COL_RIGHT_PUPIL_MM + 2)])
+        wr.writerow(VARJO_HEADER)
         for i in range(n):
-            row = ["0"] * (varjo.COL_RIGHT_PUPIL_MM + 2)
+            row = ["0"] * len(VARJO_HEADER)
+            row[col["left_iris_diameter_in_mm"]] = "-nan(ind)"   # as Varjo Base writes missing values
             t_ns = int(i * 1e9 / rate)
-            row[varjo.COL_EPOCH_NS] = str(1_700_000_000 * 10**9 + t_ns)
-            row[varjo.COL_RELATIVE_NS] = str(t_ns)
-            for c in (varjo.COL_STATUS, varjo.COL_LEFT_STATUS, varjo.COL_RIGHT_STATUS):
-                row[c] = "3"
-            row[varjo.COL_LEFT_PROJ_X] = row[varjo.COL_RIGHT_PROJ_X] = str(gaze[0])
-            row[varjo.COL_LEFT_PROJ_Y] = row[varjo.COL_RIGHT_PROJ_Y] = str(gaze[1])
+            row[col["relative_to_unix_epoch_timestamp"]] = str(1_700_000_000 * 10**9 + t_ns)
+            row[col["relative_to_video_first_frame_timestamp"]] = str(t_ns)
+            for c in ("status", "left_status", "right_status"):
+                row[col[c]] = "2"
+            for c in ("left_projected_x", "right_projected_x", "gaze_projected_to_left_view_x"):
+                row[col[c]] = str(gaze[0])
+            for c in ("left_projected_y", "right_projected_y", "gaze_projected_to_left_view_y"):
+                row[col[c]] = str(gaze[1])
             p = pupil_mm(i / rate) if callable(pupil_mm) else pupil_mm
-            row[varjo.COL_LEFT_PUPIL_MM] = row[varjo.COL_RIGHT_PUPIL_MM] = str(p)
+            row[col["left_pupil_diameter_in_mm"]] = row[col["right_pupil_diameter_in_mm"]] = str(p)
             wr.writerow(row)
     return folder
 

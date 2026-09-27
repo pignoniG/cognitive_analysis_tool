@@ -35,6 +35,7 @@ class MainWindow(QMainWindow):
         self._task: Task | None = None
         self._params_path: Path | None = None
         self._lux_folder: Path | None = None
+        self._base_sequence: calibration.Sequence | None = None
 
         self._recompute_timer = QTimer(self, singleShot=True, interval=RECOMPUTE_DELAY_MS)
         self._recompute_timer.timeout.connect(self.recompute)
@@ -130,8 +131,13 @@ class MainWindow(QMainWindow):
         default_sequence.clicked.connect(lambda: self.set_sequence(calibration.DEFAULT))
         sequence_buttons.addWidget(load_sequence)
         sequence_buttons.addWidget(default_sequence)
+        self.find_sequence_button = QPushButton("Find in recording")
+        self.find_sequence_button.setToolTip("Locate the sequence in the analysed video and adapt its step "
+                                             "length if the recording used different timing")
+        self.find_sequence_button.clicked.connect(self.find_sequence)
         cal_layout.addRow(self.sequence_label)
         cal_layout.addRow(sequence_buttons)
+        cal_layout.addRow(self.find_sequence_button)
         cal_layout.addRow(self.sequence_check)
         cal_layout.addRow("Start", self.sequence_start)
         cal_layout.addRow("ΔPD RMS in sequence", self.sequence_rms)
@@ -200,6 +206,7 @@ class MainWindow(QMainWindow):
         self.open_action.setEnabled(not busy)
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
+        self.find_sequence_button.setEnabled(self.video is not None and not busy)
         if self.result is None:
             self.summary_label.setText("Open a recording to start." if not has_rec else "")
         else:
@@ -276,7 +283,8 @@ class MainWindow(QMainWindow):
         rec = self.recording
         settings = self.params_panel.video_settings().for_recording(rec)
         if use_cache:
-            cached = VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times)
+            cached = VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times,
+                                             rec.gaze)
             if cached is not None:
                 self._video_ready(cached, "cached analysis")
                 return
@@ -286,7 +294,7 @@ class MainWindow(QMainWindow):
                                 frame_times=rec.scene_frame_times)
             if cancelled():
                 return None
-            res.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times)
+            res.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze)
             return res
 
         self._start_task(work, lambda res: res and self._video_ready(res, "analysed"),
@@ -404,7 +412,24 @@ class MainWindow(QMainWindow):
         self._settings.setValue("last_sequence", path)
         self.set_sequence(sequence)
 
-    def set_sequence(self, sequence: calibration.Sequence) -> None:
+    def find_sequence(self) -> None:
+        if self.video is None:
+            return
+        base = self._base_sequence or self.sequence
+        loc = calibration.locate(self.video.time, self.video.background_rgb, base)
+        if loc is None or loc.error > 0.35:
+            self._error("Sequence not found", "Could not match the calibration sequence to this recording's "
+                                              "scene colours. Place it by dragging the start line.")
+            return
+        self.set_sequence(loc.sequence, keep_base=True)
+        self.sequence_start.setValue(loc.start)
+        self.sequence_check.setChecked(True)
+        self.statusBar().showMessage(f"Sequence found at {loc.start:.2f} s "
+                                     f"(colour match error {loc.error:.0%})", 5000)
+
+    def set_sequence(self, sequence: calibration.Sequence, keep_base: bool = False) -> None:
+        if not keep_base:
+            self._base_sequence = sequence
         self.sequence = sequence
         self.sequence_label.setText(f"{sequence.name}: {len(sequence.steps)} steps, {sequence.duration:.0f} s")
         self._sequence_changed()
