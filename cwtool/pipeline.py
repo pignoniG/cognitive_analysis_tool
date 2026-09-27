@@ -148,8 +148,15 @@ PUPIL_RANGE_MM = (1.0, 9.0)
 PLAUSIBLE_MM = (2.0, 8.0)
 
 
+def steady_pupil(lum, params: Parameters, field_area: float) -> np.ndarray:
+    """Light-adapted pupil (mm) for luminance ``lum`` (cd/m²): Watson & Yellott with the
+    participant's light sensitivity applied to the luminance."""
+    return model.watson_yellott(np.asarray(lum, dtype=float) * params.sensitivity, params.age, field_area,
+                                params.eyes, params.reference_age)
+
+
 def expected_pupil(lum: np.ndarray, fs: float, params: Parameters, field_area: float) -> np.ndarray:
-    pd = model.watson_yellott(lum, params.age, field_area, params.eyes, params.reference_age)
+    pd = steady_pupil(lum, params, field_area)
     pd = model.delay(pd, fs, params.delay)
     if params.dynamics:
         pd = model.attack_release(pd, fs, params.attack, params.release)
@@ -360,8 +367,7 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         cw = np.where(good, smooth, np.nan)
 
     if prep.photometric:
-        ends = model.watson_yellott(np.array([params.l_min, params.l_max]), params.age, profile.field_area,
-                                    params.eyes, params.reference_age)
+        ends = steady_pupil(np.array([params.l_min, params.l_max]), params, profile.field_area)
     else:
         ends = (float("nan"), float("nan"))  # Lmin/Lmax are not used with a lux sensor or fixed exposure
 

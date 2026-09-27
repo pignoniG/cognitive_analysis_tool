@@ -63,7 +63,7 @@ What the analysis needs to know about a device, as opposed to a participant:
 | Field | Use |
 |---|---|
 | `pupil_unit`, `pupil_scale` | device units × scale = mm; `None` for pixels (scaled per recording) |
-| `luminance_source` | `display` (photometric calibration) or `lux_sensor` |
+| `luminance_source` | `display` (display photometry) or `lux_sensor` |
 | `field_of_view` | deg (h, v) spanned by the scene video: converts the gaze circle radius to pixels |
 | `circular_scene` | the scene video is a circle with black corners that must be masked out (Varjo) |
 | `native_rate` | Hz, used when `analysis_rate` is 0 |

@@ -18,8 +18,10 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 - **Open recording…**: choose a recording folder. The device is detected automatically.
 - **Choose lux folder…**: the folder with lux sensor logs, for Pupil recordings whose logs are not in the recording
   folder or its `lux` subfolder. It applies to the recordings opened afterwards.
-- **Load parameters… / Save parameters / Save parameters as…**: the participant's parameter file (JSON). Files
-  written by version 1.x are converted when loaded.
+- **Load parameters… / Save parameters / Save parameters as…**: the participant's parameter file (JSON), without
+  the display photometry. Files written by version 1.x are converted when loaded.
+- **Load display photometry… / Save display photometry…**: the headset's nominal Lmin, Lmax and gamma. The last
+  file used with a device is loaded automatically with its recordings; the window title shows which one is in use.
 - **Export results…**: CSVs, the parameters used and a PDF plot, into a folder of your choice
   (default `cwtool_export` inside the recording).
 
@@ -35,7 +37,7 @@ fixed-exposure scene camera, for recordings of the same exposure without a lux l
 
 ## Parameters
 
-Parameters are grouped as in [Parameters](../reference/parameters.md): Participant, Photometric calibration,
+Parameters are grouped as in [Parameters](../reference/parameters.md): Participant, Display photometry, Participant light response,
 Pupil signal, Lux sensor, Scene camera without lux log, Dynamics, ΔPD. Every change re-runs the analysis from the cached video pass, so the
 plots follow instantly.
 
@@ -75,7 +77,9 @@ See [Participant calibration](calibration.md) for the procedure.
 - **Start**: the sequence start in seconds.
 - **ΔPD RMS in sequence**: how well the model fits within the sequence, the value to minimise when calibrating
   by hand.
-- **Fit latency, scale and offset**: the automatic fit of the participant's pupil parameters.
+- **1. Fit light sensitivity**: the participant's light sensitivity and channel weights (optionally gamma), with a
+  result window showing each step's steady-state pupil against the model.
+- **2. Fit latency, scale and offset**: the participant's timing, pupil scale and offset.
 
 ## Video preview
 

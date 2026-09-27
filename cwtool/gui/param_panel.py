@@ -16,9 +16,12 @@ NUMBERS = {
     "reference_age": ("Reference age", 1, 120, 0.1, 2, "Watson & Yellott reference age"),
     "l_min": ("Lmin (cd/m²)", 0, 1000, 0.1, 3, "Panel black point"),
     "l_max": ("Lmax (cd/m²)", 0.1, 100000, 50, 1, "Panel white point"),
-    "gain_r": ("Red gain", 0, 100, 0.1, 2, "Relative gain of the red channel"),
-    "gain_g": ("Green gain", 0, 100, 0.1, 2, "Relative gain of the green channel"),
-    "gain_b": ("Blue gain", 0, 100, 0.1, 2, "Relative gain of the blue channel"),
+    "sensitivity": ("Light sensitivity (×)", 0.001, 1000, 0.1, 3,
+                    "Participant factor on the luminance entering the pupil model; it also absorbs any "
+                    "common error of the display photometry. Fitted on the calibration sequence"),
+    "gain_r": ("Red weight", 0, 100, 0.1, 2, "Relative weight of the red channel for the pupil"),
+    "gain_g": ("Green weight", 0, 100, 0.1, 2, "Relative weight of the green channel for the pupil"),
+    "gain_b": ("Blue weight", 0, 100, 0.1, 2, "Relative weight of the blue channel for the pupil"),
     "gamma": ("Gamma", 1.4, 3.0, 0.1, 2, "Display gamma: code values are decoded as (C/255)^γ"),
     "fixation_weight": ("Fixation weight", 0, 1, 0.05, 2, "Weight of the gaze area; the background gets the rest"),
     "pupil_offset": ("Pupil offset (mm)", -10, 10, 0.01, 3, "Offset used by alignment 'fixed' (set by the calibration fit)"),
@@ -70,7 +73,8 @@ TEXTS = {
 
 GROUPS = [
     ("Participant", ["age", "reference_age", "eyes", "eye"]),
-    ("Photometric calibration", ["l_min", "l_max", "gain_r", "gain_g", "gain_b", "gamma", "fixation_weight"]),
+    ("Display photometry (datasheet)", ["l_min", "l_max", "gamma"]),
+    ("Participant light response", ["sensitivity", "gain_r", "gain_g", "gain_b", "fixation_weight"]),
     ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
                       "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
     ("Lux sensor (Pupil devices)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),

@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 
 
-PARAMS_VERSION = 2
+PARAMS_VERSION = 3
 
 
 @dataclass
@@ -36,16 +36,22 @@ class Parameters:
     eyes: int = 2
     eye: str = "both"                    # pupil used: "left", "right" or "both"
 
-    # Photometric calibration
-    # Real luminances: the adapting field area comes from the device's field of view.
+    # Display photometry (display devices): the headset's nominal values, e.g. from its datasheet.
+    # Kept in their own file (DisplayPhotometry), not in participant files, since they belong to
+    # the device and its settings. Real luminances: the adapting field area comes from the device.
     # Default l_max is the mean of the Varjo pilot calibrations (4250 cd/m² at field 160),
     # converted to the XR-4 field area.
     l_min: float = 0.02                  # cd/m², panel black point
     l_max: float = 70.0                  # cd/m², panel white point
-    gain_r: float = 1.0
+    gamma: float = 2.2
+
+    # Participant light response, fitted on the calibration sequence. The sensitivity multiplies
+    # the luminance entering Watson & Yellott, so it also absorbs any common error of the
+    # display photometry (e.g. a datasheet luminance that does not match the headset's settings).
+    sensitivity: float = 1.0
+    gain_r: float = 1.0                  # channel weights for the pupil (relative balance)
     gain_g: float = 1.0
     gain_b: float = 1.0
-    gamma: float = 2.2
     fixation_weight: float = 0.65        # background weight is 1 - fixation_weight
 
     # Lux sensor (Pupil devices): average luminance = (gain · lux + offset) / solid angle (1.x values)
@@ -105,16 +111,23 @@ class Parameters:
             return self.camera_white * self.camera_reference_ms / self.camera_exposure_ms
         return self.camera_white
 
-    def save(self, path: str | Path) -> None:
-        Path(path).write_text(json.dumps(asdict(self), indent=2))
+    def save(self, path: str | Path, participant_only: bool = False) -> None:
+        """Write the parameters as JSON. ``participant_only`` leaves out the display photometry,
+        which is saved separately (:class:`DisplayPhotometry`); exports keep everything used."""
+        data = asdict(self)
+        if participant_only:
+            for key in DISPLAY_FIELDS:
+                data.pop(key)
+        Path(path).write_text(json.dumps(data, indent=2))
 
     @classmethod
-    def load(cls, path: str | Path, profile=None) -> "Parameters":
-        return cls.from_dict(json.loads(Path(path).read_text()), profile)
+    def load(cls, path: str | Path, profile=None, base: "Parameters | None" = None) -> "Parameters":
+        return cls.from_dict(json.loads(Path(path).read_text()), profile, base)
 
     @classmethod
-    def from_dict(cls, data: dict, profile=None) -> "Parameters":
-        """Build parameters, converting files written before version 2.
+    def from_dict(cls, data: dict, profile=None, base: "Parameters | None" = None) -> "Parameters":
+        """Build parameters, converting files written before version 2. Fields the file does not
+        have (e.g. the display photometry, absent from participant files) come from ``base``.
 
         Version 1 files carry ``field`` (used directly as the flux-density area) and an
         absolute ``pupil_scale``. The expected pupil depends only on luminance × field, so
@@ -134,7 +147,46 @@ class Parameters:
                     data[key] = data[key] * factor
             if "pupil_scale" in data and profile.pupil_scale:
                 data["pupil_correction"] = data.pop("pupil_scale") / profile.pupil_scale
-            data["version"] = PARAMS_VERSION
+        data["version"] = PARAMS_VERSION   # versions 2 and 3 differ only in which fields a file holds
+        known = {f.name for f in fields(cls)}
+        values = asdict(base) if base is not None else {}
+        values.update({k: v for k, v in data.items() if k in known})
+        return cls(**values)
+
+
+# Parameters that describe the display rather than the participant.
+DISPLAY_FIELDS = ("l_min", "l_max", "gamma")
+
+
+@dataclass
+class DisplayPhotometry:
+    """Nominal photometry of a display device, supplied by the user (e.g. from the datasheet) and
+    saved on its own, since firmware or settings changes alter it independently of participants.
+    Errors common to all participants are absorbed by each participant's fitted sensitivity."""
+
+    device: str = ""
+    l_min: float = 0.02      # cd/m², black
+    l_max: float = 70.0      # cd/m², white
+    gamma: float = 2.2
+    source: str = ""         # where the values come from, e.g. "Varjo XR-4 datasheet"
+
+    KIND = "cwtool display photometry"
+
+    @classmethod
+    def from_params(cls, p: Parameters, device: str = "", source: str = "") -> "DisplayPhotometry":
+        return cls(device, p.l_min, p.l_max, p.gamma, source)
+
+    def apply(self, p: Parameters) -> Parameters:
+        return replace(p, l_min=self.l_min, l_max=self.l_max, gamma=self.gamma)
+
+    def save(self, path: str | Path) -> None:
+        Path(path).write_text(json.dumps({"kind": self.KIND, **asdict(self)}, indent=2))
+
+    @classmethod
+    def load(cls, path: str | Path) -> "DisplayPhotometry":
+        data = json.loads(Path(path).read_text())
+        if data.get("kind") != cls.KIND:
+            raise ValueError(f"{Path(path).name} is not a display photometry file")
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in data.items() if k in known})
 

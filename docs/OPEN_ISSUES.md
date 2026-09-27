@@ -385,6 +385,20 @@ them rather than describing the headset or the participant.
   measure vignetting.
 - **Status:** needs data.
 
+### 36. Display photometry and participant sensitivity cannot be separated on one sequence
+- **Where:** manual calibration in 1.x (Lmin, Lmax, gains, gamma per participant); Table 2a.
+- **Problem:** Watson & Yellott depend on luminance × field area only, so a brighter display and a more sensitive
+  participant give identical pupils; with the Varjo pupil scale also unknown, per-participant Lmax values mix the
+  two. This is a likely reason for the 1500–6500 cd/m² spread of calibrated Lmax in Table 2a on one headset.
+- **2.0:** the display photometry (Lmin, Lmax, gamma) is the user's nominal description of the headset, kept in its
+  own file; each participant gets a fitted light sensitivity (a factor on luminance) and channel weights. The
+  sensitivity includes any common error of the display photometry, so sensitivities are comparable only between
+  participants calibrated with the same display photometry. Old participant files keep their Lmin/Lmax/gamma and
+  reproduce their results.
+- **Open:** if the headset can be measured later, the sensitivities become absolute; a pooled fit over several
+  participants could also estimate a common display correction.
+- **Status:** decided (display photometry separate, sensitivity per participant); paper text to follow.
+
 ## D. Paper text
 
 ### 24. Dynamics section: filter placement and stage count

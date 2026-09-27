@@ -63,6 +63,16 @@ def _means(hist: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return hist @ _CODES / n, (hist @ _LUT.T / n).T
 
 
+def at_gamma(values: np.ndarray, gamma: float) -> np.ndarray:
+    """Linear means (..., G, 3), stored for each γ of GAMMA_GRID, at ``gamma`` (clipped to
+    GAMMA_RANGE; interpolated in log space, error below 0.001 of full scale) -> (..., 3)."""
+    g = float(np.clip(gamma, *GAMMA_RANGE))
+    i = int(np.clip(np.searchsorted(GAMMA_GRID, g) - 1, 0, len(GAMMA_GRID) - 2))
+    f = (g - GAMMA_GRID[i]) / (GAMMA_GRID[i + 1] - GAMMA_GRID[i])
+    lo, hi = np.log(values[..., i, :] + 1e-12), np.log(values[..., i + 1, :] + 1e-12)
+    return np.clip(np.exp(lo + f * (hi - lo)) - 1e-12, 0.0, 1.0)
+
+
 @dataclass
 class VideoResult:
     time: np.ndarray            # s, relative clock, one row per analysed gaze sample
@@ -75,15 +85,7 @@ class VideoResult:
     def linear(self, gamma: float) -> tuple[np.ndarray, np.ndarray]:
         """Per-pixel-linearised mean R, G, B (N, 3) of the fixation and background areas.
         ``gamma`` is clipped to GAMMA_RANGE; values in between are interpolated in log space."""
-        g = float(np.clip(gamma, *GAMMA_RANGE))
-        i = int(np.clip(np.searchsorted(GAMMA_GRID, g) - 1, 0, len(GAMMA_GRID) - 2))
-        f = (g - GAMMA_GRID[i]) / (GAMMA_GRID[i + 1] - GAMMA_GRID[i])
-
-        def interp(x):
-            lo, hi = np.log(x[:, i] + 1e-12), np.log(x[:, i + 1] + 1e-12)
-            return np.clip(np.exp(lo + f * (hi - lo)) - 1e-12, 0.0, 1.0)
-
-        return interp(self.fixation_lin), interp(self.background_lin)
+        return at_gamma(self.fixation_lin, gamma), at_gamma(self.background_lin, gamma)
 
     def frame_linear(self, gamma: float) -> np.ndarray:
         """Per-pixel-linearised mean R, G, B (N, 3) of the whole visible scene."""

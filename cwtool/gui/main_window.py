@@ -18,7 +18,8 @@ from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
-from cwtool.params import Parameters
+from cwtool.params import DisplayPhotometry, Parameters
+from cwtool.photometry import fit_light_response
 from cwtool.video import VideoResult, analyse_video
 
 RECOMPUTE_DELAY_MS = 150
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
         self._task: Task | None = None
         self._params_path: Path | None = None
         self._lux_folder: Path | None = None
+        self._display_path: Path | None = None
         self._base_sequence: calibration.Sequence | None = None
 
         self._recompute_timer = QTimer(self, singleShot=True, interval=RECOMPUTE_DELAY_MS)
@@ -61,12 +63,15 @@ class MainWindow(QMainWindow):
         self.load_params_action = action("Load parameters…", self.choose_params)
         self.save_params_action = action("Save parameters", self.save_params, QKeySequence.Save)
         self.save_params_as_action = action("Save parameters as…", self.save_params_as, QKeySequence.SaveAs)
+        self.load_display_action = action("Load display photometry…", self.choose_display)
+        self.save_display_action = action("Save display photometry…", self.save_display)
         self.export_action = action("Export results…", self.export)
         quit_action = action("Quit", self.close, QKeySequence.Quit)
 
         file_menu = self.menuBar().addMenu("&File")
         for a in (self.open_action, self.lux_action, None, self.load_params_action, self.save_params_action,
-                  self.save_params_as_action, None, self.export_action, None, quit_action):
+                  self.save_params_as_action, None, self.load_display_action, self.save_display_action, None,
+                  self.export_action, None, quit_action):
             file_menu.addSeparator() if a is None else file_menu.addAction(a)
 
         self.fit_action = action("Fit view", lambda: self.plots.fit_to_data(), QKeySequence("Ctrl+0"))
@@ -153,11 +158,20 @@ class MainWindow(QMainWindow):
         cal_layout.addRow(self.sequence_check)
         cal_layout.addRow("Start", self.sequence_start)
         cal_layout.addRow("ΔPD RMS in sequence", self.sequence_rms)
+        self.fit_gamma_check = QCheckBox("Also fit gamma")
+        self.fit_gamma_check.setToolTip("Fit the display gamma from the spacing of the grey steps (usually "
+                                        "weakly determined; keep the datasheet value unless it clearly fails)")
+        self.light_button = QPushButton("1. Fit light sensitivity")
+        self.light_button.setToolTip("Fits the participant's light sensitivity and channel weights from the "
+                                     "steady-state pupil on each step, given the display photometry")
+        self.light_button.clicked.connect(self.fit_light)
+        cal_layout.addRow(self.fit_gamma_check)
+        cal_layout.addRow(self.light_button)
         self.fit_dynamics_check = QCheckBox("Include dilation/constriction time constants")
         self.fit_dynamics_check.setChecked(True)
-        self.fit_button = QPushButton("Fit latency, scale and offset")
-        self.fit_button.setToolTip("Fits the pupil parameters on the sequence, given the current photometric "
-                                   "calibration. Adjust Lmin, Lmax, gains and gamma first.")
+        self.fit_button = QPushButton("2. Fit latency, scale and offset")
+        self.fit_button.setToolTip("Fits the participant's latency, dilation/constriction time constants, pupil "
+                                   "scale and offset on the sequence. Fit the light sensitivity first.")
         self.fit_button.clicked.connect(self.fit_sequence)
         cal_layout.addRow(self.fit_dynamics_check)
         cal_layout.addRow(self.fit_button)
@@ -218,6 +232,7 @@ class MainWindow(QMainWindow):
         self.open_action.setEnabled(not busy)
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
+        self.light_button.setEnabled(self.fit_button.isEnabled())
         self.find_sequence_button.setEnabled(self.video is not None and not busy)
         has_lux = has_rec and self.recording.lux_values is not None
         self.camera_button.setVisible(has_rec and self.recording.luminance_source == "lux_sensor")
@@ -235,6 +250,8 @@ class MainWindow(QMainWindow):
                 f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
                 f"{r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}{warn}")
         name = self._params_path.name if self._params_path else "unsaved parameters"
+        if has_rec and self.recording.luminance_source == "display":
+            name += ", display " + (self._display_path.name if self._display_path else "defaults")
         rec = f" — {self.recording.name}" if has_rec else ""
         self.setWindowTitle(f"Cognitive Workload Tool {__version__}{rec} ({name})")
 
@@ -288,6 +305,9 @@ class MainWindow(QMainWindow):
         # Hide what does not apply to this device: the calibration sequence is shown on a display.
         self.params_panel.set_recording(rec)
         on_display = rec.luminance_source == "display"
+        remembered = self._settings.value(f"display_photometry/{rec.device}", "")
+        if on_display and remembered and Path(remembered).exists() and Path(remembered) != self._display_path:
+            self.load_display(Path(remembered), quiet=True)   # the last photometry used with this device
         if not on_display:
             self.sequence_check.setChecked(False)
         self.cal_box.setVisible(on_display)
@@ -381,6 +401,20 @@ class MainWindow(QMainWindow):
         self.plots.set_sequence(self.sequence_check.isChecked(), self.sequence_start.value(), self.sequence)
         self._update_sequence_rms()
         self._update_state()
+
+    def fit_light(self) -> None:
+        rec, video, params = self.recording, self.video, self.params_panel.params()
+        start, sequence, gamma = self.sequence_start.value(), self.sequence, self.fit_gamma_check.isChecked()
+
+        def work(progress, cancelled):
+            return fit_light_response(rec, video, params, start, sequence, fit_gamma=gamma)
+
+        self._start_task(work, self._light_done, "Fitting the light response on the calibration sequence…")
+
+    def _light_done(self, fit) -> None:
+        from cwtool.gui.photometry_dialog import PhotometryDialog
+        if PhotometryDialog(fit, self).exec():
+            self.params_panel.set_params(fit.params)
 
     def fit_sequence(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
@@ -480,7 +514,8 @@ class MainWindow(QMainWindow):
         if path:
             try:
                 profile = self.recording.profile if self.recording is not None else None
-                self.params_panel.set_params(Parameters.load(path, profile))
+                # Participant files hold no display photometry: the current one is kept.
+                self.params_panel.set_params(Parameters.load(path, profile, base=self.params_panel.params()))
             except Exception as e:
                 self._error("Cannot load parameters", str(e))
                 return
@@ -491,8 +526,8 @@ class MainWindow(QMainWindow):
         if self._params_path is None:
             self.save_params_as()
         else:
-            self.params_panel.params().save(self._params_path)
-            self.statusBar().showMessage(f"Saved {self._params_path}", 3000)
+            self.params_panel.params().save(self._params_path, participant_only=True)
+            self.statusBar().showMessage(f"Saved {self._params_path} (display photometry is saved separately)", 4000)
 
     def save_params_as(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Save parameters", self._params_dir(), "Parameters (*.json)")
@@ -503,6 +538,44 @@ class MainWindow(QMainWindow):
             self._settings.setValue("last_params_dir", str(self._params_path.parent))
             self.save_params()
             self._update_state()
+
+    def _device(self) -> str:
+        return self.recording.device if self.recording is not None else ""
+
+    def choose_display(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Load display photometry", self._params_dir(),
+                                              "Display photometry (*.json)")
+        if path:
+            self.load_display(Path(path))
+
+    def load_display(self, path: Path, quiet: bool = False) -> None:
+        try:
+            display = DisplayPhotometry.load(path)
+        except Exception as e:
+            if not quiet:
+                self._error("Cannot load display photometry", str(e))
+            return
+        self.params_panel.set_params(display.apply(self.params_panel.params()))
+        self._display_path = path
+        if display.device:
+            self._settings.setValue(f"display_photometry/{display.device}", str(path))
+        self.statusBar().showMessage(f"Display photometry: {path.name}"
+                                     + (f" ({display.source})" if display.source else ""), 5000)
+        self._update_state()
+
+    def save_display(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Save display photometry", self._params_dir(),
+                                              "Display photometry (*.json)")
+        if not path:
+            return
+        if not path.endswith(".json"):
+            path += ".json"
+        DisplayPhotometry.from_params(self.params_panel.params(), self._device()).save(path)
+        self._display_path = Path(path)
+        if self._device():
+            self._settings.setValue(f"display_photometry/{self._device()}", path)
+        self.statusBar().showMessage(f"Saved {path}", 3000)
+        self._update_state()
 
     def _params_dir(self) -> str:
         return self._settings.value("last_params_dir", str(Path.home()))

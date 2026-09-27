@@ -5,14 +5,16 @@
 ## 1. Watson & Yellott (2012)
 
 The unified formula for the light-adapted pupil. The corneal flux density is luminance × adapting field area ×
-the monocular attenuation:
+the monocular attenuation, with the participant's light sensitivity \(s\) (`sensitivity`, default 1) applied to
+the luminance:
 
 \[
-F = L \cdot a \cdot M(e), \qquad M(2) = 1,\; M(1) = 0.1
+F = s \cdot L \cdot a \cdot M(e), \qquad M(2) = 1,\; M(1) = 0.1
 \]
 
 with \(a\) the adapting field area in deg² (from the device profile, treating the field as an ellipse) and \(e\)
-the number of eyes adapted (`eyes`). The Stanley & Davies (1995) diameter is
+the number of eyes adapted (`eyes`). The sensitivity is fitted on the calibration sequence
+([Calibration fit](calibration-fit.md#light-sensitivity)); the exported luminance is \(L\), without it. The Stanley & Davies (1995) diameter is
 
 \[
 D_{SD} = 7.75 - 5.75 \, \frac{(F/846)^{0.41}}{(F/846)^{0.41} + 2}

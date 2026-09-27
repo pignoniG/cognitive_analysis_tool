@@ -15,14 +15,23 @@ Two sets, both in `cwtool/params.py`.
 | `eyes` | 2 | eyes adapted to the light (1 or 2) |
 | `eye` | both | pupil analysed: `left`, `right` or `both` |
 
-## Photometric calibration (display devices)
+## Display photometry (display devices)
+
+The headset's nominal values, e.g. from its datasheet. Saved in their own file (**File → Save display photometry…**),
+not in participant files.
 
 | Name | Default | Meaning |
 |---|---|---|
 | `l_min` | 0.02 cd/m² | panel black point |
 | `l_max` | 70 cd/m² | panel white point |
-| `gain_r`, `gain_g`, `gain_b` | 1 | channel balance (normalised by their mean) |
 | `gamma` | 2.2 | decoding exponent, 1.4–3.0 |
+
+## Participant light response
+
+| Name | Default | Meaning |
+|---|---|---|
+| `sensitivity` | 1 | factor on the luminance entering Watson & Yellott; also absorbs common errors of the display photometry (fitted) |
+| `gain_r`, `gain_g`, `gain_b` | 1 | channel weights for the pupil, normalised by their mean (fitted) |
 | `fixation_weight` | 0.65 | weight of the gaze circle; the background gets 1 − weight (also used with lux devices) |
 
 ## Lux sensor (Pupil devices)
@@ -85,8 +94,14 @@ Two sets, both in `cwtool/params.py`.
 
 ## File format and older files
 
-A parameter file is the JSON of `Parameters` with a `version` field (currently 2). Files from version 1.x are
-converted on load:
+A participant file is the JSON of `Parameters` without the display photometry, with a `version` field (currently 3).
+Loading one keeps the display photometry in use; files that do contain `l_min`, `l_max` or `gamma` (older ones, and
+the parameters written with an export, which record everything used) set them too.
+
+A display photometry file holds `kind` ("cwtool display photometry"), `device`, `l_min`, `l_max`, `gamma` and a free
+`source` text.
+
+Files from version 1.x are converted on load:
 
 - `field` (the adapting field value used directly in the flux) is removed and `l_min`, `l_max` are rescaled by
   `field / device field area`, which gives identical expected pupils;

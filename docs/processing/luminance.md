@@ -23,8 +23,8 @@ The gaze circle and background means are then weighted, with \(w\) = `fixation_w
 
 ## Display devices
 
-For the Varjo, the capture shows what the display showed, so the colours map to luminance through the display's
-**photometric calibration** (the paper's per-channel extension of the WCAG 2.1 relative luminance):
+For the Varjo, the capture shows what the display showed, so the colours map to luminance through the
+**display photometry** (the paper's per-channel extension of the WCAG 2.1 relative luminance):
 
 \[
 L = \frac{1}{\bar g}\sum_{c \in \{R,G,B\}} k_c \left( L_\text{max}\, g_c\, C_{w,c} + L_\text{min}\,(1 - C_{w,c}) \right)
@@ -35,9 +35,10 @@ L = \frac{1}{\bar g}\sum_{c \in \{R,G,B\}} k_c \left( L_\text{max}\, g_c\, C_{w,
 - \(k_c\) = 0.2126, 0.7152, 0.0722: the photopic weights of the BT.709/sRGB primaries.
 
 With unit gains this is a linear mapping of relative luminance onto \([L_\text{min}, L_\text{max}]\). These are
-real luminances: the adapting field area comes from the device profile, not from the photometric parameters. The
-defaults (0.02 and 70 cd/m²) are the mean of the Varjo pilot calibrations; each participant is calibrated on the
-[calibration sequence](../usage/calibration.md).
+real luminances: the adapting field area comes from the device profile. \(L_\text{min}\), \(L_\text{max}\) and
+\(\gamma\) are the user's nominal values for the headset (e.g. its datasheet), saved in their own file; the defaults
+(0.02 and 70 cd/m²) are the mean of the Varjo pilot calibrations. The channel gains are the participant's channel
+weights, fitted with their light sensitivity on the [calibration sequence](../usage/calibration.md).
 
 ## Lux sensor devices
 

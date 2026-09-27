@@ -1,7 +1,7 @@
 """Fit a participant's pupil parameters on their calibration sequence.
 
-Photometric parameters (Lmin, Lmax, gains, gamma) stay with the operator. Given
-those, this fits what the operator would otherwise guess:
+Run after the light response fit (:mod:`cwtool.photometry`). Given the display photometry
+and the participant's light sensitivity and channel weights, this fits:
 
 - the response latency (``delay``), from the timing of the sequence's steps,
 - the dilation and constriction time constants (``attack``, ``release``),
@@ -21,7 +21,7 @@ from scipy.optimize import minimize
 
 from cwtool import calibration, model
 from cwtool.params import Parameters
-from cwtool.pipeline import Prepared, prepare, residual_rms, run
+from cwtool.pipeline import Prepared, prepare, residual_rms, run, steady_pupil
 from cwtool.recording import Recording
 from cwtool.video import VideoResult
 
@@ -56,8 +56,7 @@ class _Problem:
         hi = np.searchsorted(t, end, side="right")
         self.fs = prep.fs
         self.offset_in = np.searchsorted(t, start) - lo
-        self.base = model.watson_yellott(prep.luminance[lo:hi], params.age, field_area,
-                                         params.eyes, params.reference_age)
+        self.base = steady_pupil(prep.luminance[lo:hi], params, field_area)
         seg = slice(lo + self.offset_in, hi)
         scale = prep.scale if prep.scale is not None else 1.0
         # The lightly smoothed signal keeps the step edges that carry latency and constriction speed.
@@ -141,13 +140,13 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
             at_limit.append(name)
     if at_limit:
         notes.append(f"{', '.join(at_limit)} reached the limit of the search range: the model probably does "
-                     "not match the measured pupil yet. Adjust Lmin, Lmax, gains and gamma on the sequence "
-                     "first, then fit again.")
+                     "not match the measured pupil yet. Fit the light sensitivity on the sequence first (and "
+                     "check the sequence start and display photometry), then fit again.")
     if not problem.fit_scale:
         notes.append("The pupil barely varies in the window, so only the offset was fitted.")
     elif k == 1.0:
         notes.append(f"The fitted scale was outside {SCALE_RANGE[0]:g}–{SCALE_RANGE[1]:g}, "
-                     "so only the offset was fitted. Check the photometric calibration and the window.")
+                     "so only the offset was fitted. Check the light sensitivity fit and the window.")
     fitted = replace(params, delay=delay, pupil_correction=params.pupil_correction * k,
                      pupil_offset=b, alignment="fixed")
     if attack is not None:

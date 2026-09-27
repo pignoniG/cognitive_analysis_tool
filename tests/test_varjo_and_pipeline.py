@@ -88,7 +88,7 @@ def test_version1_params_convert_to_identical_expected_pupil(tmp_path):
     from cwtool import model
     old = {"age": 33, "field": 160.0, "l_min": 1.0, "l_max": 5000.0, "pupil_scale": 2.2, "gain_b": 3}
     p = Parameters.from_dict(old, varjo.PROFILE)
-    assert p.version == 2 and p.pupil_correction == pytest.approx(1.1)
+    assert p.version == 3 and p.pupil_correction == pytest.approx(1.1)
     assert p.l_max == pytest.approx(5000 * 160 / varjo.PROFILE.field_area)
     L = np.logspace(-1, 3, 9)
     before = model.watson_yellott(L * 5000 / 200, 33, 160)

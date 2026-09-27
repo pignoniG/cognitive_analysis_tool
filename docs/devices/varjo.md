@@ -51,7 +51,7 @@ frame height by default) to exclude them.
 | | |
 |---|---|
 | Pupil | mm, scale 2.0 |
-| Luminance | display: the scene capture's colours mapped through the [photometric calibration](../processing/luminance.md#display-devices) |
+| Luminance | display: the scene capture's colours mapped through the [display photometry](../processing/luminance.md#display-devices), with the participant's light sensitivity |
 | Field of view | 120° × 105° (nominal); the adapting field is the same |
 | Circular scene | yes |
 | Rate | 200 Hz |

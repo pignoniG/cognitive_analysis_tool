@@ -43,9 +43,23 @@ def test_open_analyse_and_retune(app, varjo_folder, tmp_path):
     w.sequence_start.setValue(0)
     assert w.sequence_rms.text().endswith("mm")
 
+    p = w.params_panel.params()
+    p.sensitivity = 2.5
+    w.params_panel.set_params(p)
     w._params_path = tmp_path / "p.json"
     w.save_params()
-    assert Parameters.load(tmp_path / "p.json").l_max == 2000
+    import json
+    saved = json.loads((tmp_path / "p.json").read_text())
+    assert saved["sensitivity"] == 2.5 and "l_max" not in saved     # display photometry is separate
+
+    from cwtool.params import DisplayPhotometry
+    DisplayPhotometry("varjo", 0.05, 150.0, 2.4, "test datasheet").save(tmp_path / "xr4.json")
+    w.load_display(tmp_path / "xr4.json")
+    assert w.params_panel.params().l_max == 150.0 and w.params_panel.params().sensitivity == 2.5
+    w.params_panel.set_params(Parameters(l_max=10.0))
+    w.params_panel.set_params(Parameters.load(tmp_path / "p.json", base=w.params_panel.params()))
+    assert w.params_panel.params().l_max == 10.0 and w.params_panel.params().sensitivity == 2.5
+    w._settings.remove("display_photometry/varjo")
     w.close()
 
 
@@ -166,3 +180,36 @@ def test_view_fits_the_data(app, varjo_folder, tmp_path):
     assert data_range([1.0, np.nan, 3.0]) == pytest.approx((1.0, 3.0))
     assert data_range([np.nan]) == (None, None)
     assert data_range(np.r_[np.full(999, 3.0), 50.0], trim=0.5) == pytest.approx((2.9, 3.1))  # trimmed spike
+
+
+def test_light_response_dialog(app):
+    import numpy as np
+    from cwtool.gui.photometry_dialog import PhotometryDialog
+    from cwtool.photometry import PhotometryFit, StepLevel
+    steps = [StepLevel(f"Gray {v}", (v, v, v), i * 10.0, i * 10.0 + 10, 6 - v / 60, 0.03, i % 3 > 0,
+                       np.zeros((9, 3))) for i, v in enumerate((0, 73, 146, 255))]
+    fit = PhotometryFit(Parameters(sensitivity=2.0), 2.0, (1.5, 2.7), (1.2, 0.9, 0.9), 2.2, 0.95, 0.2, steps,
+                        np.linspace(6, 3, 4), np.linspace(6.1, 2.9, 4), np.linspace(6, 3, 4), np.full(4, 0.03),
+                        0.3, 0.05, ["example note"])
+    dialog = PhotometryDialog(fit)
+    assert "×2" in dialog.findChildren(type(dialog.layout().itemAt(0).widget()))[0].text()
+    dialog.close()
+
+
+def test_light_sensitivity_button_applies_the_fit(app, varjo_folder, monkeypatch):
+    from cwtool import calibration
+    from cwtool.gui import photometry_dialog
+    monkeypatch.setattr(photometry_dialog.PhotometryDialog, "exec", lambda self: True)
+    w = MainWindow()
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None)
+    steps = tuple(calibration.Step(i, i + 1.0, (g, g, g), f"Gray {g}") for i, g in enumerate((0, 128, 255, 64)))
+    w.set_sequence(calibration.Sequence(steps, "test"))
+    w.sequence_check.setChecked(True)
+    w.sequence_start.setValue(0)
+    assert w.light_button.isEnabled()
+    before = w.params_panel.params()
+    w.light_button.click()
+    assert wait_for(app, lambda: w.params_panel.params() != before)
+    assert w.params_panel.params().l_max == before.l_max     # the display photometry is not fitted
+    w.close()

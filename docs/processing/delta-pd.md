@@ -34,7 +34,7 @@ empty.
 | ΔPD SD | standard deviation of ΔPD: its spread around its own mean |
 | ΔPD in SD units | ΔPD / SD, exported next to ΔPD in mm |
 
-Absolute ΔPD in mm depends on the photometric calibration and the offset. Reporting changes relative to a baseline,
+Absolute ΔPD in mm depends on the light sensitivity, the display photometry and the offset. Reporting changes relative to a baseline,
 or in SD units, compares better across participants (see [open issue 28](../OPEN_ISSUES.md)).
 
 ## Events
