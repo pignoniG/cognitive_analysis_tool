@@ -116,3 +116,19 @@ def test_camera_calibration_from_lux(tmp_path):
     rec, video = _analysed(write_neon_recording(tmp_path / "auto", [128] * 90, FRAME_TIMES,
                                                 lux=lambda t: 50 if t < 1.5 else 800))
     assert pipeline.calibrate_camera(rec, video, p).notes
+
+
+def test_unused_parameters_per_device(tmp_path, varjo_folder):
+    from cwtool.params import unused_parameters
+    varjo = devices.load(varjo_folder)
+    with_lux = devices.load(write_neon_recording(tmp_path / "a", GRAYS, FRAME_TIMES, lux=lambda t: 300.0))
+    without = devices.load(write_neon_recording(tmp_path / "b", GRAYS, FRAME_TIMES))
+    p = Parameters()
+    assert unused_parameters(None, p) == set()
+    assert {"lux_gain", "camera_exposure"} <= unused_parameters(varjo, p)
+    assert "l_max" not in unused_parameters(varjo, p) and "field_radius" not in unused_parameters(varjo, p)
+    assert {"l_min", "l_max", "camera_exposure", "field_radius"} <= unused_parameters(with_lux, p)
+    assert "lux_gain" not in unused_parameters(with_lux, p)
+    assert {"lux_gain", "camera_white"} <= unused_parameters(without, p)
+    assert {"lux_gain", "l_max"} <= unused_parameters(without, Parameters(camera_exposure="fixed"))
+    assert "camera_white" not in unused_parameters(without, Parameters(camera_exposure="fixed"))

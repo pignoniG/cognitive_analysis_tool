@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
         video_layout.addWidget(self.camera_button)
         side_layout.addWidget(video_box)
 
-        cal_box = QGroupBox("Calibration sequence")
+        self.cal_box = cal_box = QGroupBox("Calibration sequence")
         cal_layout = QFormLayout(cal_box)
         self.sequence_check = QCheckBox("Show sequence overlay")
         self.sequence_check.toggled.connect(self._sequence_changed)
@@ -280,6 +280,12 @@ class MainWindow(QMainWindow):
         self.plots.clear_result()
         self.plots.show_events(rec.events)
         self.params_panel.set_video_settings(self.params_panel.video_settings().for_recording(rec))
+        # Hide what does not apply to this device: the calibration sequence is shown on a display.
+        self.params_panel.set_recording(rec)
+        on_display = rec.luminance_source == "display"
+        if not on_display:
+            self.sequence_check.setChecked(False)
+        self.cal_box.setVisible(on_display)
         self.preview.set_recording(rec, self.params_panel.video_settings())
         if len(rec.time):
             self.plots.set_cursor(float(rec.time[0]))

@@ -99,3 +99,30 @@ def test_loaded_sequence_drives_overlay_and_rms(app, varjo_folder, tmp_path):
     assert len(w.plots._sequence_items) == 3
     assert "3 steps" in w.sequence_label.text() and w.sequence_rms.text().endswith("mm")
     w.close()
+
+
+def test_options_follow_the_recording(app, varjo_folder, tmp_path):
+    from conftest import write_neon_recording
+    from test_neon import FRAME_TIMES, GRAYS
+    w = MainWindow()
+    shown = w.params_panel.is_shown
+    assert shown("lux_gain") and shown("l_max")          # nothing loaded: everything
+
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None)
+    assert shown("l_max") and shown("field_radius") and not w.cal_box.isHidden()
+    assert not shown("lux_gain") and not shown("camera_exposure")
+
+    w.open_recording(write_neon_recording(tmp_path / "lux", GRAYS, FRAME_TIMES, lux=lambda t: 300.0))
+    assert wait_for(app, lambda: w.result is not None and w.recording.device == "pupil_neon")
+    assert shown("lux_gain") and shown("gamma") and w.cal_box.isHidden()
+    assert not shown("l_max") and not shown("camera_exposure") and not shown("field_radius")
+
+    w.open_recording(write_neon_recording(tmp_path / "nolux", GRAYS, FRAME_TIMES))
+    assert wait_for(app, lambda: w.result is not None and w.recording.lux_values is None)
+    assert shown("camera_exposure") and shown("l_max") and not shown("camera_white") and not shown("lux_gain")
+    p = w.params_panel.params()
+    p.camera_exposure = "fixed"
+    w.params_panel.set_params(p)
+    assert shown("camera_white") and not shown("l_max")
+    w.close()

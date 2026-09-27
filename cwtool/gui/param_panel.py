@@ -8,7 +8,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox,
                                QLineEdit, QSpinBox, QVBoxLayout, QWidget)
 
-from cwtool.params import Parameters, VideoSettings
+from cwtool.params import Parameters, VideoSettings, unused_parameters
 
 # name: (label, min, max, step, decimals, tooltip)
 NUMBERS = {
@@ -92,6 +92,7 @@ class _Form(QWidget):
         super().__init__(parent)
         self._value = value
         self._editors = {}
+        self._boxes = []   # (group box, its form layout, field names)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         for title, names in groups:
@@ -105,7 +106,19 @@ class _Form(QWidget):
                 else:
                     form.addRow(label, editor)
             layout.addWidget(box)
+            self._boxes.append((box, form, names))
         self.set_value(value)
+
+    def hide_fields(self, hidden: set[str]) -> None:
+        """Hide the rows of ``hidden`` fields, and groups left empty. Hidden fields keep their values."""
+        for box, form, names in self._boxes:
+            for name in names:
+                form.setRowVisible(self._editors[name], name not in hidden)
+            box.setVisible(any(name not in hidden for name in names))
+
+    def is_shown(self, name: str) -> bool:
+        box = next(b for b, _, names in self._boxes if name in names)
+        return not box.isHidden() and not self._editors[name].isHidden()
 
     def _make(self, name):
         if name in NUMBERS:
@@ -182,6 +195,8 @@ class ParameterPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self._params = _Form(GROUPS, Parameters())
         self._video = _Form([VIDEO_GROUP], VideoSettings())
+        self._recording = None
+        self._params.changed.connect(self._update_visible)
         self._params.changed.connect(self.params_changed)
         self._video.changed.connect(self.video_settings_changed)
         layout.addWidget(self._params)
@@ -196,7 +211,22 @@ class ParameterPanel(QWidget):
 
     def set_params(self, p: Parameters) -> None:
         self._params.set_value(p)
+        self._update_visible()
         self.params_changed.emit()
+
+    def set_recording(self, rec) -> None:
+        """Show only the options that affect ``rec`` (all of them when None)."""
+        self._recording = rec
+        self._update_visible()
+
+    def is_shown(self, name: str) -> bool:
+        form = self._video if name in self._video._editors else self._params
+        return form.is_shown(name)
+
+    def _update_visible(self) -> None:
+        hidden = unused_parameters(self._recording, self._params.value())
+        self._params.hide_fields(hidden)
+        self._video.hide_fields(hidden)
 
     def video_settings(self) -> VideoSettings:
         return self._video.value()

@@ -137,3 +137,27 @@ class Parameters:
             data["version"] = PARAMS_VERSION
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in data.items() if k in known})
+
+
+_LUX = ("lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video")
+_CAMERA = ("camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms")
+_PANEL = ("l_min", "l_max")
+
+
+def unused_parameters(rec, params: Parameters) -> set[str]:
+    """Names of the parameters and video settings that have no effect on ``rec`` with ``params``
+    (e.g. the lux sensor calibration for a Varjo recording), for interfaces to hide. None if no
+    recording is loaded: everything may matter."""
+    if rec is None:
+        return set()
+    unused = set()
+    if not rec.circular_scene:
+        unused.add("field_radius")
+    if rec.luminance_source != "lux_sensor":
+        return unused | set(_LUX) | set(_CAMERA)
+    if rec.lux_values is not None and len(rec.lux_values) >= 2:
+        return unused | set(_PANEL) | set(_CAMERA)
+    unused |= set(_LUX)
+    if params.camera_exposure == "fixed":
+        return unused | set(_PANEL)
+    return unused | set(_CAMERA[1:])

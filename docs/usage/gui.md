@@ -39,6 +39,15 @@ Parameters are grouped as in [Parameters](../reference/parameters.md): Participa
 Pupil signal, Lux sensor, Scene camera without lux log, Dynamics, ΔPD. Every change re-runs the analysis from the cached video pass, so the
 plots follow instantly.
 
+Only the options that affect the loaded recording are shown (all of them before a recording is opened); hidden
+options keep their values and are still saved in the parameter file:
+
+| Recording | Hidden |
+|---|---|
+| Varjo | Lux sensor, Scene camera without lux log |
+| Pupil Core / Neon with a lux log | Lmin, Lmax, Scene camera without lux log, Calibration sequence, scene circle radius |
+| Pupil Core / Neon without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
+
 The **Video analysis** group (gaze circle radius, scene circle, background, analysis width) changes what is
 measured in the video: after editing it, click **Analyse video**. The video preview already draws the new
 circles, so sizes can be checked before re-running.
