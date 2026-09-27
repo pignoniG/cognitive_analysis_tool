@@ -72,7 +72,10 @@ is revised; they remain in the git history of this file.
   (`cwtool.fit`, "Fit latency, scale and offset" in the GUI) estimates each participant's latency, dilation and
   constriction time constants, pupil scale correction and offset from the 20 steps of the sequence, given the
   operator's photometric calibration. Latency and constriction speed trade off, so they are fitted jointly.
-- **Status:** fixed in 2.0 (to be validated on the pilot recordings).
+- **Checked (September 2026):** on the seven Varjo calibration recordings the latency measured from constriction
+  onsets is 0.30–0.36 s with a one-stage constriction and 0.20–0.33 s with two (issues 38, 41, 43), within the
+  200–500 ms the paper cites; the fitted latency replaces the 0.5 s default per participant.
+- **Status:** fixed in 2.0.
 
 ### 4. Field size used as a diameter instead of an area
 - **Where:** `colour_tools.effectiveCornealFluxDensity` (`L * a * M(e)`), `fieldAngle = 160`; 2.0 `Parameters.field`.
@@ -163,10 +166,11 @@ is revised; they remain in the git history of this file.
 - **Problem:** the legacy function is not the paper's equation. It adds `rCoeff − gCoeff/2 − bCoeff/2`
   (and so on) to the sRGB weights and then maps the result linearly between Lmin and Lmax. With the Table 2a
   gains (e.g. b_C = 20) that gives negative or extreme weights, so Table 2 was probably not computed with the
-  code on `develop-varjo`. 2.0 implements the paper's equation.
-- **Proposal:** confirm which implementation produced Table 2, and re-run one pilot participant through 2.0
-  to check the numbers match.
-- **Status:** open.
+  code on `develop-varjo`. 2.0 implements the paper's equation, with the black-point correction of issue 9.
+- **Answer (G. Pignoni, September 2026):** the table came from one of several colour-weighting approaches tried on the
+  Varjo branch, and that version may be lost. The paper is a draft that will be reworked to describe 2.0, so its
+  pilot numbers do not need to be reproduced.
+- **Status:** closed (not pursued).
 
 ### 12. Gamma 2.2 inside the piecewise sRGB curve
 - **Where:** paper eq. for C_lin; legacy `relativeLuminanceClac` / `manualRGBtoLuminanceClac`; 2.0 `luminance.srgb_to_linear`.
