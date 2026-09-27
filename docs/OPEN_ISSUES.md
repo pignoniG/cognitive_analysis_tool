@@ -644,6 +644,30 @@ is revised; they remain in the git history of this file.
   - In g, escape τ (7.2 s) and dilation τ (9.6 s) still trade off; that is step 2 (two-phase dilation).
 - **Status:** steps 1 (transient) and 3 (two-stage constriction) done, both optional and off by default; steps 2
   and 4 open.
+- **What remains (September 2026)**, with two stages and the transient fitted on a–g:
+  - after brightening, the mean residual is gone (within ±0.06 mm at every time from 0.5 to 9.5 s);
+  - after darkening, the pupil still dilates later than the model: −0.12, −0.15 and −0.13 mm at 0.5, 1 and 1.5 s,
+    fading by 4 s (a delayed dilation onset rather than a missing slow phase); but only 20 darkening steps exist
+    (about 3 per participant), and their first 4 s hold 3–17 % of the remaining squared error;
+  - the error is spread roughly in proportion to time: 18–38 % in the 4 s after brightening (32 % of the time),
+    3–17 % after darkening (6 %), 50–74 % in the settled rest of the steps (62 %);
+  - in the settled parts, 46–86 % of the error is a constant offset per step (a wrong step level), the rest
+    fluctuation within the step (0.08–0.24 mm RMS, which no light model predicts);
+  - the per-step offsets (SD 0.11–0.38 mm) follow neither time in the sequence (a linear drift explains 2–36 %) nor
+    the step's hue (9–59 %, after the fitted channel weights); they jump irregularly from step to step (b +1.35 mm at
+    grey 0; g −0.39 at grey 0, +0.41 at grey 36). With each colour shown once, in a fixed order, a reproducible model
+    error cannot be told from the participant's state at that moment.
+- **What this means for the open steps:**
+  - step 2 (two-phase dilation): the data point to a delayed dilation onset (a dilation latency, or two stages on
+    dilation as well) more than to a second slow phase, and the possible gain is small (the darkening phases hold
+    3–17 % of the error). It needs a sequence with many more darkening steps; until then it is not worth fitting.
+  - step 4 (fit the light response with the dynamics on the whole trace): the largest remaining error is in the step
+    levels, which step 4 targets. It would also replace the extrapolated steady states (issue 40). But if the
+    offsets are state fluctuations rather than model error, no fit removes them; the new sequence should show each
+    colour at least twice, in different orders, so the two can be separated.
+- **For the new calibration sequence:** each level at least twice, in a pseudo-random order; irregular step lengths
+  (anticipation, issue 41); several returns to dark or to a dim level (dilation); some long steps (slow phases,
+  issue 40).
 - **Switch (September 2026):** the transient is applied only with `dynamics` on, together with the time constants
   and constriction stages, and the app fits it whenever it fits the dynamics (one option). A parameter file with
   `transient` above 0 and `dynamics` off now leaves the transient out.
