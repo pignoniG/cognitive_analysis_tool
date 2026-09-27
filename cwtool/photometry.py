@@ -14,7 +14,9 @@ step match the model:
 Each step contributes its steady-state pupil, the asymptote of an exponential fitted to the step
 (dilation can take longer than a step to settle), and its colour as measured in the video, so the
 calibration sees exactly what the analysis sees. Weak priors keep poorly constrained values near
-sensible ones: sensitivity and gains around 1, scale correction around 1, gamma around 2.2.
+sensible ones: gains around 1, scale correction around 1, gamma around 2.2. The sensitivity has none:
+a prior centred on 1 would mean "the datasheet is right", making the fit depend on the datasheet
+luminance beyond the exact trade-off between the two (open issue 42).
 """
 
 from __future__ import annotations
@@ -36,8 +38,7 @@ MIN_STEP_SAMPLES = 20       # pupil samples a step needs to be used
 NOISE_MM = 0.1              # mm, floor on a step's uncertainty (pupil fluctuations, model error)
 SETTLED_MM = 0.1            # mm, change over the last 30 % of a step below which it has settled
 MAX_EXTRAPOLATION = 1.0     # mm, beyond the last second of a step
-# Prior standard deviations (natural log units for factors).
-PRIOR_LOG_SENSITIVITY = np.log(10.0)
+# Prior standard deviations (natural log units for factors). None on the sensitivity (see the module text).
 PRIOR_LOG_GAIN = 1.5         # wide: the pupil's colour weighting departs strongly from photopic (blue)
 PRIOR_SCALE = 0.25
 PRIOR_GAMMA = 0.2
@@ -179,7 +180,7 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     def residuals(x):
         sens, gains, c, d, gamma = unpack(x)
         r = [(m - (c * _expected(levels, params, area, sens, gains, gamma) + d)) / sigma,
-             [np.log(sens) / PRIOR_LOG_SENSITIVITY, np.log(c) / PRIOR_SCALE]]
+             [np.log(c) / PRIOR_SCALE]]
         if fit_gains:
             r.append(np.log(gains) / PRIOR_LOG_GAIN)
         if fit_gamma:

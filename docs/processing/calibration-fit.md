@@ -58,19 +58,21 @@ error) over \(\log s\), the log channel weights, \(\log c\) and \(d\), and optio
 correction is \(k = 1/c\) and the offset \(b = -d/c\). Residuals are in measured millimetres on purpose: written the
 other way round (\(k A_s + b \approx WY\)), a fit can shrink its residuals by compressing both the model's range (an
 extreme sensitivity putting every step at the smallest pupil) and the scale, which is what happened on the first real
-recording. Weak priors keep poorly determined values near sensible ones: \(\log s\) around 0 (SD \(\log 10\)), log
-weights around 0 (SD 1.5; wide, because the pupil's colour weighting departs strongly from photopic luminance, blue
-in particular), \(\log c\) around 0 (SD 0.25), \(\gamma\) around 2.2 (SD 0.2). Because the pupil curve is S-shaped in log luminance, the fit
-starts from five sensitivities (0.03 to 30) and keeps the best. The weights are reported normalised to a mean of 1.
+recording. Weak priors keep poorly determined values near sensible ones: log weights around 0 (SD 1.5; wide, because
+the pupil's colour weighting departs strongly from photopic luminance, blue in particular), \(\log c\) around 0
+(SD 0.25), \(\gamma\) around 2.2 (SD 0.2). The sensitivity has no prior, only its range (0.001–1000): a prior centred
+on \(s = 1\) would mean "the display photometry is right", so it would pull the fit differently for different
+datasheet values and break the exact trade-off between the two ([open issue 42](../OPEN_ISSUES.md)). Because the pupil
+curve is S-shaped in log luminance, the fit starts from five sensitivities (0.03 to 30) and keeps the best. The weights are reported normalised to a mean of 1.
 
 **Uncertainty and warnings.** An approximate 95 % interval of \(s\) comes from the curvature at the solution. Notes
 flag a wide interval (factor above 4), values at their limits, more than a third of the steps unsettled, and
 skipped steps.
 
 **Synthetic check** (`tests/test_photometry.py`): a participant with sensitivity 3 and channel weights 1.5, 0.7, 0.8
-on the built-in sequence with 10 s steps, dilation τ 4 s and noise is recovered as sensitivity 2.7 (interval
-1.0–7.5), weights within 5 %, scale within 5 %; doubling the datasheet luminance halves the fitted sensitivity and
-leaves the predictions unchanged.
+on the built-in sequence with 10 s steps, dilation τ 4 s and noise is recovered as sensitivity 2.9 (interval
+0.96–8.7), weights within 8 %, scale within 3 %; doubling the datasheet luminance halves the fitted sensitivity exactly
+and leaves the predictions unchanged.
 
 **Real recording** (Varjo XR-4, April 2026, default display photometry): see
 [open issue 36](../OPEN_ISSUES.md) for the results and what they say about sensitivity and pupil scale.

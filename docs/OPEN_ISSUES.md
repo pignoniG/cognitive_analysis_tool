@@ -406,7 +406,9 @@ is revised; they remain in the git history of this file.
   | f | 39 (8.0–191) | 0.54 / 0.42 / 2.05 | 0.75 | 0.36 s (14) | 5.4 / 0.13 s | 0.73 (1.47) | +0.40 | 0.720 → 0.302 → 0.188 |
   | g | 0.044 (0.0085–0.23) | 0.37 / 0.37 / 2.27 | 0.51 | 0.27 s (14) | 3.4 / 0.12 s | 0.66 (1.31) | +2.21 | 0.834 → 0.440 → 0.322 |
 
-  Light RMS: steady-state levels after the light fit, mm. Offset in mm on the model's scale. e lost tracking in most
+  Light RMS: steady-state levels after the light fit, mm. Offset in mm on the model's scale. Fitted with the
+  sensitivity prior, since removed (issue 42): without it the sensitivities are a 48.5, b 0.0022, c 9.5, d 0.49,
+  e 9.0, f 57, g 0.049 (d from its later video analysis, scene circle radius 0.95), and the spread is the same. e lost tracking in most
   red and blue steps (64 % valid samples): 3 steps skipped, 9 onsets.
 
   - **Latency is consistent:** 0.30–0.36 s in the six complete recordings (0.26 s in e), the same with the step
@@ -560,8 +562,10 @@ is revised; they remain in the git history of this file.
   3. **Centre the prior on the headset, not on 1:** e.g. on the median sensitivity of the other participants
      calibrated with the same display photometry (the pooled fit proposed in issue 36). The centre scales with the
      photometry, so the equivalence is exact, and weak fits are still stabilised, by a meaningful value.
-- **Recommendation:** 1 now, 3 when the pooled fit exists.
-- **Status:** open (the test fails until decided).
+- **2.0:** option 1 (September 2026): the sensitivity has no prior, only its range and the note when it reaches a
+  limit. Doubling the display luminance now halves the fitted sensitivity exactly and the test passes; the synthetic
+  participant (sensitivity 3) is recovered as 2.9 instead of 2.7. Option 3 is not planned.
+- **Status:** fixed in 2.0.
 
 ### 43. The dynamic model cannot describe the measured step responses
 - **Where:** 2.0 `model.delay` and `model.attack_release`: the Watson & Yellott steady state, delayed, through a
