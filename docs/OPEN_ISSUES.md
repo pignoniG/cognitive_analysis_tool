@@ -334,6 +334,35 @@ them rather than describing the headset or the participant.
   step length and sets the start. The paper should state the step length used.
 - **Status:** open (paper).
 
+### 32. The Neon reader is written from the documentation only
+- **Where:** `cwtool/devices/neon.py`, from the Pupil Labs data format page and `pl-neon-recording` (September 2026).
+- **To check on a real recording:** the column names of the Pupil Cloud export (older exports had a single
+  `pupil diameter [mm]` column, which is read for both eyes); recordings with several sections (only the longest
+  is analysed); the native `eye_state` record layout when there is no `.dtype` file (left diameter at field 0,
+  right at field 7); multipart scene videos (only the longest part is analysed); the 0.1 s padding around
+  Cloud blinks.
+- **Status:** needs data.
+
+### 33. Glasses trackers' scene camera field of view comes from a pinhole model
+- **Where:** `devices/common.pinhole_fov`, used by the Pupil Core and Neon readers.
+- **Problem:** both scene cameras have wide-angle lenses with strong distortion. The pinhole field of view from the
+  camera matrix is the view near the image centre (e.g. about 80° instead of Neon's nominal 103° horizontal), and
+  it is what converts the gaze circle radius from degrees to pixels. It is right for a gaze circle near the centre
+  and increasingly wrong towards the edges. The adapting field used by Watson & Yellott is unaffected (it is the
+  binocular visual field).
+- **Proposed:** undistort the gaze point and circle with the distortion coefficients, which both devices provide.
+- **Status:** open.
+
+### 34. Clocks of the Neon phone and the lux logger
+- **Where:** Neon timestamps are UTC from the Companion phone's clock (NTP); the lux logger stamps readings with
+  the computer's clock, or the Arduino's real-time clock.
+- **Problem:** any offset between the clocks shifts the lux signal against the pupil. Pupil Core has the same issue
+  (its system time comes from the recording computer, usually the same one that runs the logger).
+- **2.0:** compensate with the time lag parameter, as in 1.x. Neon's documentation recommends syncing the phone with
+  a time server; logging an event visible to both (a light switched on in front of the sensor and the camera) would
+  let the offset be measured.
+- **Status:** open.
+
 ## D. Paper text
 
 ### 24. Dynamics section: filter placement and stage count

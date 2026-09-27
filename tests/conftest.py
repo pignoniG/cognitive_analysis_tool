@@ -108,3 +108,91 @@ def write_core_recording(folder: Path, grays, frame_times, pupil_mm=6.0, rate=20
             for t in np.arange(-1, span + 1, 0.1):
                 wr.writerow([f"{(epoch0 + t) * 1000:.0f}", 1, 1, 1, lux(t)])
     return folder
+
+
+NEON_EYE_HEADER = (
+    "section id,recording id,timestamp [ns],pupil diameter left [mm],pupil diameter right [mm],"
+    "eye ball center left x [mm],eye ball center left y [mm],eye ball center left z [mm],"
+    "eye ball center right x [mm],eye ball center right y [mm],eye ball center right z [mm],"
+    "optical axis left x,optical axis left y,optical axis left z,optical axis right x,optical axis right y,"
+    "optical axis right z,eyelid angle top left,eyelid angle bottom left,eyelid angle top right,"
+    "eyelid angle bottom right,eyelid aperture left [mm],eyelid aperture right [mm]").split(",")
+NEON_GAZE_HEADER = ("section id,recording id,timestamp [ns],gaze x [px],gaze y [px],worn,fixation id,blink id,"
+                    "azimuth [deg],elevation [deg]").split(",")
+
+
+def write_neon_recording(folder: Path, grays, frame_times, layout="cloud", pupil_mm=5.0, rate=200,
+                         gaze_px=(80, 30), size=(160, 120), not_worn=(), blinks=(), events=(), lux=None,
+                         start_ns=1_700_000_000_000_000_000, video_delay=0.25):
+    """Synthetic Neon recording in the Pupil Cloud Timeseries export ("cloud") or the native
+    format ("native"). Eye samples start ``video_delay`` s before the first scene frame, as the
+    eye cameras start first. ``not_worn`` and ``blinks`` are (start, end) spans in s relative to
+    the first frame; ``events`` are (time, name) markers. ``pupil_mm`` may be a function of time."""
+    import json
+    folder.mkdir(parents=True, exist_ok=True)
+    first_frame = start_ns + int(video_delay * 1e9)
+    ns = lambda t: first_frame + int(round(t * 1e9))
+    frame_ns = [ns(t) for t in frame_times]
+    (folder / "info.json").write_text(json.dumps({
+        "start_time": start_ns, "duration": int((frame_times[-1] + video_delay + 0.1) * 1e9),
+        "recording_id": "a1b2c3d4-0000", "gaze_mode": "binocular", "data_format_version": "2.3"}))
+    times = np.arange(-video_delay, frame_times[-1], 1 / rate)
+    inside = lambda t, spans: any(a <= t < b for a, b in spans)
+    diam = [pupil_mm(t) if callable(pupil_mm) else pupil_mm for t in times]
+
+    w, h = size
+    video_name = "a1b2c3d4_0-10.mp4" if layout == "cloud" else "Neon Scene Camera v1 ps1.mp4"
+    writer = cv2.VideoWriter(str(folder / video_name), cv2.VideoWriter_fourcc(*"mp4v"), 30, (w, h))
+    for g in grays:
+        writer.write(np.full((h, w, 3), g, dtype=np.uint8))
+    writer.release()
+    fx = w / 2 / np.tan(np.radians(45))          # pinhole with a 90° horizontal field
+
+    if layout == "cloud":
+        def table(name, header, rows):
+            with open(folder / name, "w", newline="") as f:
+                wr = csv.writer(f)
+                wr.writerow(header)
+                wr.writerows(rows)
+        eye_rows, gaze_rows = [], []
+        for t, d in zip(times, diam):
+            eye = ["s1", "r1", ns(t), d, d + 0.2] + [0.0] * (len(NEON_EYE_HEADER) - 5)
+            eye_rows.append(eye)
+            gaze_rows.append(["s1", "r1", ns(t), gaze_px[0], gaze_px[1], 0.0 if inside(t, not_worn) else 1.0,
+                              "", "", 0.0, 0.0])
+        table("3d_eye_states.csv", NEON_EYE_HEADER, eye_rows)
+        table("gaze.csv", NEON_GAZE_HEADER, gaze_rows)
+        table("world_timestamps.csv", ["section id", "recording id", "timestamp [ns]"],
+              [["s1", "r1", t] for t in frame_ns])
+        table("blinks.csv", ["section id", "recording id", "blink id", "start timestamp [ns]",
+                             "end timestamp [ns]", "duration [ms]"],
+              [["s1", "r1", i + 1, ns(a), ns(b), (b - a) * 1000] for i, (a, b) in enumerate(blinks)])
+        table("events.csv", ["recording id", "timestamp [ns]", "name", "type"],
+              [["r1", start_ns, "recording.begin", "recording"]]
+              + [["r1", ns(t), name, "cloud"] for t, name in events])
+        (folder / "scene_camera.json").write_text(json.dumps({
+            "camera_matrix": [[fx, 0, w / 2], [0, fx, h / 2], [0, 0, 1]], "dist_coefs": [0.0] * 8,
+            "serial_number": "abc123", "version": 1}))
+    else:
+        eye_ts = np.array([ns(t) for t in times], dtype="<i8")
+        eye = np.zeros((len(times), 14), dtype="<f4")
+        eye[:, 0] = diam
+        eye[:, 7] = np.asarray(diam) + 0.2
+        eye_ts.tofile(folder / "eye_state ps1.time")
+        eye.tofile(folder / "eye_state ps1.raw")
+        eye_ts.tofile(folder / "gaze ps1.time")
+        np.tile(np.asarray(gaze_px, dtype="<f4"), (len(times), 1)).tofile(folder / "gaze ps1.raw")
+        np.array([0 if inside(t, not_worn) else 1 for t in times], dtype="u1").tofile(folder / "worn ps1.raw")
+        np.array(frame_ns, dtype="<i8").tofile(folder / "Neon Scene Camera v1 ps1.time")
+        marks = [(start_ns, "recording.begin")] + [(ns(t), name) for t, name in events]
+        (folder / "event.txt").write_text("\n".join(name for _, name in marks) + "\n")
+        np.array([t for t, _ in marks], dtype="<i8").tofile(folder / "event.time")
+        k = np.array([[fx, 0, w / 2], [0, fx, h / 2], [0, 0, 1]], dtype="<f8")
+        (folder / "calibration.bin").write_bytes(b"\x01" + b"abc123" + k.tobytes() + bytes(600))
+    if lux is not None:
+        epoch0 = first_frame / 1e9
+        with open(folder / "1_1_1.csv", "w", newline="") as f:
+            wr = csv.writer(f)
+            for t in np.arange(-1, frame_times[-1] + 1, 0.1):
+                wr.writerow([f"{(epoch0 + t) * 1000:.0f}", 1, 1, 1, lux(t)])
+    return folder

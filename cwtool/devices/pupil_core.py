@@ -16,14 +16,13 @@ from __future__ import annotations
 
 import csv
 import json
-import math
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 
 from cwtool import lux
-from cwtool.devices.common import read_event_log
+from cwtool.devices.common import bin_samples as _bin, pinhole_fov, read_event_log, sample_rate, video_resolution
 from cwtool.recording import DeviceProfile, Recording
 
 NAME = "pupil_core"
@@ -55,40 +54,9 @@ def camera_fov(folder: Path, resolution: tuple[int, int]) -> tuple[float, float]
         import msgpack
 
         data = msgpack.unpackb((folder / "world.intrinsics").read_bytes(), raw=False)
-        cam = data[str(tuple(resolution))]
-        k = cam["camera_matrix"]
-        w, h = resolution
-        return (2 * math.degrees(math.atan(w / 2 / k[0][0])), 2 * math.degrees(math.atan(h / 2 / k[1][1])))
+        return pinhole_fov(data[str(tuple(resolution))]["camera_matrix"], resolution)
     except Exception:
         return DEFAULT_CAMERA_FOV
-
-
-def _video_resolution(path: Path) -> tuple[int, int]:
-    import cv2
-
-    cap = cv2.VideoCapture(str(path))
-    size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-    cap.release()
-    return size
-
-
-def _bin(times: np.ndarray, values: np.ndarray, t0: float, rate: float, n: int) -> np.ndarray:
-    """Average ``values`` (N, ...) into ``n`` bins of 1/rate s starting at t0; empty bins are NaN."""
-    values = np.asarray(values, dtype=float)
-    shape = (n,) + values.shape[1:]
-    out = np.full(shape, np.nan)
-    idx = np.round((times - t0) * rate).astype(int)
-    ok = (idx >= 0) & (idx < n) & np.all(np.isfinite(values.reshape(len(values), -1)), axis=1)
-    if not ok.any():
-        return out
-    idx, vals = idx[ok], values[ok].reshape(ok.sum(), -1)
-    sums = np.zeros((n, vals.shape[1]))
-    counts = np.zeros(n)
-    np.add.at(sums, idx, vals)
-    np.add.at(counts, idx, 1)
-    filled = counts > 0
-    out.reshape(n, -1)[filled] = sums[filled] / counts[filled, None]
-    return out
 
 
 def load(folder: Path, lux_folder: Optional[Path] = None, min_confidence: float = MIN_CONFIDENCE,
@@ -129,8 +97,8 @@ def load(folder: Path, lux_folder: Optional[Path] = None, min_confidence: float 
     all_t = np.concatenate([np.asarray(eyes[e][0]) for e in eyes])
     if len(all_t) < 2:
         raise ValueError(f"No pupil samples with confidence >= {min_confidence} in {export}")
-    rates = [1 / np.median(np.diff(np.sort(eyes[e][0]))) for e in eyes if len(eyes[e][0]) > 10]
-    rate = float(round(np.median(rates))) if rates else 120.0
+    rates = [sample_rate(eyes[e][0], 0) for e in eyes if len(eyes[e][0]) > 10]
+    rate = float(np.median(rates)) if rates else 120.0
     t0 = float(all_t.min())
     n = int(round((all_t.max() - t0) * rate)) + 1
     time = t0 + np.arange(n) / rate
@@ -153,7 +121,7 @@ def load(folder: Path, lux_folder: Optional[Path] = None, min_confidence: float 
     gaze[outside] = np.nan
 
     video = folder / "world.mp4"
-    fov = camera_fov(folder, _video_resolution(video)) if video.exists() else DEFAULT_CAMERA_FOV
+    fov = camera_fov(folder, video_resolution(video)) if video.exists() else DEFAULT_CAMERA_FOV
     profile = DeviceProfile(
         name=NAME,
         pupil_unit="mm" if use_3d else "px",
