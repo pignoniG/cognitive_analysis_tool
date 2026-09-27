@@ -60,12 +60,49 @@ The camera's exposure cancels in the ratio. Set `lux_use_video` off to use the s
 
 \(L_\text{min}\) and \(L_\text{max}\) are not used in this mode, so the plots show no black and white point lines.
 
-!!! note "Without lux logs"
-    If a lux device's recording has no lux readings, the scene camera alone is used, mapped onto
-    \([L_\text{min}, L_\text{max}]\) as for a display, and a warning says so: the automatic exposure makes it only
-    relative.
-
 Version 1.x combined the sensor and camera with a different heuristic; see [open issue 29](../OPEN_ISSUES.md).
+
+## Lux devices without a lux log
+
+If a Pupil recording has no lux readings, the scene camera is used alone. **Camera exposure** (`camera_exposure`)
+says how to read it.
+
+**`auto`** (default): the camera adjusted its exposure, so the video gives only relative luminance. It is mapped onto
+\([L_\text{min}, L_\text{max}]\) as for a display, and a warning says so.
+
+**`fixed`**: the exposure was fixed during the recording (Neon's manual exposure mode, or manual exposure in Pupil
+Capture for the Core). Linearised pixel values are then proportional to scene luminance, up to saturation:
+
+\[
+L = L_\text{full} \cdot Y_w, \qquad L_\text{full} = L_\text{white} \cdot \frac{t_\text{ref}}{t}
+\]
+
+- \(Y_w\): relative luminance of the weighted gaze/background colour, as above;
+- \(L_\text{white}\) (`camera_white`): the luminance that saturates the camera (code 255) at the reference
+  exposure time \(t_\text{ref}\) (`camera_reference_ms`);
+- \(t\) (`camera_exposure_ms`): the recording's exposure time. A longer exposure saturates at a lower luminance.
+  With either time at 0, \(L_\text{white}\) is used as is.
+
+A warning appears when the gaze area is saturated (mean code value ≥ 250) in more than 5 % of the video samples,
+since luminance is underestimated there.
+
+### Calibrating the camera from a lux log
+
+\(L_\text{white}\) depends on the camera, its gain and the lens, so it is measured once: record with the same
+fixed exposure **and** the lux sensor, open that recording, enter its exposure time and click
+**Calibrate camera from lux**. The sensor's average luminance \(\bar L\) and the whole frame's relative luminance
+\(Y_\text{frame}\) describe the same view, so
+
+\[
+L_\text{white} = \operatorname{median}\left(\frac{\bar L}{Y_\text{frame}}\right)
+\]
+
+over the video samples that are neither black nor saturated. The dialog reports the spread (90th / 10th percentile
+of the per-sample ratios); above ×2 it warns that the exposure was probably not fixed. Applying sets `camera_white`
+and `camera_reference_ms`; save the parameters and load them for recordings without a lux log.
+
+The assumptions behind this (fixed gain, the camera's tone curve, lens vignetting) are listed in
+[open issue 35](../OPEN_ISSUES.md).
 
 ## Timing
 

@@ -36,6 +36,14 @@ NUMBERS = {
     "lux_gain": ("Lux gain", 0, 100, 0.01, 6, "Sensor calibration: average luminance = (gain·lux + offset) / solid angle"),
     "lux_offset": ("Lux offset", -1000, 1000, 0.01, 5, "Sensor calibration offset"),
     "lux_solid_angle": ("Sensor solid angle (sr)", 0.01, 12.6, 0.1, 3, "Solid angle seen by the lux sensor"),
+    "camera_white": ("Camera full scale (cd/m²)", 0.1, 1e7, 50, 1,
+                     "Luminance that saturates the scene camera (code 255) at the reference exposure; "
+                     "set it with 'Calibrate camera from lux' on a recording made with the same exposure"),
+    "camera_reference_ms": ("Reference exposure (ms)", 0, 10000, 1, 2,
+                            "Exposure time the full-scale value was calibrated at; 0 = same as the recording"),
+    "camera_exposure_ms": ("Recording exposure (ms)", 0, 10000, 1, 2,
+                           "This recording's exposure time; the full scale is scaled by reference / recording. "
+                           "0 = same as the reference"),
     "cw_window": ("ΔPD window (s)", 0.01, 10, 0.05, 2, "Averaging window for ΔPD"),
     "field_radius": ("Scene circle radius", 0.05, 1, 0.05, 2, "Fraction of half the frame height (circular videos)"),
     "fixation_radius_deg": ("Gaze circle radius (°)", 0.5, 60, 0.25, 2,
@@ -54,6 +62,7 @@ CHOICES = {
     "eye": ("Pupil", ["both", "left", "right"]),
     "eyes": ("Eyes viewing", [2, 1]),
     "alignment": ("Alignment", ["recording", "baseline", "fixed", "none"]),
+    "camera_exposure": ("Camera exposure", ["auto", "fixed"]),
 }
 TEXTS = {
     "baseline_events": ("Baseline events", "Comma-separated event labels used by alignment 'baseline'"),
@@ -65,6 +74,8 @@ GROUPS = [
     ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
                       "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
     ("Lux sensor (Pupil devices)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
+    ("Scene camera without lux log (Pupil devices)",
+     ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
     ("Dynamics", ["delay", "dynamics", "attack", "release"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]

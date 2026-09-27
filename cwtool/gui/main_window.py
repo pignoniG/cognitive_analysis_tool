@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -106,6 +107,12 @@ class MainWindow(QMainWindow):
         video_layout.addWidget(self.video_label)
         video_layout.addWidget(self.progress)
         video_layout.addLayout(buttons)
+        self.camera_button = QPushButton("Calibrate camera from lux")
+        self.camera_button.setToolTip("For recordings made with a fixed camera exposure and a lux log: find the "
+                                      "luminance that saturates the camera, for recordings of the same exposure "
+                                      "without a lux log")
+        self.camera_button.clicked.connect(self.calibrate_camera)
+        video_layout.addWidget(self.camera_button)
         side_layout.addWidget(video_box)
 
         cal_box = QGroupBox("Calibration sequence")
@@ -207,6 +214,9 @@ class MainWindow(QMainWindow):
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
         self.find_sequence_button.setEnabled(self.video is not None and not busy)
+        has_lux = has_rec and self.recording.lux_values is not None
+        self.camera_button.setVisible(has_rec and self.recording.luminance_source == "lux_sensor")
+        self.camera_button.setEnabled(has_lux and self.video is not None and not busy)
         if self.result is None:
             self.summary_label.setText("Open a recording to start." if not has_rec else "")
         else:
@@ -214,7 +224,7 @@ class MainWindow(QMainWindow):
             gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
             warn = "".join(f"<br><span style='color:#c00'>⚠ {w}</span>" for w in r.warnings)
             ends = (f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
-                    if np.isfinite(r.expected_black) else "luminance from lux sensor &nbsp;&nbsp; ")
+                    if np.isfinite(r.expected_black) else f"luminance from {r.luminance_mode} &nbsp;&nbsp; ")
             self.summary_label.setText(
                 f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm &nbsp;&nbsp; {ends}"
                 f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
@@ -384,6 +394,26 @@ class MainWindow(QMainWindow):
                           QMessageBox.Apply | QMessageBox.Cancel, self)
         if box.exec() == QMessageBox.Apply:
             self.params_panel.set_params(fit.params)
+
+    def calibrate_camera(self) -> None:
+        params = self.params_panel.params()
+        try:
+            cal = pipeline.calibrate_camera(self.recording, self.video, params)
+        except ValueError as e:
+            self._error("Camera calibration", str(e))
+            return
+        exposure = (f" at {params.camera_exposure_ms:g} ms" if params.camera_exposure_ms > 0
+                    else " (enter the recording exposure first to reuse it at other exposures)")
+        notes = "".join(f"<br><span style='color:#c00'>⚠ {n}</span>" for n in cal.notes)
+        box = QMessageBox(QMessageBox.Question, "Camera calibration",
+                          f"<b>Full scale: {cal.white:.0f} cd/m²</b>{exposure}<br>"
+                          f"from {cal.samples} video samples, spread ×{cal.spread:.2f} (90th / 10th percentile)"
+                          f"{notes}<br><br>Apply? Recordings without a lux log will use it when camera exposure "
+                          f"is 'fixed'. Save the parameters to keep it.",
+                          QMessageBox.Apply | QMessageBox.Cancel, self)
+        if box.exec() == QMessageBox.Apply:
+            self.params_panel.set_params(replace(params, camera_white=cal.white,
+                                                 camera_reference_ms=params.camera_exposure_ms))
 
     def _sequence_dragged(self, start: float) -> None:
         self.sequence_start.blockSignals(True)

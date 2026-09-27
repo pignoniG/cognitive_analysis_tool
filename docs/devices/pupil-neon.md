@@ -82,9 +82,13 @@ An `event_log` CSV from the [event logger](../usage/tools.md#event-logger) in th
 
 Neon's scene camera can run with **manual exposure** (1–1000 ms, set in the Companion app's preview), or one of
 three automatic modes. Automatic exposure rescales the video's brightness with the scene, so the video can only
-distribute the lux sensor's reading over the view (which is how it is used), not measure luminance itself. For
-studies where the video should be photometrically stable, use manual exposure and keep it fixed across a
-participant's recordings; exposures above 330 ms lower the frame rate below 30 fps.
+distribute the lux sensor's reading over the view (which is how it is used), not measure luminance itself.
+
+With **manual exposure** the video is photometrically stable, and it can stand in for the lux sensor: set
+**Camera exposure** to `fixed` and enter the exposure time. Calibrate the camera's full-scale luminance once on a
+recording made with the lux sensor (see
+[Lux devices without a lux log](../processing/luminance.md#lux-devices-without-a-lux-log)). Exposures above 330 ms
+lower the frame rate below 30 fps.
 
 ## Clocks
 

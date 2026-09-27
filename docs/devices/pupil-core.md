@@ -52,8 +52,10 @@ to the whole binocular field, so the adapting field area uses 200° × 135° (Pi
 ## Luminance
 
 From the lux sensor worn on the tracker, distributed over the view with the scene video; see
-[Luminance](../processing/luminance.md#lux-sensor-devices). Without lux logs the scene camera is used alone, with a
-warning: its automatic exposure makes it only relative.
+[Luminance](../processing/luminance.md#lux-sensor-devices). Without lux logs the scene camera is used alone: as
+relative luminance, with a warning, or, if the recording was made with manual exposure in Pupil Capture, as
+absolute luminance with **Camera exposure** set to `fixed` (see
+[Lux devices without a lux log](../processing/luminance.md#lux-devices-without-a-lux-log)).
 
 ## Profile
 

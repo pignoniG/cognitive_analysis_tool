@@ -60,3 +60,59 @@ def test_markers_become_events():
                                                   "Recall", "Rest"], end=8, ignore=("recording.begin",))
     assert [(e.label, e.start, e.end) for e in ev] == [
         ("Rest", 1, 5), ("Task", 2, 3), ("Recall", 5, 6), ("Rest", 6, 8)]
+
+
+def _analysed(folder):
+    rec = devices.load(folder)
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec),
+                          frame_times=rec.scene_frame_times)
+    return rec, video
+
+
+def _level(res, t):
+    return res.luminance[np.argmin(np.abs(res.time - t))]
+
+
+def test_fixed_exposure_camera_without_lux(tmp_path):
+    rec, video = _analysed(write_neon_recording(tmp_path / "neon", GRAYS, FRAME_TIMES))
+    assert rec.lux_values is None
+    res = pipeline.run(rec, video, Parameters(camera_exposure="fixed", camera_white=1000.0))
+    assert res.luminance_mode == "camera, fixed exposure" and np.isnan(res.expected_black)
+    assert not any("lux" in w for w in res.warnings)
+    # Uniform frames: luminance = full scale × decoded code value (MPEG-4 shifts levels slightly).
+    assert _level(res, 0.8) == pytest.approx(1000 * (40 / 255) ** 2.2, rel=0.15)
+    assert _level(res, 2.5) == pytest.approx(1000 * (220 / 255) ** 2.2, rel=0.05)
+    # Twice the exposure time saturates at half the luminance.
+    half = pipeline.run(rec, video, Parameters(camera_exposure="fixed", camera_white=1000.0,
+                                               camera_reference_ms=10, camera_exposure_ms=20))
+    assert _level(half, 2.5) == pytest.approx(_level(res, 2.5) / 2, rel=1e-6)
+
+
+def test_automatic_exposure_without_lux_suggests_fixed(tmp_path):
+    rec, video = _analysed(write_neon_recording(tmp_path / "neon", GRAYS, FRAME_TIMES))
+    res = pipeline.run(rec, video, Parameters())
+    assert res.luminance_mode == "camera, relative"
+    assert any("'fixed'" in w for w in res.warnings)
+
+
+def test_saturated_gaze_area_is_reported(tmp_path):
+    rec, video = _analysed(write_neon_recording(tmp_path / "neon", [255] * 90, FRAME_TIMES))
+    res = pipeline.run(rec, video, Parameters(camera_exposure="fixed"))
+    assert any("saturated" in w for w in res.warnings)
+
+
+def test_camera_calibration_from_lux(tmp_path):
+    white, p = 800.0, Parameters()
+    level = lambda t: (40 if t < 1.5 else 220) / 255
+    # A fixed-exposure camera: the sensor's average luminance is proportional to the frame's.
+    lux = lambda t: (white * level(t) ** 2.2 * p.lux_solid_angle - p.lux_offset) / p.lux_gain
+    rec, video = _analysed(write_neon_recording(tmp_path / "neon", GRAYS, FRAME_TIMES, lux=lux))
+    cal = pipeline.calibrate_camera(rec, video, p)
+    assert cal.white == pytest.approx(white, rel=0.1)
+    # The MPEG-4 test video decodes grey 40 as 37 and 220 as 216, so the halves differ by ~15 %.
+    assert cal.spread < 2 and not cal.notes
+
+    # With automatic exposure the frame stays mid-grey while the light changes: flagged.
+    rec, video = _analysed(write_neon_recording(tmp_path / "auto", [128] * 90, FRAME_TIMES,
+                                                lux=lambda t: 50 if t < 1.5 else 800))
+    assert pipeline.calibrate_camera(rec, video, p).notes

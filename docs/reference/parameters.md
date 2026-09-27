@@ -34,6 +34,15 @@ Two sets, both in `cwtool/params.py`.
 | `lux_solid_angle` | 2.2 sr | sensor field of view |
 | `lux_use_video` | on | distribute the sensor's average over the view with the scene video |
 
+## Scene camera without a lux log (Pupil devices)
+
+| Name | Default | Meaning |
+|---|---|---|
+| `camera_exposure` | auto | `auto`: relative luminance mapped onto Lmin–Lmax; `fixed`: the exposure was fixed, pixel values are proportional to luminance |
+| `camera_white` | 1000 cd/m² | luminance at full scale (code 255) for the reference exposure; set it with **Calibrate camera from lux** |
+| `camera_reference_ms` | 0 | exposure time `camera_white` refers to; 0 = the recording's |
+| `camera_exposure_ms` | 0 | the recording's exposure time; full scale is scaled by reference / recording; 0 = same as the reference |
+
 ## Pupil signal
 
 | Name | Default | Meaning |

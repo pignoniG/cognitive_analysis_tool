@@ -37,6 +37,7 @@ class Result:
     measured_rate: float        # Hz, rate estimated from the recording's timestamps
     gap_fraction: float         # share of the grid inside gaps longer than max_gap
     warnings: list = field(default_factory=list)
+    luminance_mode: str = "display"   # see Prepared.mode
 
 
 def _odd(n: int, minimum: int = 3) -> int:
@@ -187,6 +188,8 @@ class Prepared:
     scale: Optional[float]      # device units to mm, None for pixel data (fitted per recording)
     photometric: bool = True    # luminance comes from the Lmin/Lmax mapping (not a lux sensor)
     notes: list = field(default_factory=list)
+    # "display", "lux sensor", "camera, fixed exposure" or "camera, relative"
+    mode: str = "display"
 
 
 def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
@@ -223,14 +226,77 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
             y_w, y_frame = relative_luminances(video, params)
             ratio = np.where(y_frame[order] > 1e-4, y_w[order] / np.maximum(y_frame[order], 1e-4), 1.0)
             lum = avg * np.interp(time, vt, ratio)
-        photometric = False
+        photometric, mode = False, "lux sensor"
+    elif rec.luminance_source == "lux_sensor" and params.camera_exposure == "fixed":
+        # Fixed exposure: pixel values are proportional to scene luminance up to saturation.
+        y_w, _ = relative_luminances(video, params)
+        lum = np.interp(time, vt, params.camera_full_scale * y_w[order])
+        clipped = clipped_fraction(video)
+        if clipped > CLIPPED_WARNING:
+            notes.append(f"The gaze area is saturated in {clipped:.0%} of the video samples: luminance is "
+                         "underestimated there. A shorter exposure would avoid it.")
+        photometric, mode = False, "camera, fixed exposure"
     else:
+        mode = "display"
         if rec.luminance_source == "lux_sensor":
             notes.append("No lux sensor data found: luminance is estimated from the scene camera alone, "
-                         "mapped onto Lmin–Lmax. The camera's automatic exposure makes this only relative.")
+                         "mapped onto Lmin–Lmax. With automatic exposure this is only relative; if the "
+                         "exposure was fixed, set camera exposure to 'fixed'.")
+            mode = "camera, relative"
         lum = np.interp(time, vt, scene_luminance(video, params)[order])
         photometric = True
-    return Prepared(time, fs, smooth, fast, valid, lum, scale, photometric, notes)
+    return Prepared(time, fs, smooth, fast, valid, lum, scale, photometric, notes, mode)
+
+
+# Mean code value above which an area counts as saturated, and the share of saturated samples
+# that triggers a warning.
+CLIPPED_CODE = 250
+CLIPPED_WARNING = 0.05
+
+
+def clipped_fraction(video: VideoResult) -> float:
+    """Share of video samples whose gaze area is saturated in any channel."""
+    if not len(video.time):
+        return 0.0
+    return float((video.fixation_rgb.max(axis=1) >= CLIPPED_CODE).mean())
+
+
+@dataclass
+class CameraCalibration:
+    white: float          # cd/m² at full scale for the recording's exposure
+    spread: float         # 90th / 10th percentile of the per-sample estimates (1 = perfectly constant)
+    samples: int
+    notes: list
+
+
+def calibrate_camera(rec: Recording, video: VideoResult, params: Parameters) -> CameraCalibration:
+    """Full-scale luminance of a fixed-exposure scene camera, from a recording that also has a lux log.
+
+    The sensor's average luminance and the whole frame's relative luminance describe the same view, so
+    their ratio is the luminance that saturates the camera. It is estimated per video sample and the
+    median is kept. A large spread means the exposure was not fixed (or the sensor and camera saw
+    different scenes). Apply it to recordings without a lux log made with the same exposure, or scale
+    it with camera_reference_ms / camera_exposure_ms.
+    """
+    if rec.lux_values is None or len(rec.lux_values) < 2:
+        raise ValueError("The recording has no lux sensor data to calibrate the camera with")
+    order = np.argsort(video.time)
+    t = video.time[order] - params.timelag
+    _, y_frame = relative_luminances(video, params)
+    y_frame = y_frame[order]
+    avg = luminance_from_lux(rec, params, t)
+    inside = (t >= rec.lux_time[0] - params.timelag) & (t <= rec.lux_time[-1] - params.timelag)
+    usable = inside & (y_frame > 0.005) & (video.background_rgb[order].max(axis=1) < CLIPPED_CODE)
+    if usable.sum() < 10:
+        raise ValueError("Too few video samples overlap the lux log with a usable (not black, not saturated) frame")
+    ratio = avg[usable] / y_frame[usable]
+    p10, p50, p90 = np.percentile(ratio, [10, 50, 90])
+    spread = float(p90 / p10) if p10 > 0 else float("inf")
+    notes = []
+    if spread > 2:
+        notes.append(f"The estimate varies {spread:.1f}× across the recording: the exposure was probably not "
+                     "fixed, or the sensor and the camera saw different parts of the scene.")
+    return CameraCalibration(float(p50), spread, int(usable.sum()), notes)
 
 
 def luminance_from_lux(rec: Recording, params: Parameters, time: np.ndarray) -> np.ndarray:
@@ -297,14 +363,14 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         ends = model.watson_yellott(np.array([params.l_min, params.l_max]), params.age, profile.field_area,
                                     params.eyes, params.reference_age)
     else:
-        ends = (float("nan"), float("nan"))  # Lmin/Lmax are not used with a lux sensor
+        ends = (float("nan"), float("nan"))  # Lmin/Lmax are not used with a lux sensor or fixed exposure
 
     return Result(time=time, luminance=prep.luminance, measured_raw=measured_raw, measured=measured,
                   expected=expected, cw_time=cw_time, cw=cw, cw_rms=residual_rms(cw),
                   cw_sd=float(np.nanstd(cw)) if good.any() else float("nan"),
                   expected_black=float(ends[0]), expected_white=float(ends[1]), offset=offset,
                   pupil_scale=scale, rate=fs, measured_rate=rec.measured_rate,
-                  gap_fraction=float(1 - valid.mean()), warnings=notes)
+                  gap_fraction=float(1 - valid.mean()), warnings=notes, luminance_mode=prep.mode)
 
 
 def event_means(result: Result, events) -> list[tuple[str, float, float, float]]:

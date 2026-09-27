@@ -364,6 +364,19 @@ them rather than describing the headset or the participant.
   the sensor and the camera) would let the offset be measured.
 - **Status:** open.
 
+### 35. Fixed-exposure camera as a luminance meter
+- **Where:** `pipeline.prepare` (camera exposure "fixed") and `pipeline.calibrate_camera`.
+- **Assumptions:** (a) the camera's gain is fixed along with its exposure time; Neon's manual mode sets the exposure
+  time, and whether the gain also stays fixed is not documented. (b) After decoding with the gamma parameter, pixel
+  values are proportional to luminance; the scene cameras' tone curves are not published, and the one gamma
+  parameter serves both the display and the camera. (c) Lens vignetting darkens the edges of wide-angle images, so
+  a gaze area near the edge reads darker than it is. (d) The full-scale value scales inversely with exposure time.
+  (e) The lux sensor and the camera see comparable parts of the scene when calibrating.
+- **To check:** record a static scene at two exposure times with the lux sensor: the calibrated full-scale values
+  should differ by the exposure ratio, with a small spread in each. A grey card at the image centre and edge would
+  measure vignetting.
+- **Status:** needs data.
+
 ## D. Paper text
 
 ### 24. Dynamics section: filter placement and stage count

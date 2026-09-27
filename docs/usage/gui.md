@@ -7,7 +7,7 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 | Area | Contents |
 |---|---|
 | Left panel | Recording, Scene video, Calibration sequence and the parameter editors |
-| Summary line | ΔPD RMS and SD, expected pupil at the display's black and white points (display devices) or "luminance from lux sensor", pupil scale and offset applied, sampling rates, share of the recording in gaps, and warnings in red |
+| Summary line | ΔPD RMS and SD, expected pupil at the display's black and white points (display devices) or where the luminance comes from (lux sensor, or camera with fixed exposure), pupil scale and offset applied, sampling rates, share of the recording in gaps, and warnings in red |
 | Plots | Measured vs expected pupil (top) and ΔPD (bottom), sharing the time axis |
 | Video preview (dock) | The scene frame at the cursor with the analysis circles; toggle it in **View** |
 
@@ -29,10 +29,14 @@ The video is analysed automatically when a recording is opened, unless a cached 
 video, settings, frame timestamps and gaze exists. **Analyse video** runs it again (for example after changing the
 video analysis settings), **Cancel** stops it.
 
+**Calibrate camera from lux** (Pupil recordings with a lux log): measures the luminance that saturates a
+fixed-exposure scene camera, for recordings of the same exposure without a lux log (see
+[Luminance](../processing/luminance.md#calibrating-the-camera-from-a-lux-log)).
+
 ## Parameters
 
 Parameters are grouped as in [Parameters](../reference/parameters.md): Participant, Photometric calibration,
-Pupil signal, Lux sensor, Dynamics, ΔPD. Every change re-runs the analysis from the cached video pass, so the
+Pupil signal, Lux sensor, Scene camera without lux log, Dynamics, ΔPD. Every change re-runs the analysis from the cached video pass, so the
 plots follow instantly.
 
 The **Video analysis** group (gaze circle radius, scene circle, background, analysis width) changes what is

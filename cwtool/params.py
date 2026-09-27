@@ -54,6 +54,15 @@ class Parameters:
     lux_solid_angle: float = 2.2         # sr
     lux_use_video: bool = True           # distribute the sensor's average with the scene video (2021 eq. 5-8)
 
+    # Scene camera alone, when a Pupil recording has no lux log:
+    #   "auto":  automatic exposure; the video gives only relative luminance, mapped onto Lmin-Lmax
+    #   "fixed": the exposure was fixed (e.g. Neon manual exposure), so pixel values are proportional to
+    #            luminance: L = white · relative luminance, with white the luminance that saturates the camera
+    camera_exposure: str = "auto"
+    camera_white: float = 1000.0         # cd/m² at full scale (code 255), for an exposure of camera_reference_ms
+    camera_reference_ms: float = 0.0     # exposure time camera_white was calibrated at; 0 = the recording's
+    camera_exposure_ms: float = 0.0      # the recording's exposure time; 0 = the same as camera_reference_ms
+
     # Sampling
     analysis_rate: float = 100.0         # Hz, uniform analysis grid; 0 = device's native rate
     max_gap: float = 0.5                 # s, longer gaps (not blinks) are left out of ΔPD
@@ -87,6 +96,14 @@ class Parameters:
     @property
     def gains(self) -> tuple[float, float, float]:
         return (self.gain_r, self.gain_g, self.gain_b)
+
+    @property
+    def camera_full_scale(self) -> float:
+        """cd/m² at full scale for the recording's exposure: saturation luminance scales inversely
+        with exposure time."""
+        if self.camera_reference_ms > 0 and self.camera_exposure_ms > 0:
+            return self.camera_white * self.camera_reference_ms / self.camera_exposure_ms
+        return self.camera_white
 
     def save(self, path: str | Path) -> None:
         Path(path).write_text(json.dumps(asdict(self), indent=2))
