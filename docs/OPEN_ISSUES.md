@@ -514,9 +514,15 @@ them rather than describing the headset or the participant.
   brightening steps within a colour (e.g. red 191 → 255, blue 64 → 128), where the constriction is small and the
   pupil is still moving from the previous step. The median is robust, but the reported interquartile range includes
   them (e: −0.19–0.40 s), and with few onsets they pull the median down.
-- **Proposal:** discard onsets outside a physiological range (e.g. 0.1–0.8 s) and require a flat baseline before
-  the change.
-- **Status:** open.
+- **Cause:** not the timing of the change: the detected video change is within 0.09 s of the nominal one at these
+  steps, as at the others. The pupil was already shrinking before the change (median −0.29 mm/s over the second
+  before, against +0.05 mm/s at steps with a normal onset), so the 20 % point is reached early against a baseline
+  taken as flat. Whether this is spontaneous fluctuation or anticipation of the regular 10 s rhythm is unknown; a
+  sequence with irregular step lengths would tell.
+- **Proposal:** measure the onset against the pre-change trend (or against the model's prediction, once it describes
+  re-dilation, issue 43) rather than a flat level, and discard onsets outside a physiological range (e.g.
+  0.1–0.8 s).
+- **Status:** open; part of the dynamics model (issue 43).
 
 ### 42. The sensitivity prior breaks the display–sensitivity equivalence slightly
 - **Where:** 2.0 `photometry.fit_light_response`; `tests/test_photometry.py::test_display_error_is_absorbed_by_the_sensitivity`,
@@ -528,6 +534,32 @@ them rather than describing the headset or the participant.
 - **Proposal:** state the equivalence as approximate (exact only when the data determine the sensitivity), or centre
   the prior on the sensitivity that the display photometry implies, e.g. from a pooled fit (issue 36).
 - **Status:** open (the test fails until decided).
+
+### 43. The dynamic model cannot describe the measured step responses
+- **Where:** 2.0 `model.delay` and `model.attack_release`: the Watson & Yellott steady state, delayed, through a
+  one-pole filter with separate dilation and constriction time constants.
+- **Problem:** this model moves monotonically from one steady state to the next. On the 91 brightening and 20
+  darkening steps of the seven calibration recordings (issue 36):
+  - the pupil constricts by 0.83 mm (median), reaching its minimum 1.0 s after the change, then re-dilates by
+    0.43 mm, 59 % of the constriction, within the 10 s step; in 16 % of the brightening steps it ends larger than
+    before the change ("pupillary escape");
+  - dilation has a fast and a slow phase: 0.71 mm in the first 3 s, then another 0.49 mm by the end of the step;
+  - the onset of the constriction is gradual (S-shaped), while a one-pole filter starts at full speed, so the fitted
+    constriction τ (0.09–0.22 s) and the delay share the shape of the onset between them;
+  - the latency does not depend on the step size (r = 0.06 with the log luminance ratio), so a fixed delay is enough.
+  Because of the re-dilation and slow dilation the steady states per step must be extrapolated (issue 40), onsets
+  are read against a moving baseline (issue 41), and the whole-trace fit leaves residuals the parameters then absorb.
+- **Proposal:** in order of expected gain:
+  1. a transient pathway: a constriction proportional to increases in log luminance that decays with an escape time
+     constant of a few seconds, added to the sustained response (two parameters);
+  2. dilation as the sum of a fast and a slow one-pole (one more time constant and a share);
+  3. a second-order (two-pole) constriction, so the delay is the true latency and the onset is S-shaped;
+  4. with such a model, fit the light sensitivity on the whole trace together with the dynamics, instead of from
+     per-step steady states (removing issue 40), and fit the latency from the model's prediction around each change
+     (removing issue 41).
+  The new calibration sequence should allow these to be identified: irregular step lengths, return-to-dark steps,
+  and some long steps.
+- **Status:** open.
 
 ## D. Paper text
 
