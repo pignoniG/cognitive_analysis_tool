@@ -411,8 +411,58 @@ them rather than describing the headset or the participant.
     uncertain; ΔPD in SD units or relative to rest is unaffected.
   - The saturated colour steps constrict the pupil almost as much as white (blue 255: 2.74 mm, where photopic
     luminance predicts 3.67 mm), consistent with the melanopsin-driven pupil response; hence the wide colour prior.
-- **Status:** decided (display photometry separate, sensitivity per participant); needs more participants to see how
-  consistent sensitivities are; paper text to follow.
+- **Seven participants (Varjo XR-4, calibration recordings a–g, a on 14 April and b–g on 21 April 2026):** video
+  re-analysed with the current code; default display photometry; built-in sequence located by *Find in recording*
+  (10 s steps, colour match error 9–10 %), except e, placed at 1.8 s by hand (issue 39); then *1. Fit light
+  sensitivity* (channel weights, gamma fixed) and *2. Fit latency, scale and offset* (with time constants), as the
+  app runs them. a is the recording above; with the new video analysis it gives sensitivity 38 and 0.150 mm.
+
+  | | sensitivity (95 %) | weights R/G/B | light RMS | latency (onsets) | τ dil. / constr. | scale k (diam. / reported) | offset | ΔPD RMS default → light → both |
+  |---|---|---|---|---|---|---|---|---|
+  | a | 38 (9.5–153) | 1.54 / 0.40 / 1.06 | 0.37 | 0.32 s (10) | 3.9 / 0.21 s | 0.63 (1.25) | +0.63 | 0.517 → 0.250 → 0.150 |
+  | b | 0.0063 (0.0010–0.039) | 0.56 / 0.08 / 2.35 | 1.11 | 0.34 s (14) | 1.6 / 0.17 s | 0.94 (1.89) | +3.59 | 0.734 → 0.602 → 0.487 |
+  | c | 8.1 (2.0–33) | 0.31 / 0.20 / 2.49 | 0.38 | 0.31 s (13) | 3.2 / 0.09 s | 0.78 (1.57) | +0.53 | 0.517 → 0.384 → 0.213 |
+  | d | 0.27 (0.069–1.1) | 0.25 / 0.23 / 2.53 | 0.68 | 0.30 s (14) | 2.8 / 0.15 s | 1.25 (2.49) | −0.21 | 0.662 → 0.604 → 0.506 |
+  | e | 5.7 (1.4–23) | 0.68 / 0.05 / 2.27 | 0.77 | 0.26 s (9) | 2.1 / 0.22 s | 0.92 (1.84) | −0.16 | 0.698 → 0.470 → 0.352 |
+  | f | 39 (8.0–191) | 0.54 / 0.42 / 2.05 | 0.75 | 0.36 s (14) | 5.4 / 0.13 s | 0.73 (1.47) | +0.40 | 0.720 → 0.302 → 0.188 |
+  | g | 0.044 (0.0085–0.23) | 0.37 / 0.37 / 2.27 | 0.51 | 0.27 s (14) | 3.4 / 0.12 s | 0.66 (1.31) | +2.21 | 0.834 → 0.440 → 0.322 |
+
+  Light RMS: steady-state levels after the light fit, mm. Offset in mm on the model's scale. e lost tracking in most
+  red and blue steps (64 % valid samples): 3 steps skipped, 9 onsets.
+
+  - **Latency is consistent:** 0.30–0.36 s in the six complete recordings (0.26 s in e), the same with the step
+    estimator below; constriction τ 0.09–0.22 s, dilation τ 1.6–5.4 s. Every participant also has 1–3 negative
+    onsets (issue 41).
+  - **Channel weights are consistent:** blue weighs 2.0–2.5 and green least (0.05–0.42) in b–g; a, the only
+    recording from another day, is the exception (R 1.54, B 1.06).
+  - **Sensitivity is not:** it spans four orders of magnitude (0.006–39), and the 95 % intervals of b, g and d do not
+    overlap those of a and f. Profiling the light fit over fixed sensitivities (weights, scale and offset refitted):
+    between 0.1 and 10, χ² changes by only 11 for b and 14 for d, against 35–190 for the others. The intervals are
+    also too narrow: the steady-state residuals (0.55–1.25 mm in the profile) are far above the 0.1 mm noise the
+    fit assumes, i.e. the model does not describe the steps within their stated uncertainty.
+  - **Most steps are extrapolated:** 11–18 of 20 steps per participant had not settled, and the extrapolated
+    levels are often implausible (issue 40). With each step's level taken as the mean of its last 30 % instead, the
+    light-fit RMS falls to 0.13–0.32 mm (b 0.62), but the sensitivities still spread: a 43, b 0.76, c 2.9, d 0.050,
+    e 7.4, f 105, g 0.033. So extrapolation adds noise but does not explain the spread.
+  - **What the sensitivity follows:** the grey staircase. a and f flatten from grey 109 upwards (high sensitivity);
+    d and g still shrink at 219–255 (low sensitivity). Because the greys ascend in time, that flattening also
+    coincides with 30–80 s into the sequence, so adaptation or re-dilation cannot be told from sensitivity with this
+    order.
+  - **Sensitivity, scale and offset trade off:** the low sensitivities come with large positive offsets (b +3.6,
+    g +2.2 mm; with the step means d +1.4, g +2.6), i.e. a model pupil 1.4–3.6 mm larger than measured. The light fit
+    has no prior on the offset. The scale k ranges 0.63–1.25 (diameter 1.25–2.5 × the reported value), so these data
+    do not settle the device scale (issue 1) per participant either.
+  - ΔPD RMS in the sequence improves for everyone (0.52–0.83 → 0.15–0.51 mm), least for b and d, whose steps the
+    model fits worst.
+- **Proposal:** do not compare sensitivities between participants yet. Options, in order of effort:
+  - a prior on the offset in the light fit (it should be near 0 once the scale is fitted);
+  - one sensitivity pooled over all participants of a headset, with only weights, scale and offset per participant
+    (the "Open" point above);
+  - a pseudo-random step order (Eckert et al., 2022) so that luminance is not confounded with time, and a dark
+    step between colours;
+  - fix the step level estimator (issue 40).
+- **Status:** decided (display photometry separate, sensitivity per participant); the per-participant sensitivity is
+  not reliable on the current sequence (seven participants, September 2026); paper text to follow.
 
 ### 37. Pupil scale fitted by regressing the model on the measurement
 - **Where:** 2.0 `fit.fit_calibration` (and the first version of the light sensitivity fit).
@@ -429,6 +479,41 @@ them rather than describing the headset or the participant.
 - **2.0:** with the sequence, the latency is measured from constriction onsets (20–50 % line extended to baseline):
   0.32 s on that recording.
 - **Status:** fixed in 2.0. The model's lack of re-dilation remains (it limits how well any response shape fits).
+
+### 39. Find in recording accepts a sequence that runs past the end of the recording
+- **Where:** 2.0 `calibration.locate`.
+- **Problem:** a candidate start is scored only on the part of the sequence inside the recording. On calibration
+  recording e (September 2026), where tracking, and so the video analysis, is missing during most red and blue steps,
+  the true start (1.8 s, 10 s steps) scores 25 % because the gaps are interpolated. A start at 159.9 s with 6 s steps
+  scores 18 %: its window runs to 280 s in a 206 s recording, and the 46 s inside happen to match. The app accepts
+  anything below 35 %, so the wrong start is set silently.
+- **2.0:** unchanged; the start was placed by hand for issue 36.
+- **Proposal:** reject candidates whose window extends beyond the recording (or score the missing part as a
+  mismatch), and leave out grid points far from any analysed video sample instead of interpolating across gaps.
+- **Status:** open.
+
+### 40. Step levels extrapolated from unsettled steps are unstable
+- **Where:** 2.0 `photometry.step_asymptote`.
+- **Problem:** on the seven calibration recordings (issue 36), 11–18 of 20 steps per participant count as not settled
+  (a change of more than 0.1 mm over the last 30 %, common with 10 s steps). Their exponential asymptotes are often
+  implausible: on a, grey 36 gets 2.59 mm while its last values are 3.66 mm and grey 73 gets 3.40 mm, and
+  uncertainties reach tens of millimetres (±39 mm), which silently drops the step. The light-fit RMS is 0.37–1.11 mm
+  with the asymptotes and 0.13–0.62 mm with the mean of each step's last 30 %.
+- **2.0:** asymptote fitted from the turning point, limited to 1 mm beyond the last second.
+- **Proposal:** use the mean of the step's end, or constrain the time constant of the extrapolation to a physiological
+  range (the fitted dilation τ is 1.6–5.4 s) and extrapolate only when the fit is well determined; either way, report
+  steps that are dropped by their uncertainty.
+- **Status:** open.
+
+### 41. Negative constriction onsets are accepted
+- **Where:** 2.0 `fit.onset_latency`.
+- **Problem:** every one of the seven calibration recordings has 1–3 onsets between −0.2 and −0.7 s, all at small
+  brightening steps within a colour (e.g. red 191 → 255, blue 64 → 128), where the constriction is small and the
+  pupil is still moving from the previous step. The median is robust, but the reported interquartile range includes
+  them (e: −0.19–0.40 s), and with few onsets they pull the median down.
+- **Proposal:** discard onsets outside a physiological range (e.g. 0.1–0.8 s) and require a flat baseline before
+  the change.
+- **Status:** open.
 
 ## D. Paper text
 
