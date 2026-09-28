@@ -25,6 +25,15 @@ def test_short_gaps_are_bridged():
     assert valid.all()
 
 
+def test_a_missing_eye_is_bridged_with_the_difference_between_the_eyes():
+    left = np.full(100, 3.0)
+    right = np.full(100, 3.3)
+    left[40:60] = np.nan                           # left lost: right minus the usual 0.3 mm difference
+    right[70:80] = np.nan
+    both = pipeline.combine_eyes(left, right, "both")
+    assert np.allclose(both, 3.15)
+
+
 def test_both_eyes_fall_back_to_one():
     left = np.array([3.0, np.nan, 3.0])
     right = np.array([5.0, 5.0, np.nan])

@@ -58,7 +58,7 @@ class Recording:
     profile: DeviceProfile
     folder: Path
     time: np.ndarray            # s, relative to the scene video start
-    epoch_start: float          # unix time (s) of time == 0
+    epoch_start: float          # unix time (s) of time == 0; NaN if the recording does not tell
     pupil_left: np.ndarray      # device units
     pupil_right: np.ndarray     # device units
     gaze: np.ndarray            # (N, 2), normalised [0, 1], origin top-left of the scene video
@@ -69,6 +69,7 @@ class Recording:
     lux_time: Optional[np.ndarray] = None    # s, relative clock
     lux_values: Optional[np.ndarray] = None  # lux
     events: list[Event] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)   # reader's warnings, shown with every result
 
     def __post_init__(self) -> None:
         n = len(self.time)

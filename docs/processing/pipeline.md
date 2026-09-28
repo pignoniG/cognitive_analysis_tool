@@ -86,7 +86,7 @@ by `timelag` (0 s).
 | 4.1 | Scale to mm: device units × profile `pupil_scale` × `pupil_correction`. Pixel data have no scale yet (step 6) | `pupil_correction` 1 | `prepare` |
 | 4.2 | Range: diameters outside 1–9 mm removed, per eye (skipped for pixel data) | `PUPIL_RANGE_MM` | `prepare` |
 | 4.3 | Artefacts: speed above the limit towards a sample at least 40 ms away, widened by the padding, per eye (skipped for pixel data) | `max_pupil_speed` 10 mm/s (0 = off), `artefact_padding` 0.05 s | `artefacts` |
-| 4.4 | Combine the eyes; `both` averages, falling back to one eye | `eye` both | `combine_eyes` |
+| 4.4 | Combine the eyes; `both` averages, bridging a missing eye with the other plus their median difference | `eye` both | `combine_eyes` |
 | 4.5 | Resample onto a uniform grid by linear interpolation; gaps longer than `max_gap` marked invalid | `analysis_rate` 100 Hz (0 = native), `max_gap` 0.5 s | `resample` |
 | 4.6 | Smooth: Savitzky–Golay order 2 over about 0.5 s (**measured**) and order 6 over about 0.25 s, at least 9 samples (**measured raw**, used by the calibration fits); both NaN in long gaps | – | `prepare` |
 

@@ -59,13 +59,27 @@ def interp_nan(x: np.ndarray) -> np.ndarray:
     return x
 
 
+# Samples with both eyes needed to estimate the difference between them.
+MIN_BOTH_EYES = 20
+
+
 def combine_eyes(left: np.ndarray, right: np.ndarray, eye: str) -> np.ndarray:
-    """"left", "right", or "both": the average, falling back to one eye where the other is missing."""
+    """"left", "right", or "both": the average, falling back to one eye where the other is missing.
+
+    The eyes often differ by a steady amount (up to 0.26 mm on the Varjo calibration recordings), so
+    falling back to one eye would step the average by half of it. Where one eye is missing it is
+    therefore taken as the other plus the median difference between the eyes, measured on the samples
+    with both (open issue 45); with fewer than MIN_BOTH_EYES such samples, the plain fallback is used."""
+    left, right = np.asarray(left, dtype=float), np.asarray(right, dtype=float)
     if eye == "left":
-        return np.asarray(left, dtype=float)
+        return left
     if eye == "right":
-        return np.asarray(right, dtype=float)
-    pair = np.vstack([left, right]).astype(float)
+        return right
+    both = np.isfinite(left) & np.isfinite(right)
+    if both.sum() >= MIN_BOTH_EYES:
+        diff = float(np.median(right[both] - left[both]))
+        left, right = np.where(np.isnan(left), right - diff, left), np.where(np.isnan(right), left + diff, right)
+    pair = np.vstack([left, right])
     with np.errstate(all="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         return np.nanmean(pair, axis=0)
@@ -384,6 +398,7 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
     if profile.experimental:
         notes.insert(0, f"Experimental support for {profile.name}: the reader has not been checked on a real "
                         "recording yet; check the pupil, gaze and timing before relying on the results.")
+    notes += rec.notes
     expected = expected_pupil(prep.luminance, fs, params, profile.field_area)
 
     scale = prep.scale

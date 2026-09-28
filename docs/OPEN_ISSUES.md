@@ -852,5 +852,9 @@ is revised; they remain in the git history of this file.
     difference between the eyes (from samples with both) before averaging;
   - the camera calibration's principal point is ignored (the pinhole field of view assumes the image centre); minor
     next to the lens distortion of issue 33.
-- **Status:** needs data; the three points above can be addressed before.
+- **2.0 (September 2026), the three points:** no start-time fallback (without `created` the lux log and event logs
+  are not read, a note says why, and exported Unix times are empty); `timezone` gives event logs without a zone the
+  recording unit's offset; `combine_eyes` bridges a missing eye with the other plus the median difference between the
+  eyes (from at least 20 samples with both), for every device. Varjo results are unchanged (no one-eye samples).
+- **Status:** needs data (the real-recording checks above).
 

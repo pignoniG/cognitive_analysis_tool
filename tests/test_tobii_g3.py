@@ -55,3 +55,32 @@ def test_neon_is_flagged_experimental_and_others_are_not(tmp_path, varjo_folder)
     from conftest import write_neon_recording
     assert devices.load(write_neon_recording(tmp_path / "n", [40] * 30, np.arange(30) / 30)).profile.experimental
     assert not devices.load(varjo_folder).profile.experimental
+
+
+def test_without_a_start_time_nothing_is_matched_by_clock(tmp_path):
+    # No fallback to the file's modification time, which is the copy time after an SD card transfer.
+    folder = write_tobii_g3_recording(tmp_path / "g3", GRAYS, created=None, lux=lambda t: 300.0)
+    (folder / "x_event_log.csv").write_text("Event,Start Time,End Time,Duration (s)\nTask,2026-09-28T12:00:01,x,1\n")
+    rec = devices.load(folder)
+    assert np.isnan(rec.epoch_start) and rec.lux_values is None and rec.events == []
+    assert rec.notes and "no start time" in rec.notes[0]
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec))
+    assert any("no start time" in w for w in pipeline.run(rec, video, Parameters()).warnings)
+
+
+def test_event_logs_without_a_zone_use_the_recording_units_zone(tmp_path):
+    # 10:00 UTC is 12:00 in Oslo in September (UTC+2), whatever the analysing computer's zone.
+    folder = write_tobii_g3_recording(tmp_path / "g3", GRAYS, timezone="Europe/Oslo")
+    (folder / "x_event_log.csv").write_text("Event,Start Time,End Time,Duration (s)\nTask,2026-09-28T12:00:01,x,1\n")
+    rec = devices.load(folder)
+    assert [(e.label, e.start, e.end) for e in rec.events] == [("Task", 1.0, 2.0)]
+    assert tobii_g3._utc_offset({"timezone": "Not/AZone"}, rec.epoch_start) is None
+
+
+def test_one_eye_stretches_do_not_step_the_combined_pupil(tmp_path):
+    # Right reads 0.2 mm more than left; while only the left eye is tracked the average must not drop 0.1 mm.
+    folder = write_tobii_g3_recording(tmp_path / "g3", GRAYS, left_only=[(1.0, 3.0)])
+    rec = devices.load(folder)
+    both = pipeline.combine_eyes(rec.pupil_left, rec.pupil_right, "both")
+    ok = np.isfinite(both)
+    assert np.allclose(both[ok], 4.1)

@@ -23,7 +23,8 @@ Copy the recording folder from the recording unit's SD card:
 
 | Used for | Source |
 |---|---|
-| start time | `recording.g3` → `created` (UTC); the recording start is taken as the start of the scene video |
+| start time | `recording.g3` → `created` (UTC); the recording start is taken as the start of the scene video. Without it the lux log and event logs cannot be matched and are not read (a note says so; exported Unix times are empty): the file's modification time would be the copy time after an SD card transfer |
+| time zone | `recording.g3` → `timezone` (IANA name, as used by 1.x): event logs without a zone are read in it |
 | pupil | `gazedata.gz` → `data.eyeleft.pupildiameter`, `data.eyeright.pupildiameter` (mm) |
 | gaze | `gazedata.gz` → `data.gaze2d`, normalised scene video coordinates, origin top left |
 | invalid samples | samples with empty `data`; each eye separately, so a sample with one eye tracked still counts for that eye |

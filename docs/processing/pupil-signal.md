@@ -24,7 +24,11 @@ scale is only known after the expected pupil is computed.
 
 ## 4. Combine the eyes
 
-`eye` = `left`, `right` or `both`. `both` averages the two eyes, falling back to one eye where the other is missing.
+`eye` = `left`, `right` or `both`. `both` averages the two eyes. Where one eye is missing it is taken as the other plus
+the median difference between the eyes, measured on the samples with both (at least 20; otherwise the tracked eye is
+used as it is): the eyes often differ by a steady amount (up to 0.26 mm on the Varjo calibration recordings), and a
+plain fallback would step the average by half of it whenever one eye drops out
+([open issue 45](../OPEN_ISSUES.md)).
 
 ## 5. Resample
 

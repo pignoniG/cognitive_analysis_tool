@@ -200,7 +200,7 @@ def write_neon_recording(folder: Path, grays, frame_times, layout="cloud", pupil
 
 def write_tobii_g3_recording(folder: Path, grays, fps=25, pupil_mm=4.0, rate=50, gaze=(0.25, 0.75),
                              size=(96, 54), untracked=(), left_only=(), events=(), lux=None,
-                             calibration=True, created="2026-09-28T10:00:00.000Z"):
+                             calibration=True, created="2026-09-28T10:00:00.000Z", timezone=None):
     """Synthetic Tobii Pro Glasses 3 recording: a scene video of full-frame grey levels (one per frame),
     gaze samples at ``rate`` Hz with both pupils (right = left + 0.2 mm), untracked spans with empty
     data and spans with only the left eye tracked; ``events`` are (time, tag) markers."""
@@ -214,9 +214,13 @@ def write_tobii_g3_recording(folder: Path, grays, fps=25, pupil_mm=4.0, rate=50,
         writer.write(np.full((h, w, 3), g, dtype=np.uint8))
     writer.release()
     duration = len(grays) / fps
-    info = {"created": created, "duration": duration, "name": "test",
+    info = {"duration": duration, "name": "test",
             "gaze": {"file": "gazedata.gz", "samples": 0}, "events": {"file": "eventdata.gz"},
             "scenecamera": {"file": "scenevideo.mp4"}}
+    if created is not None:
+        info["created"] = created
+    if timezone is not None:
+        info["timezone"] = timezone
     if calibration:
         fx = w / 2 / np.tan(np.radians(45))          # pinhole with a 90° horizontal field
         info["scenecamera"]["camera-calibration"] = {"focal-length": [fx, fx], "principal-point": [w / 2, h / 2],
@@ -238,7 +242,7 @@ def write_tobii_g3_recording(folder: Path, grays, fps=25, pupil_mm=4.0, rate=50,
         f.write(json.dumps({"type": "syncport", "timestamp": 1.0, "data": {"direction": "in", "value": 1}}) + "\n")
     (folder / "recording.g3").write_text(json.dumps(info))
     if lux is not None:
-        epoch0 = datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp()
+        epoch0 = datetime.fromisoformat((created or "2026-09-28T10:00:00Z").replace("Z", "+00:00")).timestamp()
         with open(folder / "1_1_1.csv", "w", newline="") as f:
             wr = csv.writer(f)
             for t in np.arange(-1, duration + 1, 0.1):

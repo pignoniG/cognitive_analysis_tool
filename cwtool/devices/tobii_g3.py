@@ -22,6 +22,7 @@ from __future__ import annotations
 import gzip
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pathlib import Path
 from typing import Optional
 
@@ -80,6 +81,19 @@ def _created(info: dict) -> Optional[float]:
         return datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
     except ValueError:
         return None
+
+
+def _utc_offset(info: dict, epoch: float) -> Optional[float]:
+    """UTC offset (s) of the recording unit's ``timezone`` (an IANA name) at ``epoch``, as 1.x used it;
+    None if absent or unknown."""
+    name = info.get("timezone")
+    if not name:
+        return None
+    try:
+        offset = datetime.fromtimestamp(epoch, ZoneInfo(str(name))).utcoffset()
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return None
+    return offset.total_seconds() if offset is not None else None
 
 
 def _stream_file(info: dict, key: str, default: str) -> str:
@@ -171,12 +185,17 @@ def load(folder: Path, lux_folder: Optional[Path] = None, flip_gaze_y: bool = Fa
         experimental=True,
     )
 
+    # The start time matches the lux log and event logs to the recording. There is no fallback: a file's
+    # modification time is the copy time after an SD card transfer, and would match them silently at the
+    # wrong time (open issue 45).
     epoch_start = _created(info)
-    if epoch_start is None:
-        epoch_start = (folder / "recording.g3").stat().st_mtime - float(info.get("duration") or ts.max())
+    notes = []
     lux_dir = Path(lux_folder) if lux_folder else lux.find_lux_folder(folder)
     lux_time = lux_values = None
-    if lux_dir is not None:
+    if epoch_start is None:
+        notes.append("recording.g3 has no start time ('created'): the lux log and event logs cannot be matched "
+                     "to the recording and were not read; exported Unix times are empty.")
+    elif lux_dir is not None:
         lux_time, lux_values = lux.read_lux(lux_dir, epoch_start, float(time[-1] - min(time[0], 0.0)))
         if not len(lux_time):
             lux_time = lux_values = None
@@ -186,14 +205,16 @@ def load(folder: Path, lux_folder: Optional[Path] = None, flip_gaze_y: bool = Fa
              if o.get("type", "event") == "event"]
     marks = [(t, name) for t, name in marks if np.isfinite(t)]
     events = events_from_markers([t for t, _ in marks], [name for _, name in marks], end=float(time[-1]))
-    events += read_event_log(folder, epoch_start)
+    if epoch_start is not None:
+        # Event logs without a zone are read in the recording unit's zone (open issue 22).
+        events += read_event_log(folder, epoch_start, _utc_offset(info, epoch_start))
 
     return Recording(
         name=folder.name,
         profile=profile,
         folder=folder,
         time=time,
-        epoch_start=float(epoch_start),
+        epoch_start=float(epoch_start) if epoch_start is not None else float("nan"),
         pupil_left=left,
         pupil_right=right,
         gaze=gaze_grid,
@@ -202,4 +223,5 @@ def load(folder: Path, lux_folder: Optional[Path] = None, flip_gaze_y: bool = Fa
         lux_time=lux_time,
         lux_values=lux_values,
         events=sorted(events, key=lambda e: e.start),
+        notes=notes,
     )
