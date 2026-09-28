@@ -103,13 +103,15 @@ class VideoPreview(QWidget):
         self.refresh()
 
     def refresh(self) -> None:
-        if self._cap is not None:
+        if self._cap is not None and self._pending is None:   # a pending frame is drawn with the new state
             self.show_time(self._time)
 
     def _step(self, frames: int) -> None:
         if self._fps:
-            # Middle of the neighbouring frame, so rounding cannot land on the same one.
-            idx = int(self._clock.index(self._time)) + frames
+            # From the bar's latest position, even if its frame is not drawn yet. Middle of the
+            # neighbouring frame, so rounding cannot land on the same one.
+            t = self._pending if self._pending is not None else self._time
+            idx = int(self._clock.index(t)) + frames
             idx = int(np.clip(idx, 0, max(self._n_frames - 1, 0)))
             self.show_time((self._clock.time(idx) + self._clock.time(idx + 1)) / 2)
             self.time_changed.emit(self._time)
@@ -142,11 +144,15 @@ class VideoPreview(QWidget):
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ok, frame = self._cap.read()
         if not ok:
+            self._frame_cache = None     # the capture's position is unknown now: seek next time
             return None
         self._frame_cache = (idx, frame)
         return frame
 
     def show_time(self, t: float) -> None:
+        # A frame requested while scrubbing and not drawn yet is older than this: drop it.
+        self._pending = None
+        self._pending_timer.stop()
         self._time = t
         if self._cap is None or self._rec is None:
             return

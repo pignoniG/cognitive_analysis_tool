@@ -274,3 +274,39 @@ def test_preview_reads_the_same_frame_forward_as_by_seeking(app, varjo_folder):
         a = forward._read(idx).copy()
         seeking._frame_cache = None
         assert np.array_equal(a, seeking._read(idx))
+
+
+def test_a_frame_requested_while_scrubbing_does_not_override_later_actions(app, varjo_folder):
+    w = MainWindow()
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None)
+    preview = w.preview
+    preview.request_time(1.5)                # dragged to frame 15, not drawn yet
+    preview.next_button.click()              # steps from the bar's position, to frame 16
+    for _ in range(5):
+        app.processEvents()
+    assert "frame 16" in preview.time_label.text() and preview._pending is None
+    assert w.plots.cursors[0].value() == pytest.approx(1.65)
+    preview.request_time(3.5)
+    w.open_recording(varjo_folder)           # a new recording starts at its beginning, not at the old request
+    assert wait_for(app, lambda: w.result is not None)
+    for _ in range(5):
+        app.processEvents()
+    assert "frame 0" in preview.time_label.text()
+    w.close()
+
+
+def test_a_failed_read_makes_the_preview_seek_next_time(app, varjo_folder):
+    from cwtool import devices
+    from cwtool.gui.video_preview import VideoPreview
+    from cwtool.params import VideoSettings
+    rec = devices.load(varjo_folder)
+    p = VideoPreview()
+    p.set_recording(rec, VideoSettings().for_recording(rec))
+    reference = p._read(4).copy()
+    assert p._read(10_000) is None and p._frame_cache is None   # past the end: position unknown
+    p2 = VideoPreview()
+    p2.set_recording(rec, VideoSettings().for_recording(rec))
+    p2._read(2)
+    p2._read(10_000)
+    assert np.array_equal(p2._read(4), reference)                # seeks instead of reading on from 2
