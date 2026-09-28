@@ -28,8 +28,9 @@ NUMBERS = {
                          "Participant multiplier on the device's pupil scale (1 = device default)"),
     "timelag": ("Time lag (s)", -60, 60, 0.05, 2, "Shift of the luminance signal"),
     "delay": ("Delay (s)", 0, 5, 0.05, 2, "Pupil response latency"),
-    "attack": ("Dilation τ (s)", 0.01, 60, 0.5, 2, "Attack time constant"),
-    "release": ("Constriction τ (s)", 0.01, 60, 0.1, 2, "Release time constant"),
+    "attack": ("Dilation τ (s)", 0.01, 60, 0.5, 2, "Time constant while the pupil dilates (attack)"),
+    "release": ("Constriction τ (s)", 0.01, 60, 0.1, 2,
+                "Time constant while the pupil constricts (release), per constriction stage"),
     "transient": ("Transient (mm)", 0, 5, 0.05, 2,
                   "Largest constriction beyond the steady state after a brightening step, which then "
                   "re-dilates (pupillary escape); 0 = off. Fitted on the calibration sequence"),
@@ -85,8 +86,8 @@ GROUPS = [
     ("Participant light response", ["sensitivity", "gain_r", "gain_g", "gain_b", "fixation_weight"]),
     ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
                       "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
-    ("Lux sensor (Pupil devices)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
-    ("Scene camera without lux log (Pupil devices)",
+    ("Lux sensor (glasses)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
+    ("Scene camera without lux log (glasses)",
      ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]

@@ -7,16 +7,20 @@ import sys
 from pathlib import Path
 
 from cwtool import devices, pipeline
-from cwtool.params import Parameters, VideoSettings
+from cwtool.params import DisplayPhotometry, Parameters, VideoSettings
 from cwtool.video import VideoResult, analyse_video
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Load a recording, analyse its video (or reuse the cached analysis), run the pipeline and
+    export. Returns the exit code."""
     ap = argparse.ArgumentParser(prog="cwtool", description="Luminance-compensated pupillometry")
     ap.add_argument("recording", type=Path, help="recording folder")
     ap.add_argument("--device", choices=sorted(devices.READERS), help="default: auto-detect")
     ap.add_argument("--params", type=Path, help="participant parameters JSON")
-    ap.add_argument("--lux", type=Path, help="folder with lux sensor logs (Pupil devices; default: in the recording)")
+    ap.add_argument("--display", type=Path,
+                    help="display photometry JSON (display devices; participant files do not hold it)")
+    ap.add_argument("--lux", type=Path, help="folder with lux sensor logs (glasses; default: in the recording)")
     ap.add_argument("--out", type=Path, help="export folder (default: RECORDING/cwtool_export)")
     ap.add_argument("--reanalyse", action="store_true", help="ignore the cached video analysis")
     ap.add_argument("--workers", type=int, default=0, help="parallel video chunks (default: one per CPU core)")
@@ -25,6 +29,8 @@ def main(argv: list[str] | None = None) -> int:
 
     rec = devices.load(args.recording, args.device, lux_folder=args.lux)
     params = Parameters.load(args.params, rec.profile) if args.params else Parameters()
+    if args.display:
+        params = DisplayPhotometry.load(args.display).apply(params)
     settings = VideoSettings().for_recording(rec)
     print(f"{rec.device} recording {rec.name}: {len(rec.time)} samples, {rec.time[-1] - rec.time[0]:.1f} s")
 

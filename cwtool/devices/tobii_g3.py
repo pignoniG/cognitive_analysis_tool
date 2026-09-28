@@ -42,6 +42,7 @@ SCENE_VIDEO = "scenevideo.mp4"
 
 
 def detect(folder: Path) -> bool:
+    """A Glasses 3 recording has ``recording.g3`` and ``gazedata.gz``."""
     folder = Path(folder)
     return (folder / "recording.g3").exists() and (folder / "gazedata.gz").exists()
 
@@ -102,6 +103,7 @@ def _camera_fov(info: dict, size: tuple[int, int]) -> tuple[float, float]:
 
 
 def _event_name(data) -> str:
+    """Label of an event's ``data``: its tag (or name, label, event), else the data as JSON."""
     if isinstance(data, dict):
         for key in ("tag", "name", "label", "event"):
             if data.get(key) not in (None, ""):

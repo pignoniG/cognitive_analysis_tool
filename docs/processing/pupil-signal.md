@@ -19,7 +19,8 @@ away**, and `artefact_padding` (0.05 s) is removed around each. Measuring the sp
 neighbouring samples keeps the threshold independent of the sampling rate: at 200 Hz, sample-to-sample noise alone
 would read as high speed. Physiological responses stay well below 10 mm/s. Set the speed to 0 to disable the filter.
 
-Steps 2 and 3 run on each eye separately.
+Steps 2 and 3 run on each eye separately. Pixel data (Pupil Core 2D) skip both: their thresholds are in mm and the
+scale is only known after the expected pupil is computed.
 
 ## 4. Combine the eyes
 
@@ -46,5 +47,5 @@ expected pupil.
 
 ## Plausibility
 
-If the median measured pupil is outside 2–8 mm after scaling, a warning suggests checking the pupil scale
-correction.
+If the median measured pupil is outside 2–8 mm after scaling and the offset (as plotted and exported), a warning
+suggests checking the pupil scale correction and offset.

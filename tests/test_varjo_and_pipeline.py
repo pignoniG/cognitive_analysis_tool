@@ -84,6 +84,15 @@ def test_cli_end_to_end(varjo_folder, capsys):
     assert "Analysing" not in capsys.readouterr().out.split("ΔPD")[-1]
 
 
+def test_cli_applies_display_photometry(varjo_folder, tmp_path):
+    from cwtool.params import DisplayPhotometry
+    DisplayPhotometry("varjo", l_min=0.5, l_max=150.0, gamma=2.4).save(tmp_path / "display.json")
+    out = tmp_path / "out"
+    assert cli.main([str(varjo_folder), "--display", str(tmp_path / "display.json"), "--out", str(out)]) == 0
+    saved = Parameters.load(out / "rec1_params.json", varjo.PROFILE)
+    assert (saved.l_min, saved.l_max, saved.gamma) == (0.5, 150.0, 2.4)
+
+
 def test_version1_params_convert_to_identical_expected_pupil(tmp_path):
     from cwtool import model
     old = {"age": 33, "field": 160.0, "l_min": 1.0, "l_max": 5000.0, "pupil_scale": 2.2, "gain_b": 3}

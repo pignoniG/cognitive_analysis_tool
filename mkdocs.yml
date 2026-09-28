@@ -60,6 +60,7 @@ nav:
       - Lux sensor hardware: hardware/lux-sensor.md
   - How data is processed:
       - Pipeline overview: processing/overview.md
+      - Processing at a glance: processing/pipeline.md
       - Scene video analysis: processing/video.md
       - Luminance: processing/luminance.md
       - Pupil signal: processing/pupil-signal.md

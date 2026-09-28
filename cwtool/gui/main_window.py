@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (QCheckBox, QDockWidget, QDoubleSpinBox, QFileDial
 from cwtool import __version__, calibration, devices, pipeline
 from cwtool.fit import fit_calibration
 from cwtool.gui.param_panel import ParameterPanel
+from cwtool.gui.photometry_dialog import PhotometryDialog
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
@@ -436,7 +437,6 @@ class MainWindow(QMainWindow):
         self._start_task(work, self._light_done, "Fitting the light response on the calibration sequence…")
 
     def _light_done(self, fit) -> None:
-        from cwtool.gui.photometry_dialog import PhotometryDialog
         if PhotometryDialog(fit, self).exec():
             self.params_panel.set_params(fit.params)
 

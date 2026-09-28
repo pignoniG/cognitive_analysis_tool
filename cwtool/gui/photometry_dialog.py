@@ -13,6 +13,9 @@ MAX_BAR_MM = 0.5            # longest error bar drawn (each side)
 
 
 class PhotometryDialog(QDialog):
+    """Shows a :class:`PhotometryFit`: summary, per-step levels against the model before and after,
+    and Apply (accept) / Cancel. The caller applies ``fit.params`` when accepted."""
+
     def __init__(self, fit: PhotometryFit, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Participant light response")

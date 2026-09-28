@@ -20,6 +20,8 @@ from cwtool.video import VideoResult
 
 @dataclass
 class Result:
+    """Output of :func:`run`, on the uniform analysis grid (``time``) and the ΔPD windows (``cw_time``)."""
+
     time: np.ndarray            # s, relative, uniform analysis grid
     luminance: np.ndarray       # cd/m², weighted fixation/background
     measured_raw: np.ndarray    # mm, lightly smoothed, scaled and aligned; NaN in long gaps
@@ -46,6 +48,7 @@ def _odd(n: int, minimum: int = 3) -> int:
 
 
 def interp_nan(x: np.ndarray) -> np.ndarray:
+    """``x`` with NaN samples linearly interpolated (held at the ends)."""
     x = np.asarray(x, dtype=float).copy()
     bad = ~np.isfinite(x)
     if bad.all():
@@ -66,11 +69,6 @@ def combine_eyes(left: np.ndarray, right: np.ndarray, eye: str) -> np.ndarray:
     with np.errstate(all="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         return np.nanmean(pair, axis=0)
-
-
-def select_pupil(rec: Recording, eye: str) -> np.ndarray:
-    """Pupil in device units on the recording's own clock; NaN where invalid."""
-    return combine_eyes(rec.pupil_left, rec.pupil_right, eye)
 
 
 # Pupil speed is measured over at least this span, so the threshold does not depend on the
@@ -126,26 +124,26 @@ def resample(time: np.ndarray, values: np.ndarray, rate: float, max_gap: float):
 def relative_luminances(video: VideoResult, params: Parameters) -> tuple[np.ndarray, np.ndarray]:
     """Gaze-weighted and whole-scene relative luminance (0-1) per video sample, with the
     channel gains as a relative balance."""
-    fix, bg = video.linear(params.gamma)
-    w = params.fixation_weight
     gains = np.asarray(params.gains, dtype=float)
     weights = luminance.SRGB_WEIGHTS * gains / gains.mean()
-    return (w * fix + (1 - w) * bg) @ weights, video.frame_linear(params.gamma) @ weights
+    return (video.weighted(params.gamma, params.fixation_weight) @ weights,
+            video.frame_linear(params.gamma) @ weights)
 
 
 def scene_luminance(video: VideoResult, params: Parameters) -> np.ndarray:
     """Absolute luminance (cd/m²) for each video sample: the per-pixel-linearised
     fixation and background means are weighted, then mapped onto [l_min, l_max]
     with channel gains."""
-    fix, bg = video.linear(params.gamma)
-    w = params.fixation_weight
-    return luminance.absolute_luminance(w * fix + (1 - w) * bg, params.l_min, params.l_max, params.gains)
+    return luminance.absolute_luminance(video.weighted(params.gamma, params.fixation_weight),
+                                        params.l_min, params.l_max, params.gains)
 
 
 # Scaled pupil diameters outside this range (mm) are treated as tracking errors.
 PUPIL_RANGE_MM = (1.0, 9.0)
 # A median diameter outside this range (mm) suggests a wrong pupil scale.
 PLAUSIBLE_MM = (2.0, 8.0)
+# Plausible pupil scale corrections for the calibration fits; outside, only the offset is fitted.
+SCALE_RANGE = (0.5, 2.0)
 
 
 def steady_pupil(lum, params: Parameters, field_area: float) -> np.ndarray:
@@ -175,6 +173,8 @@ def dynamic_pupil(steady: np.ndarray, lum: np.ndarray, fs: float, delay: float, 
 
 
 def expected_pupil(lum: np.ndarray, fs: float, params: Parameters, field_area: float) -> np.ndarray:
+    """Expected pupil (mm) on a uniform grid at ``fs`` Hz for luminance ``lum`` (cd/m²), with the
+    participant's parameters: :func:`steady_pupil`, then :func:`dynamic_pupil`."""
     dyn = params.dynamics
     return dynamic_pupil(steady_pupil(lum, params, field_area), lum, fs, params.delay,
                          params.attack if dyn else None, params.release if dyn else None,
@@ -195,6 +195,7 @@ def windowed_difference(time, a, b, window_n: int):
 
 
 def residual_rms(x: np.ndarray) -> float:
+    """Root mean square about zero of the finite values (NaN without any)."""
     x = np.asarray(x, dtype=float)
     x = x[np.isfinite(x)]
     return float(np.sqrt(np.mean(x ** 2))) if len(x) else float("nan")
@@ -211,13 +212,30 @@ class Prepared:
     valid: np.ndarray           # False inside gaps longer than max_gap
     luminance: np.ndarray       # cd/m²
     scale: Optional[float]      # device units to mm, None for pixel data (fitted per recording)
-    photometric: bool = True    # luminance comes from the Lmin/Lmax mapping (not a lux sensor)
     notes: list = field(default_factory=list)
-    # "display", "lux sensor", "camera, fixed exposure" or "camera, relative"
+    # How the luminance was obtained: "display", "lux sensor", "camera, fixed exposure" or
+    # "camera, relative" (lux device without lux data, mapped onto Lmin–Lmax like a display)
     mode: str = "display"
+
+    @property
+    def photometric(self) -> bool:
+        """The luminance comes from the Lmin/Lmax mapping, so Lmin and Lmax have expected pupils."""
+        return self.mode in ("display", "camera, relative")
 
 
 def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
+    """Pupil and luminance on the uniform analysis grid, before the pupil scale and alignment.
+
+    Pupil (each eye, in device units): with a known scale, samples outside PUPIL_RANGE_MM and fast
+    changes (:func:`artefacts`) are removed; pixel data (no scale) skip both filters, which need
+    millimetres. The eyes are combined (``params.eye``), resampled at ``analysis_rate`` (0: the
+    device's rate) with gaps up to ``max_gap`` interpolated, and smoothed twice: Savitzky-Golay
+    order 2 over 0.5 s (``pupil``) and order 6 over 0.25 s (``pupil_fast``, the "raw" curve).
+
+    Luminance (cd/m²), shifted by ``timelag``: from the lux sensor distributed with the video, the
+    fixed-exposure camera, or the display photometry (also used, as relative, for a lux device
+    without lux data). See ``docs/processing/pipeline.md``.
+    """
     if len(video.time) < 2:
         raise ValueError("Video analysis has too few samples")
     profile = rec.profile
@@ -251,7 +269,7 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
             y_w, y_frame = relative_luminances(video, params)
             ratio = np.where(y_frame[order] > 1e-4, y_w[order] / np.maximum(y_frame[order], 1e-4), 1.0)
             lum = avg * np.interp(time, vt, ratio)
-        photometric, mode = False, "lux sensor"
+        mode = "lux sensor"
     elif rec.luminance_source == "lux_sensor" and params.camera_exposure == "fixed":
         # Fixed exposure: pixel values are proportional to scene luminance up to saturation.
         y_w, _ = relative_luminances(video, params)
@@ -260,7 +278,7 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
         if clipped > CLIPPED_WARNING:
             notes.append(f"The gaze area is saturated in {clipped:.0%} of the video samples: luminance is "
                          "underestimated there. A shorter exposure would avoid it.")
-        photometric, mode = False, "camera, fixed exposure"
+        mode = "camera, fixed exposure"
     else:
         mode = "display"
         if rec.luminance_source == "lux_sensor":
@@ -269,8 +287,7 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
                          "exposure was fixed, set camera exposure to 'fixed'.")
             mode = "camera, relative"
         lum = np.interp(time, vt, scene_luminance(video, params)[order])
-        photometric = True
-    return Prepared(time, fs, smooth, fast, valid, lum, scale, photometric, notes, mode)
+    return Prepared(time, fs, smooth, fast, valid, lum, scale, notes, mode)
 
 
 # Mean code value above which an area counts as saturated, and the share of saturated samples
@@ -358,6 +375,9 @@ def alignment_offset(expected, measured, valid, params: Parameters, time, events
 
 
 def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
+    """The whole analysis: :func:`prepare`, the expected pupil, the pupil scale (fitted to the expected
+    mean for pixel data), the alignment offset, then ΔPD averaged over ``cw_window`` s and smoothed
+    (Savitzky-Golay order 1, ``cw_smoothing`` windows each side). Warnings are collected in the result."""
     prep = prepare(rec, video, params)
     profile, fs, time, valid = rec.profile, prep.fs, prep.time, prep.valid
     notes = list(prep.notes)
@@ -412,6 +432,8 @@ def event_means(result: Result, events) -> list[tuple[str, float, float, float]]
 
 
 def export(result: Result, rec: Recording, params: Parameters, out_dir: Path) -> list[Path]:
+    """Write ``<name>_pupil.csv``, ``<name>_cw.csv``, ``<name>_events.csv`` (with events) and
+    ``<name>_params.json`` to ``out_dir``; returns their paths. See docs/reference/outputs.md."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []

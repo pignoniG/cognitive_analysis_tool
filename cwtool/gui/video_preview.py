@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVB
 from cwtool.params import VideoSettings
 from cwtool.pipeline import Result
 from cwtool.recording import Recording
-from cwtool.video import FrameClock, VideoResult, prepare_frame, radii
+from cwtool.video import FrameClock, VideoResult, analysis_height, prepare_frame, radii
 
 DISPLAY_WIDTH = 900
 SCENE_COLOUR = (255, 200, 0)    # RGB
@@ -171,7 +171,7 @@ class VideoPreview(QWidget):
     def _draw(self, frame_bgr: np.ndarray, t: float) -> None:
         s = self._settings
         # Radii as computed on the downscaled analysis frame, then scaled to the display.
-        analysis_h = max(int(frame_bgr.shape[0] * s.analysis_width / frame_bgr.shape[1]), 1)
+        analysis_h = analysis_height(frame_bgr.shape[1], frame_bgr.shape[0], s.analysis_width)
         field_r, fix_r = radii(analysis_h, s)
 
         disp_w = min(DISPLAY_WIDTH, frame_bgr.shape[1])
@@ -215,7 +215,8 @@ class VideoPreview(QWidget):
         if self._result is not None and len(self._result.time):
             j = int(np.argmin(np.abs(self._result.time - t)))
             r = self._result
-            out.append(f"luminance {r.luminance[j]:.1f} cd/m² &nbsp; measured {r.measured[j]:.2f} mm"
+            unit = " (relative)" if r.luminance_mode == "camera, relative" else ""
+            out.append(f"luminance {r.luminance[j]:.1f} cd/m²{unit} &nbsp; measured {r.measured[j]:.2f} mm"
                        f" &nbsp; expected {r.expected[j]:.2f} mm")
         return out
 

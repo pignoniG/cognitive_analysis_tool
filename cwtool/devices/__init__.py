@@ -17,6 +17,7 @@ READERS = {varjo.NAME: varjo, pupil_core.NAME: pupil_core, neon.NAME: neon, tobi
 
 
 def detect(folder: str | Path) -> str | None:
+    """Name of the first reader that recognises ``folder``, or None."""
     folder = Path(folder)
     for name, reader in READERS.items():
         if reader.detect(folder):
@@ -25,6 +26,8 @@ def detect(folder: str | Path) -> str | None:
 
 
 def load(folder: str | Path, device: str | None = None, **options) -> Recording:
+    """Read ``folder`` with the reader for ``device`` (default: detected). Only the ``options`` the
+    reader's ``load`` accepts, and that are not None, are passed on (e.g. ``lux_folder``)."""
     folder = Path(folder)
     device = device or detect(folder)
     if device is None:

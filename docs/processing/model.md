@@ -34,7 +34,7 @@ are converted exactly.
 | Device | Adapting field | Area |
 |---|---|---|
 | Varjo XR-4 | 120° × 105° (display) | 9 896 deg² |
-| Pupil Core, Neon | 200° × 135° (binocular visual field) | 21 206 deg² |
+| Pupil Core, Neon, Tobii Pro Glasses 3 | 200° × 135° (binocular visual field) | 21 206 deg² |
 
 ## 2. Latency
 

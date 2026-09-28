@@ -30,6 +30,9 @@ class VideoSettings:
 
 @dataclass
 class Parameters:
+    """Every analysis setting: participant, display photometry, light response, lux sensor,
+    camera, pupil signal, dynamics and ΔPD. See docs/reference/parameters.md for each field."""
+
     # Participant / Watson & Yellott
     age: float = 25.0
     eyes: int = 2
@@ -53,7 +56,7 @@ class Parameters:
     gain_b: float = 1.0
     fixation_weight: float = 0.65        # background weight is 1 - fixation_weight
 
-    # Lux sensor (Pupil devices): average luminance = (gain · lux + offset) / lux_solid_angle.
+    # Lux sensor (glasses): average luminance = (gain · lux + offset) / lux_solid_angle.
     # 2.2 is the ratio of illuminance to average luminance for the TSL2591 in its printed housing (its
     # near-cosine response over the 55° half-angle field), not a solid angle, despite the 1.x name kept for
     # compatibility. Gain and offset default to the chip's own lux; 1.x used 1.706061 and 0.66935, a

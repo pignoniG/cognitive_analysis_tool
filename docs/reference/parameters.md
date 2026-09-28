@@ -33,7 +33,7 @@ not in participant files.
 | `gain_r`, `gain_g`, `gain_b` | 1 | channel weights for the pupil, normalised by their mean (fitted) |
 | `fixation_weight` | 0.65 | weight of the gaze circle; the background gets 1 − weight (also used with lux devices) |
 
-## Lux sensor (Pupil devices)
+## Lux sensor (glasses)
 
 | Name | Default | Meaning |
 |---|---|---|
@@ -42,7 +42,7 @@ not in participant files.
 | `lux_solid_angle` | 2.2 | illuminance / average luminance for the sensor in its housing (not a solid angle; see [Lux sensor](../hardware/lux-sensor.md)) |
 | `lux_use_video` | on | distribute the sensor's average over the view with the scene video |
 
-## Scene camera without a lux log (Pupil devices)
+## Scene camera without a lux log (glasses)
 
 | Name | Default | Meaning |
 |---|---|---|

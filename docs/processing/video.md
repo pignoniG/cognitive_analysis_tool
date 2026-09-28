@@ -40,7 +40,7 @@ the background and the whole visible scene for each gamma.
 
 - Devices with **recorded frame timestamps** (Pupil Core, Neon): each gaze sample uses the frame whose timestamp is
   nearest, as Pupil Player does. Scene cameras drop frames, so a fixed frame rate would drift.
-- Devices with a **constant frame rate** (Varjo): frame \(n\) covers \([n/\text{fps}, (n+1)/\text{fps})\).
+- Devices with a **constant frame rate** (Varjo, Tobii Pro Glasses 3): frame \(n\) covers \([n/\text{fps}, (n+1)/\text{fps})\).
 
 Samples outside the video, or with invalid gaze, are skipped.
 

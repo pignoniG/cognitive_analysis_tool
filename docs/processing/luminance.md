@@ -21,6 +21,8 @@ The gaze circle and background means are then weighted, with \(w\) = `fixation_w
 \mathbf{C}_w = w\,\mathbf{C}_\text{lin,gaze} + (1 - w)\,\mathbf{C}_\text{lin,background}
 \]
 
+(`VideoResult.weighted`, used by every luminance method and by the calibration fit.)
+
 ## Display devices
 
 For the Varjo, the capture shows what the display showed, so the colours map to luminance through the
@@ -50,7 +52,7 @@ weights, fitted with their light sensitivity on the [calibration sequence](../us
 
 ## Lux sensor devices
 
-For the Pupil Core and Neon, the scene camera's automatic exposure hides the absolute level, so it comes from the
+For the Pupil Core, Neon and Tobii Pro Glasses 3, the scene camera's automatic exposure hides the absolute level, so it comes from the
 [lux sensor](../hardware/lux-sensor.md). Following Pignoni et al. (2021, eq. 5–8):
 
 1. The lux readings are smoothed (Savitzky–Golay, 11 samples, order 6) and converted to the **average luminance**
@@ -75,7 +77,7 @@ Version 1.x combined the sensor and camera with a different heuristic; see [open
 
 ## Lux devices without a lux log
 
-If a Pupil recording has no lux readings, the scene camera is used alone. **Camera exposure** (`camera_exposure`)
+If a glasses recording has no lux readings, the scene camera is used alone. **Camera exposure** (`camera_exposure`)
 says how to read it.
 
 **`auto`** (default): the camera adjusted its exposure, so the video gives only relative luminance. It is mapped onto

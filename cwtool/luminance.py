@@ -20,6 +20,7 @@ def to_linear(rgb8, gamma: float = 2.2) -> np.ndarray:
 
 
 def relative_luminance(linear_rgb) -> np.ndarray:
+    """Photopic relative luminance (0-1) of linear RGB (..., 3)."""
     return np.asarray(linear_rgb, dtype=float) @ SRGB_WEIGHTS
 
 

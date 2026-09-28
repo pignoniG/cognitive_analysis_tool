@@ -26,10 +26,9 @@ def test_short_gaps_are_bridged():
 
 
 def test_both_eyes_fall_back_to_one():
-    class Rec:
-        pupil_left = np.array([3.0, np.nan, 3.0])
-        pupil_right = np.array([5.0, 5.0, np.nan])
-    assert pipeline.select_pupil(Rec, "both").tolist() == [4.0, 5.0, 3.0]
+    left = np.array([3.0, np.nan, 3.0])
+    right = np.array([5.0, 5.0, np.nan])
+    assert pipeline.combine_eyes(left, right, "both").tolist() == [4.0, 5.0, 3.0]
 
 
 def test_residual_rms_vs_sd():

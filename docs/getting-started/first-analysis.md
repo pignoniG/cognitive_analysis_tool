@@ -6,10 +6,12 @@ Each device has its own layout; the tool detects it from the files present.
 
 - **Varjo XR-4:** the folder written by Varjo Base, with `varjo_gaze_output_*.csv` and `varjo_capture_*.mp4`.
 - **Pupil Core:** the recording folder after exporting it in Pupil Player (it must contain `exports/<n>/`).
-- **Pupil Neon:** a recording folder from a Pupil Cloud "Timeseries Data + Scene Video" download, or a native
-  recording folder.
+- **Pupil Neon** (experimental): a recording folder from a Pupil Cloud "Timeseries Data + Scene Video" download, or
+  a native recording folder.
+- **Tobii Pro Glasses 3** (experimental): the recording folder from the SD card, with `recording.g3` and
+  `gazedata.gz`.
 
-For the Pupil devices, put the lux sensor logs (`<month>_<day>_<hour>.csv`) in the recording folder or a `lux`
+For the glasses (Pupil Core, Neon, Glasses 3), put the lux sensor logs (`<month>_<day>_<hour>.csv`) in the recording folder or a `lux`
 subfolder, or choose their folder when opening. Optionally add an `event_log` CSV from the
 [event logger](../usage/tools.md#event-logger) to label the phases of the experiment.
 
@@ -20,7 +22,7 @@ cwtool-gui path/to/recording
 ```
 
 or start `cwtool-gui` and use **File → Open recording…**. The recording panel shows the detected device, the
-number of samples and, for Pupil devices, how many lux readings were found.
+number of samples and, for the glasses, how many lux readings were found.
 
 ## 3. Analyse the scene video
 

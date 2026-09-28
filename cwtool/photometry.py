@@ -13,8 +13,8 @@ step match the model:
 
 Each step contributes its level, the mean pupil over its last 30 %, and its colour as measured in the
 video, so the calibration sees exactly what the analysis sees. Steps are not extrapolated: on real
-recordings the apparent trend at the end of a step is mostly the pupil's own fluctuation (open issue 40). Weak priors keep poorly constrained values near
-sensible ones: gains around 1, scale correction around 1, gamma around 2.2. The sensitivity has none:
+recordings the apparent trend at the end of a step is mostly the pupil's own fluctuation (open issue
+40). Weak priors keep poorly constrained values near sensible ones: gains around 1, scale correction around 1, gamma around 2.2. The sensitivity has none:
 a prior centred on 1 would mean "the datasheet is right", making the fit depend on the datasheet
 luminance beyond the exact trade-off between the two (open issue 42).
 """
@@ -22,14 +22,12 @@ luminance beyond the exact trade-off between the two (open issue 42).
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Optional
-
 import numpy as np
 from scipy.optimize import least_squares
 
 from cwtool import calibration, luminance
 from cwtool.params import Parameters
-from cwtool.pipeline import prepare, steady_pupil
+from cwtool.pipeline import SCALE_RANGE, prepare, steady_pupil
 from cwtool.recording import Recording
 from cwtool.video import GAMMA_RANGE, VideoResult, at_gamma
 
@@ -44,7 +42,6 @@ PRIOR_SCALE = 0.25
 PRIOR_GAMMA = 0.2
 SENSITIVITY_RANGE = (1e-3, 1e3)
 GAIN_RANGE = (0.05, 20.0)
-SCALE_RANGE = (0.5, 2.0)
 
 
 @dataclass
@@ -111,8 +108,7 @@ def step_levels(rec: Recording, video: VideoResult, params: Parameters, start: f
         raise ValueError("The light response fit needs a device with a known pupil scale (not pixel data)")
     mm = prep.pupil_fast * prep.scale
     vt = video.time - params.timelag
-    w = params.fixation_weight
-    weighted = w * video.fixation_lin + (1 - w) * video.background_lin     # (N, G, 3)
+    weighted = video.weighted_lin(params.fixation_weight)     # (N, G, 3)
     skip = params.delay + 0.1           # latency before the pupil starts to respond
     levels = []
     previous = None
@@ -151,12 +147,12 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     gains0 = np.asarray(params.gains, dtype=float)
 
     def unpack(x):
-        i = 0
-        sens = np.exp(x[i]); i += 1
-        gains = np.exp(x[i:i + 3]) if fit_gains else gains0
-        i += 3 if fit_gains else 0
-        c, d = np.exp(x[i]), x[i + 1]; i += 2
-        gamma = x[i] if fit_gamma else params.gamma
+        """Free values x = [log s, (log gains ×3), log c, d, (gamma)] -> (s, gains, c, d, gamma)."""
+        sens = np.exp(x[0])
+        i = 4 if fit_gains else 1
+        gains = np.exp(x[1:4]) if fit_gains else gains0
+        c, d = np.exp(x[i]), x[i + 1]
+        gamma = x[i + 2] if fit_gamma else params.gamma
         return sens, gains, c, d, gamma
 
     # The model is mapped onto the measurement (measured ≈ c·expected + d), so residuals are in

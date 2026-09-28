@@ -38,6 +38,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             for side in ("left", "bottom"):
                 p.getAxis(side).enableAutoSIPrefix(False)  # keep values in mm and s
         self._follow = True
+        self._data = (None, None, None)    # time, pupil values, ΔPD values the view is fitted to
         for p in (self.pupil, self.cw):
             p.vb.sigRangeChangedManually.connect(self._moved_by_user)
             p.hideButtons()   # pyqtgraph's own auto-range button would include the overlays
@@ -155,8 +156,6 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             lo, hi = data_range(values)
             if lo is not None:
                 plot.setYRange(lo, hi, padding=0.08)
-
-    _data = (None, None, None)
 
     def show_result(self, r: Result) -> None:
         self.raw_curve.setData(r.time, r.measured_raw)

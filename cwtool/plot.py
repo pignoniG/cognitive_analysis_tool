@@ -12,6 +12,8 @@ from cwtool.recording import Recording  # noqa: E402
 
 
 def plot_result(result: Result, rec: Recording):
+    """Figure with the raw, smoothed and expected pupil, ΔPD and the events; saved by ``--plot``
+    and by the GUI's export."""
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(result.time, result.measured_raw, color="0.6", lw=0.5, label="Measured PD (raw)")
     ax.plot(result.time, result.measured, color="black", lw=0.8, label="Measured PD")

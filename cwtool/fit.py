@@ -24,7 +24,7 @@ from scipy.optimize import minimize
 
 from cwtool import calibration, model
 from cwtool.params import Parameters
-from cwtool.pipeline import Prepared, dynamic_pupil, prepare, residual_rms, run, steady_pupil
+from cwtool.pipeline import SCALE_RANGE, Prepared, dynamic_pupil, prepare, residual_rms, run, steady_pupil
 from cwtool.recording import Recording
 from cwtool.video import VideoResult
 
@@ -34,7 +34,6 @@ RELEASE_RANGE = (0.05, 5.0)    # s, constriction
 TRANSIENT_RANGE = (0.01, 3.0)  # mm, largest transient constriction
 ESCAPE_RANGE = (0.3, 30.0)     # s, re-dilation of the transient
 PRE_ROLL = 30.0                # s of signal before the window, so the filter state has settled
-SCALE_RANGE = (0.5, 2.0)       # plausible pupil scale corrections; outside, only the offset is fitted
 MIN_PUPIL_SD = 0.05            # mm; a flatter pupil cannot constrain the scale
 
 

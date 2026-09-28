@@ -13,7 +13,11 @@ def stanley_davies(flux) -> np.ndarray:
 
 
 def eyes_attenuation(eyes: int) -> float:
-    return {1: 0.1, 2: 1.0}.get(eyes, 0.0)
+    """Watson & Yellott's monocular effect: flux is divided by 10 with one eye viewing."""
+    try:
+        return {1: 0.1, 2: 1.0}[int(eyes)]
+    except (KeyError, TypeError, ValueError):
+        raise ValueError(f"eyes must be 1 or 2, not {eyes!r}") from None
 
 
 # Mean age of the observers behind the Stanley & Davies formula: a constant of Watson & Yellott's
@@ -25,8 +29,8 @@ def watson_yellott(luminance, age: float, field: float, eyes: int = 2,
                    reference_age: float = REFERENCE_AGE) -> np.ndarray:
     """Watson & Yellott (2012) unified formula for light-adapted pupil size (mm).
 
-    ``luminance`` in cd/m², ``field`` is the adapting field size passed through
-    as the area term of the corneal flux density, ``age`` in years.
+    ``luminance`` in cd/m², ``field`` the adapting field area in deg² (the area term of the
+    corneal flux density, luminance × area), ``age`` in years, ``eyes`` the number of eyes viewing.
     """
     flux = np.asarray(luminance, dtype=float) * field * eyes_attenuation(eyes)
     d_sd = stanley_davies(flux)

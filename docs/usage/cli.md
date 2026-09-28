@@ -1,8 +1,8 @@
 # Command line
 
 ```text
-cwtool RECORDING [--device {pupil_core,pupil_neon,varjo}] [--params FILE] [--lux FOLDER]
-                 [--out FOLDER] [--reanalyse] [--workers N] [--plot]
+cwtool RECORDING [--device {pupil_core,pupil_neon,tobii_g3,varjo}] [--params FILE] [--display FILE]
+                 [--lux FOLDER] [--out FOLDER] [--reanalyse] [--workers N] [--plot]
 ```
 
 | Option | Meaning |
@@ -10,7 +10,8 @@ cwtool RECORDING [--device {pupil_core,pupil_neon,varjo}] [--params FILE] [--lux
 | `RECORDING` | recording folder |
 | `--device` | skip auto-detection |
 | `--params` | participant parameter file (JSON) saved by the app; defaults otherwise |
-| `--lux` | folder with lux sensor logs (Pupil devices); default: the recording folder or its `lux` subfolder |
+| `--display` | display photometry file (JSON) saved by the app (Varjo); participant files do not hold Lmin, Lmax and gamma, so without it the defaults are used |
+| `--lux` | folder with lux sensor logs (glasses); default: the recording folder or its `lux` subfolder |
 | `--out` | export folder; default `RECORDING/cwtool_export` |
 | `--reanalyse` | ignore the cached video analysis |
 | `--workers` | parallel video chunks; default one per CPU core |
@@ -26,7 +27,7 @@ A shell loop over participants, each with their own parameter file:
 ```bash
 for p in P01 P02 P03; do
   for rec in data/$p/*/; do
-    cwtool "$rec" --params "params/$p.json" --out "results/$p/$(basename "$rec")"
+    cwtool "$rec" --params "params/$p.json" --display params/varjo_xr4.json --out "results/$p/$(basename "$rec")"
   done
 done
 ```
@@ -38,11 +39,12 @@ Everything the app does is available as functions:
 ```python
 from pathlib import Path
 from cwtool import devices, pipeline
-from cwtool.params import Parameters, VideoSettings
+from cwtool.params import DisplayPhotometry, Parameters, VideoSettings
 from cwtool.video import VideoResult, analyse_video
 
 rec = devices.load(Path("data/P01/rec1"))              # auto-detects the device
 params = Parameters.load("params/P01.json", rec.profile)
+params = DisplayPhotometry.load("params/varjo_xr4.json").apply(params)   # display devices
 settings = VideoSettings().for_recording(rec)
 
 video = VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze)

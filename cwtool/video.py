@@ -8,7 +8,7 @@ whole frame, or, for videos whose scene is a circle with black corners
 Pixels are linearised before averaging (the mean of (C/255)^γ, not the mean
 code value raised to γ), which matters for textured areas. So that γ can still
 change without re-reading the video, each area's per-channel histogram is
-turned into linear means for a grid of γ values; :meth:`VideoResult.linear`
+turned into linear means for a grid of γ values; :func:`at_gamma`
 interpolates between them (error below 0.001 of full scale). Luminance
 weighting and photometric calibration are applied later by the pipeline.
 """
@@ -16,6 +16,7 @@ weighting and photometric calibration are applied later by the pipeline.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import threading
@@ -41,9 +42,9 @@ _LUT = (_CODES / 255.0)[None, :] ** GAMMA_GRID[:, None]   # (G, 256)
 
 
 def _array_key(values: Optional[np.ndarray]) -> str:
+    """Short hash of an array's values, to tell whether a cached analysis matches it."""
     if values is None:
         return ""
-    import hashlib
     return hashlib.sha1(np.ascontiguousarray(values, dtype=np.float64).tobytes()).hexdigest()[:16]
 
 
@@ -89,8 +90,17 @@ class VideoResult:
 
     def frame_linear(self, gamma: float) -> np.ndarray:
         """Per-pixel-linearised mean R, G, B (N, 3) of the whole visible scene."""
-        return VideoResult(self.time, self.fixation_rgb, self.background_rgb,
-                           self.frame_lin, self.frame_lin, self.frame_lin).linear(gamma)[0]
+        return at_gamma(self.frame_lin, gamma)
+
+    def weighted_lin(self, fixation_weight: float) -> np.ndarray:
+        """Gaze-weighted linear means (N, G, 3) for each γ of GAMMA_GRID: ``fixation_weight`` × the
+        fixation area + the rest × the background. The one place the two areas are combined."""
+        w = fixation_weight
+        return w * self.fixation_lin + (1 - w) * self.background_lin
+
+    def weighted(self, gamma: float, fixation_weight: float) -> np.ndarray:
+        """Gaze-weighted linear R, G, B (N, 3) at ``gamma`` (see :meth:`weighted_lin`)."""
+        return at_gamma(self.weighted_lin(fixation_weight), gamma)
 
     @classmethod
     def empty(cls) -> "VideoResult":
@@ -100,6 +110,8 @@ class VideoResult:
 
     def save(self, folder: Path, settings: VideoSettings, video: Path,
              frame_times: Optional[np.ndarray] = None, gaze: Optional[np.ndarray] = None) -> None:
+        """Write the analysis to ``folder`` (CACHE_CSV) with what it was made from (CACHE_JSON: format,
+        γ grid, settings, video name, frame clock and gaze hash), so :meth:`load_cached` can reuse it."""
         lin_cols = [f"{area}_lin{g:.1f}_{c}" for area in ("fix", "bg", "frame") for g in GAMMA_GRID for c in "rgb"]
         n = len(self.time)
         with open(folder / CACHE_CSV, "w", newline="") as f:
@@ -136,6 +148,7 @@ class VideoResult:
 
 
 def _circle_mask(shape: tuple[int, int], center: tuple[int, int], radius: int) -> np.ndarray:
+    """uint8 mask (255 inside) of a filled circle; the radius is at least 1 px."""
     mask = np.zeros(shape, dtype=np.uint8)
     cv2.circle(mask, center, max(radius, 1), 255, -1)
     return mask
@@ -180,6 +193,7 @@ class FrameClock:
 
 
 def analysis_height(width: int, height: int, analysis_width: int) -> int:
+    """Height (px) of a ``width`` × ``height`` frame downscaled to ``analysis_width``."""
     return max(int(height * analysis_width / width), 1)
 
 
@@ -318,6 +332,7 @@ def _frames_opencv(video: Path, wanted, first: int, last: int, settings: VideoSe
 
 
 def decoder_backend() -> str:
+    """"pyav" when PyAV is installed, else "opencv" (both decode the same frames)."""
     try:
         import av  # noqa: F401
         return "pyav"

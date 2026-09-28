@@ -41,4 +41,4 @@ PLR-corrected pupil sizes.
 ## Events
 
 For each event, the mean ΔPD inside it (in mm and SD units) is written to the events CSV. Events come from the
-`event_log` CSV or, for the Neon, from the recording's own events.
+`event_log` CSV and, for the Neon and the Glasses 3, from the recording's own events.

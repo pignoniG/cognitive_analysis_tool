@@ -123,6 +123,7 @@ def _cloud_video(folder: Path, frames: dict) -> tuple[Optional[Path], Optional[n
 
 
 def _load_cloud(folder: Path):
+    """Streams of a Pupil Cloud Timeseries export, in the tuple :func:`load` unpacks for both layouts."""
     eyes = _read_csv(folder / "3d_eye_states.csv")
     if not eyes:
         raise FileNotFoundError(f"No 3d_eye_states.csv (pupil diameters) in {folder}")
@@ -168,10 +169,6 @@ def _parts(folder: Path, base: str, time_base: Optional[str] = None, ext: str = 
     return [(f, t) for _, f, t in sorted(pairs)]
 
 
-def _times(files) -> np.ndarray:
-    return np.concatenate([np.fromfile(t, dtype="<i8") for t in files]) if files else np.empty(0, np.int64)
-
-
 def _records(pairs, n_fields: int, fields_dtype=None) -> tuple[np.ndarray, np.ndarray]:
     """Timestamps (ns) and float records (N, fields) of a stream. The record size is taken
     from the stream's ``.dtype`` file when given, otherwise from the file size, so streams
@@ -201,6 +198,7 @@ def _dtype_names(folder: Path, base: str) -> Optional[list[str]]:
 
 
 def _load_native(folder: Path):
+    """Streams of a native recording (``.raw`` / ``.time`` pairs), as :func:`_load_cloud`."""
     names = _dtype_names(folder, "eye_state")
     eye_ts, eye = _records(_parts(folder, "eye_state"), 14, names)
     if not len(eye_ts):
@@ -249,6 +247,8 @@ def _load_native(folder: Path):
 
 
 def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
+    """Load a Neon recording in either layout: per-eye pupils (mm) and gaze binned onto a grid at the
+    measured rate, time zero at the first scene frame, lux logs from ``lux_folder`` or the recording."""
     folder = Path(folder)
     layout = _layout(folder)
     if layout is None:

@@ -52,10 +52,10 @@ options keep their values and are still saved in the parameter file:
 | Recording | Hidden |
 |---|---|
 | Varjo | Lux sensor, Scene camera without lux log |
-| Pupil Core / Neon with a lux log | Lmin, Lmax, Scene camera without lux log, Calibration sequence, scene circle radius |
-| Pupil Core / Neon without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
+| Pupil Core / Neon / Glasses 3 with a lux log | Lmin, Lmax, Scene camera without lux log, Calibration sequence, scene circle radius |
+| Pupil Core / Neon / Glasses 3 without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
 
-Without a calibration sequence (Pupil devices) the calibration box is titled **Pupil dynamics** and holds only the
+Without a calibration sequence (glasses) the calibration box is titled **Pupil dynamics** and holds only the
 Dynamics drop-down.
 
 ## Plots
