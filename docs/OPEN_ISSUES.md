@@ -836,5 +836,21 @@ is revised; they remain in the git history of this file.
     matched on it);
   - the structure of `eventdata.gz` (events named by `tag`);
   - how often only one eye is tracked (1.x dropped such samples).
-- **Status:** needs data.
+- **Review (September 2026)**, things to decide before a real recording arrives:
+  - **start time fallback:** without `created`, the start is taken as `recording.g3`'s modification time minus the
+    duration. After copying from the SD card that is the copy time, so the lux log and event logs would be matched
+    silently at the wrong time. Safer: no fallback (no lux, with a note) unless the video's own creation time is
+    usable;
+  - **time zone:** `recording.g3` has a `timezone` field, which 1.x used (`ZoneInfo(recordingInfo["timezone"])`).
+    2.0 ignores it; it would give event logs without a zone the recording's offset, as Varjo's file name does
+    (issue 22). The lux log does not need it: it is matched on the Unix time in each row;
+  - **one-eye samples (all glasses trackers):** `pipeline.combine_eyes` averages the eyes and falls back to the one
+    tracked, so a stretch with one eye steps the combined pupil by half the difference between the eyes. On the seven
+    Varjo recordings that difference is up to 0.26 mm (d; −0.06 to +0.05 mm in the others), i.e. steps of about
+    0.13 mm, the order of a workload effect. Varjo is unaffected (both eyes or neither in every sample), but Tobii,
+    Pupil Core and Neon report eyes separately. Proposal: fill the missing eye with the other plus the median
+    difference between the eyes (from samples with both) before averaging;
+  - the camera calibration's principal point is ignored (the pinhole field of view assumes the image centre); minor
+    next to the lens distortion of issue 33.
+- **Status:** needs data; the three points above can be addressed before.
 
