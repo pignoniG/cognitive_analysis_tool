@@ -822,3 +822,19 @@ is revised; they remain in the git history of this file.
 - **2.0:** `model.REFERENCE_AGE`; removed from the parameters and the panel. Parameter files that still carry
   `reference_age` load (the field is ignored); only a file with a value other than 28.58 would give different results.
 - **Status:** fixed in 2.0.
+
+### 45. The Tobii Pro Glasses 3 reader is written without a sample recording
+- **Where:** `cwtool/devices/tobii_g3.py` (experimental), from the 1.x branch `develop-for-Tobii-Pro-III` (2022) and
+  Tobii's recording format.
+- **To check on a real recording:**
+  - the direction of `gaze2d` y: 2.0 takes the origin at the top left (Tobii's convention as understood here); 1.x
+    flipped it, which may have been carried over from the Pupil Core code. Put a gaze marker on the video preview at
+    a known target to settle it (`flip_gaze_y` switches);
+  - the keys of the scene camera calibration in `recording.g3` (`focal-length`, `resolution`); without them the
+    nominal 95° × 63° is used;
+  - that gaze timestamps start with the scene video, and that `created` is the start of both (the lux log is
+    matched on it);
+  - the structure of `eventdata.gz` (events named by `tag`);
+  - how often only one eye is tracked (1.x dropped such samples).
+- **Status:** needs data.
+

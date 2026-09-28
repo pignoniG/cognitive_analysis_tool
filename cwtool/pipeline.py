@@ -361,6 +361,9 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
     prep = prepare(rec, video, params)
     profile, fs, time, valid = rec.profile, prep.fs, prep.time, prep.valid
     notes = list(prep.notes)
+    if profile.experimental:
+        notes.insert(0, f"Experimental support for {profile.name}: the reader has not been checked on a real "
+                        "recording yet; check the pupil, gaze and timing before relying on the results.")
     expected = expected_pupil(prep.luminance, fs, params, profile.field_area)
 
     scale = prep.scale

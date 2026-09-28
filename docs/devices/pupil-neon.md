@@ -5,7 +5,7 @@ Pupil Labs Neon recordings. Reader: `cwtool/devices/neon.py`.
 !!! warning "Not yet tested on a real recording"
     The reader was written from Pupil Labs' published data format and the `pl-neon-recording` library
     (September 2026) and is tested on synthetic recordings only. [Open issue 32](../OPEN_ISSUES.md) lists what a
-    real recording must confirm.
+    real recording must confirm. Until then every result carries a warning saying the support is experimental.
 
 Two layouts are read. Prefer the Pupil Cloud export: it has pupil diameters and blinks computed at the full 200 Hz
 even when the phone could not keep up in real time.

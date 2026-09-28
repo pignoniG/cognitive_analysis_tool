@@ -1,5 +1,5 @@
 site_name: Cognitive Workload Tool
-site_description: Luminance-compensated pupillometry for cognitive workload, from Varjo, Pupil Core and Pupil Neon recordings
+site_description: Luminance-compensated pupillometry for cognitive workload, from Varjo, Pupil Core, Pupil Neon and Tobii Pro Glasses 3 recordings
 site_url: https://pignonig.github.io/cognitive_analysis_tool/
 repo_url: https://github.com/pignoniG/cognitive_analysis_tool
 repo_name: pignoniG/cognitive_analysis_tool
@@ -56,6 +56,7 @@ nav:
       - Varjo XR-4: devices/varjo.md
       - Pupil Core: devices/pupil-core.md
       - Pupil Neon: devices/pupil-neon.md
+      - Tobii Pro Glasses 3: devices/tobii-g3.md
       - Lux sensor hardware: hardware/lux-sensor.md
   - How data is processed:
       - Pipeline overview: processing/overview.md

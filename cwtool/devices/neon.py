@@ -309,6 +309,7 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
         circular_scene=False,
         native_rate=rate,
         adapting_field=ADAPTING_FIELD,
+        experimental=True,          # open issue 32
     )
 
     epoch_start = t_zero / 1e9

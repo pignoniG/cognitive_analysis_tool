@@ -10,7 +10,8 @@ the data is processed; source in `docs/`).
 |---|---|---|
 | Varjo XR-4 | scene video (display) | supported |
 | Pupil Core | external lux sensor + scene video | supported (Pupil Player export) |
-| Pupil Neon | external lux sensor + scene video | supported (Pupil Cloud export or native format; not yet tested on a real recording) |
+| Pupil Neon | external lux sensor + scene video | experimental (Pupil Cloud export or native format; not yet tested on a real recording) |
+| Tobii Pro Glasses 3 | external lux sensor + scene video | experimental (written from the 1.x Tobii branch; not yet tested on a real recording) |
 
 ```
 pip install -e ".[gui,dev]"

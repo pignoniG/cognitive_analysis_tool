@@ -10,10 +10,10 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-from cwtool.devices import neon, pupil_core, varjo
+from cwtool.devices import neon, pupil_core, tobii_g3, varjo
 from cwtool.recording import Recording
 
-READERS = {varjo.NAME: varjo, pupil_core.NAME: pupil_core, neon.NAME: neon}
+READERS = {varjo.NAME: varjo, pupil_core.NAME: pupil_core, neon.NAME: neon, tobii_g3.NAME: tobii_g3}
 
 
 def detect(folder: str | Path) -> str | None:

@@ -20,7 +20,8 @@ from an external lux sensor worn on the tracker.
 |---|---|---|---|
 | [Varjo XR-4](devices/varjo.md) | Varjo Base eye tracking recorder | mm (reported radius ×2) | the headset's display, via the scene capture, the display photometry and the participant's fitted light sensitivity |
 | [Pupil Core](devices/pupil-core.md) | Pupil Player export | mm (3D model) or px | external lux sensor, distributed with the scene video |
-| [Pupil Neon](devices/pupil-neon.md) | Pupil Cloud Timeseries export or native format | mm | external lux sensor, distributed with the scene video |
+| [Pupil Neon](devices/pupil-neon.md) (experimental) | Pupil Cloud Timeseries export or native format | mm | external lux sensor, distributed with the scene video |
+| [Tobii Pro Glasses 3](devices/tobii-g3.md) (experimental) | recording folder from the SD card | mm | external lux sensor, distributed with the scene video |
 
 One recording is analysed at a time. A new device needs only a reader module; the analysis is shared
 (see [Devices](devices/index.md)).

@@ -27,6 +27,9 @@ class DeviceProfile:
     # Field the eye adapts to (deg, h × v), if larger than the scene video: e.g. the whole binocular
     # visual field for glasses-type trackers. Defaults to field_of_view (headsets).
     adapting_field: Optional[tuple[float, float]] = None
+    # Reader written from the manufacturer's documentation and not yet checked on a real recording:
+    # every result carries a warning saying so.
+    experimental: bool = False
 
     @property
     def field_area(self) -> float:
