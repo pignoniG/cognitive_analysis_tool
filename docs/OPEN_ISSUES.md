@@ -424,6 +424,10 @@ is revised; they remain in the git history of this file.
   it is what converts the gaze circle radius from degrees to pixels. It is right for a gaze circle near the centre
   and increasingly wrong towards the edges. The adapting field used by Watson & Yellott is unaffected (it is the
   binocular visual field).
+- **Pupil Core lenses:** the Core's scene camera takes different lenses (Pupil Labs offer more than one), so its field
+  of view depends on the lens fitted. The 2021 paper used a 100° lens at 1280×720; without `world.intrinsics` the
+  reader falls back to about 75° × 48.5°, the pinhole value of one default camera matrix. Which lenses exist, their
+  intrinsics and how to tell them apart in a recording is still to be investigated.
 - **Proposed:** undistort the gaze point and circle with the distortion coefficients, which both devices provide.
 - **Status:** open.
 
@@ -875,3 +879,18 @@ is revised; they remain in the git history of this file.
   not its scan-out), that the selectstart trigger and session end behave, and how the runtime's refresh rate
   affects steps of a few seconds.
 - **Status:** needs data.
+
+### 47. Fixation and background weights
+- **Where:** `Parameters.fixation_weight` (default 0.65), used by every luminance method (`VideoResult.weighted`).
+- **Problem:** the value has no published basis for 2.0's gaze circle. 0.65 comes from the 1.x Varjo build
+  (`vid_analysis.subFrameAsinc`, issue 14). The 2021 paper used the gaze area alone (a Grab Cut region), i.e. a weight
+  of 1 on the glasses. Eckert et al. (2022) found 26 % fixation and 74 % background best (grid search, MAE 0.31 mm), for
+  a fixation circle of about 16° radius; 2.0's circle is 5.25°, about a tenth of that area, so the weights do not
+  transfer directly (issue 17). They also found the fixation area alone "prone to errors" and suggest weighting
+  towards the screen centre when users turn their head rather than their eyes.
+- **Note:** the full-field calibration sequence cannot determine the weight, since fixation and background are the same
+  colour on every step. A scene where the gaze moves between areas of different luminance is needed (as in Eckert's
+  cube scene).
+- **Proposal:** choose the weight together with the circle radius from a reference (G. Pignoni has one suggesting a
+  different weighting), possibly per device type, and report both.
+- **Status:** open.
