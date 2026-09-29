@@ -1,5 +1,11 @@
 # Cognitive workload tool for the Pupil eye tracker
 
+> [!IMPORTANT]
+> **Archive only.** This branch keeps the 2019 rewrite of the 1.x tool with parallel processing (the former `future`). It is no longer developed or supported.
+> The current tool is **cwtool 2.0**, on the [`master_v2.0`](https://github.com/pignoniG/cognitive_analysis_tool/tree/master_v2.0) branch,
+> with documentation at https://pignonig.github.io/cognitive_analysis_tool/ (Varjo XR-4, Pupil Core, Pupil Neon and Tobii Pro Glasses 3).
+
+
 This script/application is part of my master's thesis project in MIXD developed at NTNU Gjøvik in the fall 2018 and spring 2019 semesters.
 The project aimed to experiment on the processing of eye tracking data, using an affordable eye tracker form
 [Pupil Labs](https://pupil-labs.com ), for the measure of [cognitive workload](https://en.wikipedia.org/wiki/Cognitive_load).
