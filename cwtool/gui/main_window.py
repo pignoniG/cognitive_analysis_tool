@@ -274,7 +274,7 @@ class MainWindow(QMainWindow):
         name = self._params_path.name if self._params_path else "unsaved parameters"
         if has_rec and self.recording.luminance_source == "display":
             name += ", display " + (self._display_path.name if self._display_path else "defaults")
-        rec = f" — {self.recording.name}" if has_rec else ""
+        rec = f": {self.recording.name}" if has_rec else ""
         self.setWindowTitle(f"Cognitive Workload Tool {__version__}{rec} ({name})")
 
     def _error(self, title: str, message: str) -> None:

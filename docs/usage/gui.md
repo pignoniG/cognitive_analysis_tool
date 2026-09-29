@@ -16,7 +16,7 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 **File**
 
 - **Open recording…**: choose a recording folder. The device is detected automatically.
-- **Choose lux folder…**: the folder with lux sensor logs, for Pupil recordings whose logs are not in the recording
+- **Choose lux folder…**: the folder with lux sensor logs, for glasses recordings whose logs are not in the recording
   folder or its `lux` subfolder. It applies to the recordings opened afterwards.
 - **Load parameters… / Save parameters / Save parameters as…**: the participant's parameter file (JSON), without
   the display photometry. Files written by version 1.x are converted when loaded.
@@ -35,7 +35,7 @@ it again, for example after changing the video analysis settings; **Cancel**, sh
 width) change what is measured in the video: after editing them, click **Reanalyse video**. The video preview
 already draws the new circles, so sizes can be checked before re-running.
 
-**Calibrate camera from lux** (Pupil recordings with a lux log): measures the luminance that saturates a
+**Calibrate camera from lux** (glasses recordings with a lux log): measures the luminance that saturates a
 fixed-exposure scene camera, for recordings of the same exposure without a lux log (see
 [Luminance](../processing/luminance.md#calibrating-the-camera-from-a-lux-log)).
 

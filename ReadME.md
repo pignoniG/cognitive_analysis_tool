@@ -84,7 +84,9 @@ Known problems and decisions still open are tracked in `docs/OPEN_ISSUES.md`.
 - Pignoni G., Grandi F., Peruzzini M. *Toward Reliable Pupillometry in Extended Reality Environments* (draft). The
   Varjo method.
 
-The tool started as part of a master's thesis in MIXD at NTNU Gjøvik (2018–2019).
+Earlier and related publications (2019–2022) are listed in the documentation's
+[References](https://pignonig.github.io/cognitive_analysis_tool/reference/references/). The tool started as part of a
+master's thesis in MIXD at NTNU Gjøvik (2018–2019).
 
 ## License
 

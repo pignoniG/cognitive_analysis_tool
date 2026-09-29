@@ -71,6 +71,10 @@ L = \bar L \cdot \frac{Y_w}{Y_\text{frame}}
 Looking at something brighter than the average of the view raises \(L\) above the sensor's average, and vice versa.
 The camera's exposure cancels in the ratio. Set `lux_use_video` off to use the sensor's average alone.
 
+In the paper the area of interest was selected around the gaze with a Grab Cut algorithm and used alone
+(\(L = \bar L \cdot rL_\text{AOI} / rL_\text{frame}\)). 2.0 uses the fixed gaze circle weighted against the background,
+as for the display devices, so \(Y_w\) replaces \(rL_\text{AOI}\).
+
 \(L_\text{min}\) and \(L_\text{max}\) are not used in this mode, so the plots show no black and white point lines.
 
 Version 1.x combined the sensor and camera with a different heuristic; see [open issue 29](../OPEN_ISSUES.md).

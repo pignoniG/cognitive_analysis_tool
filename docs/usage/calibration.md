@@ -96,7 +96,7 @@ sensitivity fit needs another look (sequence start, display photometry). See
 ## 4. Save
 
 **File → Save parameters as…** and name the file after the participant. Load it with their other recordings, or
-pass it to `cwtool --params`. Participant files do not contain the display photometry, so loading one keeps the
+pass it to `cwtool --params` (with the display photometry file as `--display`). Participant files do not contain the display photometry, so loading one keeps the
 display photometry currently in use. (Files from before this change still carry Lmin, Lmax and gamma; loading them
 reproduces their original results.)
 

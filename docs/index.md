@@ -53,4 +53,5 @@ One recording is analysed at a time. A new device needs only a reader module; th
 - Pignoni G., Grandi F., Peruzzini M. *Toward Reliable Pupillometry in Extended Reality Environments* (draft). The
   Varjo method: display photometric calibration and the two-circle luminance estimate.
 
-See [References](reference/references.md) for the models and related work.
+Earlier and related publications (2019–2022), the models and related work are listed in
+[References](reference/references.md).

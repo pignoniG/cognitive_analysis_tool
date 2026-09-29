@@ -8,7 +8,7 @@ pytest
 ```
 
 The tests build synthetic recordings for every device (`tests/conftest.py`: `write_varjo_recording`,
-`write_core_recording`, `write_neon_recording`) with known pupil, gaze and scene colours, so they run without real
+`write_core_recording`, `write_neon_recording`, `write_tobii_g3_recording`) with known pupil, gaze and scene colours, so they run without real
 data. The GUI tests need a display or `QT_QPA_PLATFORM=offscreen`.
 
 ## Conventions

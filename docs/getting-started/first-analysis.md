@@ -37,12 +37,13 @@ Varjo capture takes under a minute on a 4-core laptop.
 - Shaded orange regions are events from the event log; click on either plot to move the video preview to that
   moment.
 
-Every parameter change on the right updates the plots immediately.
+Every parameter change in the side panel updates the plots immediately.
 
 ## 5. Calibrate and save the participant's parameters
 
-For Varjo recordings, calibrate the display's photometric parameters and the participant's pupil response on the
-calibration sequence (see [Participant calibration](../usage/calibration.md)), then **File → Save parameters**.
+For Varjo recordings, enter the display photometry once, then fit the participant's light sensitivity and pupil
+response on the calibration sequence (see [Participant calibration](../usage/calibration.md)) and
+**File → Save parameters**.
 Load the same file for that participant's other recordings.
 
 ## 6. Export

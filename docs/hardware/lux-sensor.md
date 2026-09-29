@@ -1,6 +1,6 @@
 # Lux sensor hardware
 
-Glasses-type trackers (Pupil Core, Pupil Neon) see the world through a scene camera with automatic exposure, so
+Glasses-type trackers (Pupil Core, Pupil Neon, Tobii Pro Glasses 3) see the world through a scene camera with automatic exposure, so
 their video cannot tell how bright the scene is. An [Adafruit TSL2591](https://www.adafruit.com/product/1980) light
 sensor mounted on the tracker, facing forward, measures the illuminance at the eye; the analysis turns it into the
 average luminance of the view (see [Luminance](../processing/luminance.md#lux-sensor-devices)).

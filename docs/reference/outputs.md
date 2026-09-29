@@ -13,7 +13,7 @@ One row per analysis grid sample (default 100 Hz).
 |---|---|---|
 | `timestamp_unix` | s | Unix time |
 | `timestamp_relative` | s | from the first scene frame |
-| `luminance_cdm2` | cd/m² | estimated luminance |
+| `luminance_cdm2` | cd/m² | estimated luminance (only relative for a glasses recording without lux log and with automatic exposure) |
 | `pupil_measured_mm` | mm | measured pupil, smoothed, scaled and offset; empty in long gaps |
 | `pupil_measured_raw_mm` | mm | the same, lightly smoothed |
 | `pupil_expected_mm` | mm | expected pupil |

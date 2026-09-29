@@ -60,9 +60,11 @@ recording folder.
 
 Each phase starts at its own logged time, so pauses between phases are kept. The reader takes the Unix start when
 present, else the ISO time. Logs from the older logger have ISO times without a zone: for Varjo recordings they are
-read in the zone of the computer that recorded (from Varjo Base's file name, which is in local time), for other devices
-in the zone of the computer running the analysis.
+read in the zone of the computer that recorded (from Varjo Base's file name, which is in local time), for Glasses 3
+recordings in the recording unit's zone (`recording.g3`), for the Pupil devices in the zone of the computer running the
+analysis.
 
-!!! note "Neon events"
-    Events marked in the Neon Companion app or in Pupil Cloud are read directly from the recording; see
-    [Pupil Neon](../devices/pupil-neon.md#events). An `event_log` CSV in the folder is read as well.
+!!! note "Neon and Glasses 3 events"
+    Events marked in the Neon Companion app or in Pupil Cloud, and Glasses 3 events (`eventdata.gz`), are read
+    directly from the recording; see [Pupil Neon](../devices/pupil-neon.md#events) and
+    [Tobii Pro Glasses 3](../devices/tobii-g3.md). An `event_log` CSV in the folder is read as well.

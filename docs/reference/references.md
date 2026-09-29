@@ -2,13 +2,30 @@
 
 ## This tool
 
+The methods implemented here:
+
 - Pignoni, G., Komandur, S., & Volden, F. (2021). Accounting for effects of variation in luminance in pupillometry
   for field measurements of cognitive workload. *IEEE Sensors Journal*.
   [doi:10.1109/JSEN.2020.3038291](https://doi.org/10.1109/JSEN.2020.3038291). The lux sensor method (eq. 5–8) used
-  for the Pupil Core and Neon.
+  for the glasses (Pupil Core, Neon, Glasses 3).
 - Pignoni, G., Grandi, F., & Peruzzini, M. *Toward Reliable Pupillometry in Extended Reality Environments: A
   Video-Based Pipeline for Isolating Cognitive Workload from Pupil Data* (draft). Display photometric calibration,
   two-area luminance and the calibration sequence used for the Varjo XR-4.
+
+Related publications using the tool and its lux sensor:
+
+- Pignoni, G., & Komandur, S. (2019). Development of a quantitative evaluation tool of cognitive workload in field
+  studies through eye tracking. *Lecture Notes in Computer Science*, 11571.
+  [doi:10.1007/978-3-030-22507-0_9](https://doi.org/10.1007/978-3-030-22507-0_9)
+- Pignoni, G., Hareide, O. S., Komandur, S., & Volden, F. (2019). Trial application of pupillometry for a maritime
+  usability study in field conditions. *Necesse*, 4.
+  [NTNU Open](https://ntnuopen.ntnu.no/ntnu-xmlui/handle/11250/2633600)
+- Streilein, T., Komandur, S., Pignoni, G., Volden, F., Lunde, P., & Mjelde, F. V. (2020). Maritime navigation:
+  characterizing collaboration in a high-speed craft navigation activity. *Communications in Computer and Information
+  Science*, 1224. [PDF](https://fhs.brage.unit.no/fhs-xmlui/bitstream/handle/11250/2786638/HCI_International_2020_Tim-3.pdf?sequence=1&isAllowed=y)
+- Pignoni, G., & Komandur, S. (2022). Practical challenges in using eye trackers in the field. In *Human-Automation
+  Interaction: Mobile Computing* (pp. 653–662). Springer.
+  [doi:10.1007/978-3-031-10788-7_37](https://doi.org/10.1007/978-3-031-10788-7_37)
 
 ## Models
 
