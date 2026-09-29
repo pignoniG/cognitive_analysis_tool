@@ -1,5 +1,11 @@
 # Cognitive workload tool for the varjo xr-4
 
+> [!IMPORTANT]
+> **Archive only.** This branch keeps the 1.x build for the Varjo XR-4. It is no longer developed or supported.
+> The current tool is **cwtool 2.0**, on the [`master_v2.0`](https://github.com/pignoniG/cognitive_analysis_tool/tree/master_v2.0) branch,
+> with documentation at https://pignonig.github.io/cognitive_analysis_tool/ (Varjo XR-4, Pupil Core, Pupil Neon and Tobii Pro Glasses 3).
+
+
 
 This branch is dedicated to a new verson of the software, modified to work with the varjo xr-4 headset, the software DOES NOT work, and the documentation and part of the interface are not updated completely.
 
