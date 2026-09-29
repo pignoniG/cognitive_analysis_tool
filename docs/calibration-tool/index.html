@@ -952,8 +952,18 @@ async function startVR(p, cfg, done) {
   const sessionP = navigator.xr.requestSession("immersive-vr");   // needs the click's user activation: ask first
   sessionP.catch(() => {});
   const THREE = await loadThree();
+  // The GL context must be XR-compatible from the start: making it so afterwards makes the browser recreate it
+  // (Context Lost / Restored), which invalidates the session's render layer (InvalidStateError, a black headset).
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, xrCompatible: true });
+  if (!gl) throw new Error("WebGL 2 is not available.");
   const session = await sessionP;
-  const renderer = new THREE.WebGLRenderer({ antialias: false });
+  try { if (!gl.getContextAttributes()?.xrCompatible && gl.makeXRCompatible) await gl.makeXRCompatible(); }
+  catch (e) {
+    session.end().catch(() => {});
+    throw new Error(`${e.message} The browser's graphics processor may not be the one the headset is connected to: run the browser on the same GPU as SteamVR / Varjo Base.`);
+  }
+  const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: false });
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NoToneMapping;
   renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local"); renderer.xr.setFoveation(0);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(70, 1, 0.1, 100);
@@ -975,7 +985,8 @@ async function startVR(p, cfg, done) {
     run.abort("VR session ended");
   });
   active = { run };
-  await renderer.xr.setSession(session);
+  try { await renderer.xr.setSession(session); }
+  catch (e) { active = null; session.end().catch(() => {}); throw e; }   // never leave the headset on a black, idle session
   run.vr = { frameRate: session.frameRate ?? null };
   renderer.setAnimationLoop((t) => { run.frame(t); renderer.render(scene, camera); tickStatus(run); });
   return run;

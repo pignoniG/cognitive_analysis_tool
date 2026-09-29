@@ -879,6 +879,10 @@ is revised; they remain in the git history of this file.
   screen mode's), that the frame timestamps in the log match the display (the page logs the frame's submission,
   not its scan-out), that the selectstart trigger and session end behave, and how the runtime's refresh rate
   affects steps of a few seconds.
+- **First headset test (September 2026):** the view stayed black, with `InvalidStateError` from `startVR` and the WebGL
+  context lost and restored: the context had not been created XR-compatible, so making it so at session start
+  recreated it. Now created with `xrCompatible: true`, and the session is ended if setup fails. If it recurs, the
+  browser is probably not on the GPU the headset is connected to (hybrid-graphics computers).
 - **Status:** needs data.
 
 ### 47. Fixation and background weights
