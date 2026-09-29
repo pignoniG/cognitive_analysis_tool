@@ -8,6 +8,9 @@ copyright: Giovanni Pignoni
 
 theme:
   name: material
+  font:
+    text: Open Sans
+    code: Roboto Mono
   features:
     - navigation.sections
     - navigation.top
@@ -17,11 +20,13 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
+      primary: custom
+      accent: custom
       toggle: { icon: material/brightness-7, name: Dark mode }
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
+      primary: custom
+      accent: custom
       toggle: { icon: material/brightness-4, name: Light mode }
 
 markdown_extensions:
@@ -36,6 +41,9 @@ markdown_extensions:
   - pymdownx.superfences:
       custom_fences:
         - { name: mermaid, class: mermaid, format: !!python/name:pymdownx.superfences.fence_code_format }
+
+extra_css:
+  - stylesheets/extra.css
 
 extra_javascript:
   - javascripts/mathjax.js

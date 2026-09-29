@@ -1,0 +1,37 @@
+/* Project palette. #96D35F green, #E32400 red, #FF7A4E / #E6643B / #C1441E / #9C2101 oranges.
+   Header and links use the darker oranges, which keep white text and body text readable;
+   the green is used only on dark backgrounds, where it has enough contrast. */
+:root {
+  --cw-green: #96D35F;
+  --cw-red: #E32400;
+  --cw-orange-1: #FF7A4E;
+  --cw-orange-2: #E6643B;
+  --cw-orange-3: #C1441E;
+  --cw-orange-4: #9C2101;
+}
+
+[data-md-color-primary="custom"] {
+  --md-primary-fg-color: var(--cw-orange-3);
+  --md-primary-fg-color--light: var(--cw-orange-2);
+  --md-primary-fg-color--dark: var(--cw-orange-4);
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+}
+
+[data-md-color-accent="custom"] {
+  --md-accent-fg-color: var(--cw-red);
+  --md-accent-fg-color--transparent: rgba(227, 36, 0, 0.1);
+}
+
+[data-md-color-scheme="default"] {
+  --md-typeset-a-color: var(--cw-orange-4);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color: var(--cw-orange-1);
+}
+
+[data-md-color-scheme="slate"][data-md-color-accent="custom"] {
+  --md-accent-fg-color: var(--cw-green);
+  --md-accent-fg-color--transparent: rgba(150, 211, 95, 0.1);
+}

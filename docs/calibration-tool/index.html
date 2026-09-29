@@ -4,20 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Calibration Sequence Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
   --bg: #f6f7f9; --panel: #ffffff; --text: #1c2030; --muted: #667085; --line: #d9dde5;
-  --accent: #3f51b5; --accent-text: #ffffff; --danger: #c62828; --track: #e9ecf2; --focus: #3f51b5;
+  /* project palette: #96D35F, #E32400, #FF7A4E, #E6643B, #C1441E, #9C2101 */
+  --accent: #C1441E; --accent-text: #ffffff; --danger: #E32400; --track: #e9ecf2; --focus: #9C2101; --link: #9C2101;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #14161c; --panel: #1d2028; --text: #e7e9ef; --muted: #9aa1b2; --line: #333846;
-    --accent: #8c9eff; --accent-text: #0e1020; --danger: #ef7b7b; --track: #262a35; --focus: #8c9eff;
+    --accent: #96D35F; --accent-text: #0e1020; --danger: #FF7A4E; --track: #262a35; --focus: #FF7A4E; --link: #FF7A4E;
   }
 }
 * { box-sizing: border-box; }
-html { color-scheme: light dark; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+html { color-scheme: light dark; accent-color: var(--accent); }
+a { color: var(--link); }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
 header { padding: 20px 16px 8px; max-width: 1200px; margin: 0 auto; }
 h1 { font-size: 22px; margin: 0 0 4px; }
 h2 { font-size: 16px; margin: 0 0 12px; }
@@ -98,7 +103,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
 /* the stimulus itself: nothing but a flat field */
 #stage { position: fixed; inset: 0; z-index: 10000; display: none; cursor: none; background: #000; }
 #stage.on { display: block; }
-#hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 18px system-ui, sans-serif; text-align: center; padding: 12px 18px; border-radius: 8px; background: rgba(128,128,128,.55); color: #fff; }
+#hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 18px "Open Sans", system-ui, sans-serif; text-align: center; padding: 12px 18px; border-radius: 8px; background: rgba(128,128,128,.55); color: #fff; }
 #hint[hidden] { display: none; }
 @media (max-width: 640px) {
   input[type=number] { width: 72px; }
