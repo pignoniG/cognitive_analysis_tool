@@ -7,7 +7,7 @@ import pyqtgraph as pg
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QToolButton
 
-from cwtool import calibration
+from cwtool import calibration, palette
 from cwtool.pipeline import Result, residual_rms
 
 pg.setConfigOptions(background="w", foreground="k", antialias=True)
@@ -53,21 +53,21 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.reset_button.setStyleSheet(
             "QToolButton { font-size: 13px; padding: 5px 12px; border: 1px solid #999; border-radius: 5px;"
             " background: rgba(255, 255, 255, 230); color: #222; }"
-            "QToolButton:hover { background: #eef3fa; }")
+            f"QToolButton:hover {{ background: #fff1eb; border-color: {palette.ACCENT}; }}")
         self.reset_button.clicked.connect(self.fit_to_data)
 
         self.raw_curve = self.pupil.plot(pen=pg.mkPen((160, 160, 160), width=1), name="Measured (raw)", connect="finite")
         self.measured_curve = self.pupil.plot(pen=pg.mkPen("k", width=1.5), name="Measured", connect="finite")
-        self.expected_curve = self.pupil.plot(pen=pg.mkPen((31, 119, 180), width=1.5), name="Expected")
-        dash = pg.mkPen((31, 119, 180), width=1, style=pg.QtCore.Qt.DashLine)
+        self.expected_curve = self.pupil.plot(pen=pg.mkPen(palette.EXPECTED, width=2), name="Expected")
+        dash = pg.mkPen(palette.EXPECTED, width=1.5, style=pg.QtCore.Qt.DashLine)
         self.black_line = pg.InfiniteLine(angle=0, pen=dash, label="black point",
-                                          labelOpts={"position": 0.08, "color": (31, 119, 180)})
+                                          labelOpts={"position": 0.08, "color": palette.rgb(palette.EXPECTED)})
         self.white_line = pg.InfiniteLine(angle=0, pen=dash, label="white point",
-                                          labelOpts={"position": 0.08, "color": (31, 119, 180)})
+                                          labelOpts={"position": 0.08, "color": palette.rgb(palette.EXPECTED)})
         self.pupil.addItem(self.black_line, ignoreBounds=True)
         self.pupil.addItem(self.white_line, ignoreBounds=True)
 
-        self.cw_curve = self.cw.plot(pen=pg.mkPen((214, 39, 40), width=1.5), connect="finite")
+        self.cw_curve = self.cw.plot(pen=pg.mkPen(palette.DELTA_PD, width=1.5), connect="finite")
         self.cw.addItem(pg.InfiniteLine(angle=0, pos=0, pen=pg.mkPen((120, 120, 120), width=1)), ignoreBounds=True)
 
         self._event_items: list = []
@@ -83,7 +83,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
         # Current frame: a red bar on both plots. Click on either plot to place it, or drag it to scrub
         # the video; the time is shown at the top of the pupil plot.
-        red = (214, 39, 40)
+        red = palette.rgb(palette.CURSOR)
         self._moving_cursor = False
         self.cursors = [pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(red, width=2),
                                         hoverPen=pg.mkPen(red, width=4)) for _ in range(2)]
@@ -179,11 +179,11 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         for e in events:
             for plot in (self.pupil, self.cw):
                 region = pg.LinearRegionItem((e.start, e.end), movable=False,
-                                             brush=pg.mkBrush(255, 165, 0, 30), pen=pg.mkPen(None))
+                                             brush=pg.mkBrush(*palette.rgb(palette.EVENT), 35), pen=pg.mkPen(None))
                 region.setZValue(-20)
                 plot.addItem(region, ignoreBounds=True)
                 self._event_items.append((plot, region))
-            label = pg.TextItem(e.label, color=(180, 100, 0), anchor=(0, 0))
+            label = pg.TextItem(e.label, color=palette.rgb(palette.EVENT_TEXT), anchor=(0, 0))
             label.setPos(e.start, 0)
             self.cw.addItem(label, ignoreBounds=True)
             self._event_items.append((self.cw, label))

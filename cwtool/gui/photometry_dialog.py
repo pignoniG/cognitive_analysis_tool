@@ -6,6 +6,7 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
+from cwtool import palette
 from cwtool.gui.plots import data_range   # also sets the app's white plot style
 from cwtool.photometry import PhotometryFit
 
@@ -24,7 +25,7 @@ class PhotometryDialog(QDialog):
 
         g = fit.gains
         lo, hi = fit.sensitivity_range
-        notes = "".join(f"<br><span style='color:#c00'>⚠ {n}</span>" for n in fit.notes)
+        notes = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {n}</span>" for n in fit.notes)
         summary = QLabel(
             f"<b>Steady-state RMS: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b><br>"
             f"light sensitivity ×{fit.sensitivity:.3g} (95 % {lo:.3g}–{hi:.3g}) &nbsp; "
@@ -46,7 +47,7 @@ class PhotometryDialog(QDialog):
         offset = float(np.mean(fit.measured_after - fit.expected_before))
         plot.plot(x, fit.expected_before + offset, pen=pg.mkPen((150, 150, 150), width=1.5,
                                                                style=pg.QtCore.Qt.DashLine), name="Model, before")
-        plot.plot(x, fit.expected_after, pen=pg.mkPen((31, 119, 180), width=2), name="Model, fitted")
+        plot.plot(x, fit.expected_after, pen=pg.mkPen(palette.EXPECTED, width=2.5), name="Model, fitted")
         brushes = [pg.mkBrush(*s.rgb) for s in fit.steps]
         pens = [pg.mkPen("k", width=1.5 if s.settled else 1, style=pg.QtCore.Qt.SolidLine if s.settled
                          else pg.QtCore.Qt.DotLine) for s in fit.steps]

@@ -66,10 +66,10 @@ Dynamics drop-down.
   plots) shows all the data again: the whole recording and the range of the measured, expected and ΔPD curves. The calibration overlay, events and reference
   lines never stretch it.
 - Right-click for pyqtgraph's view menu (e.g. export an image).
-- The red bar marks the current video frame; its time is shown at its top. Click on either plot to move it, or drag it to
+- The dark orange bar marks the current video frame; its time is shown at its top. Click on either plot to move it, or drag it to
   scrub the video: the preview follows while dragging, skipping frames if decoding cannot keep up. **◀ Frame / Frame ▶**
   in the preview move it frame by frame.
-- The dashed blue lines are the expected pupil at the display's black and white points: the range the model can
+- The dashed green lines are the expected pupil at the display's black and white points: the range the model can
   explain on that device.
 - Events from the event log are shaded orange and labelled in the ΔPD plot.
 
@@ -93,5 +93,5 @@ See [Participant calibration](calibration.md) for the procedure.
 ## Video preview
 
 Shows the scene frame matched to the cursor time (by recorded frame timestamps where the device provides them),
-the scene circle used as background on Varjo videos, the gaze circle, and the mean colour and luminance measured
+the scene circle used as background on Varjo videos (green), the gaze circle (orange), and the mean colour and luminance measured
 in each. **◀ Frame / Frame ▶** step through frames.

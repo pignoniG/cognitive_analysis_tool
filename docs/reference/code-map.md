@@ -23,6 +23,7 @@ cwtool/
 ├── fit.py              step 2: latency (from onsets), dynamics, transient, pupil scale and offset
 ├── cli.py              the cwtool command
 ├── plot.py             matplotlib figure for exports
+├── palette.py          project colours, shared by the app, its plots and the PDF plot
 └── gui/
     ├── main_window.py  window, menus, recording/video/calibration panels, background tasks
     ├── param_panel.py  parameter editors (every Parameters field must have one)

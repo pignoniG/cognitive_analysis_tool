@@ -81,7 +81,7 @@ def test_video_preview_follows_cursor(app, varjo_folder):
     assert w.plots.cursors[1].value() == pytest.approx(1.5)
     assert wait_for(app, lambda: "fixation" in w.preview.info.text() and w.preview._pending is None)
     import re
-    fixation_r = int(re.search(r"fixation</span> RGB (\d+)", w.preview.info.text()).group(1))
+    fixation_r = int(re.search(r"fixation</\w+> RGB (\d+)", w.preview.info.text()).group(1))
     assert fixation_r == pytest.approx(128, abs=4)  # MJPG compression
     w.preview.next_button.click()
     assert "frame 16" in w.preview.time_label.text()

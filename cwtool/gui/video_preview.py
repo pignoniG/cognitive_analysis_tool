@@ -11,14 +11,15 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
+from cwtool import palette
 from cwtool.params import VideoSettings
 from cwtool.pipeline import Result
 from cwtool.recording import Recording
 from cwtool.video import FrameClock, VideoResult, analysis_height, prepare_frame, radii
 
 DISPLAY_WIDTH = 900
-SCENE_COLOUR = (255, 200, 0)    # RGB
-FIXATION_COLOUR = (255, 60, 60)
+SCENE_COLOUR = palette.rgb(palette.GREEN)       # RGB
+FIXATION_COLOUR = palette.rgb(palette.ORANGE_1)
 
 
 class VideoPreview(QWidget):
@@ -216,8 +217,8 @@ class VideoPreview(QWidget):
         if self._video is not None and len(self._video.time):
             j = int(np.argmin(np.abs(self._video.time - t)))
             f, b = self._video.fixation_rgb[j], self._video.background_rgb[j]
-            out.append(f"<span style='color:#d33'>fixation</span> RGB {f[0]:.0f}, {f[1]:.0f}, {f[2]:.0f}"
-                       f" &nbsp; <span style='color:#c90'>background</span> RGB {b[0]:.0f}, {b[1]:.0f}, {b[2]:.0f}")
+            out.append(f"<b style='color:{palette.ORANGE_3}'>fixation</b> RGB {f[0]:.0f}, {f[1]:.0f}, {f[2]:.0f}"
+                       f" &nbsp; <b style='color:{palette.GREEN}'>background</b> RGB {b[0]:.0f}, {b[1]:.0f}, {b[2]:.0f}")
         if self._result is not None and len(self._result.time):
             j = int(np.argmin(np.abs(self._result.time - t)))
             r = self._result

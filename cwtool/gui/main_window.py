@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QCheckBox, QDockWidget, QDoubleSpinBox, QFileDial
                                QHBoxLayout, QLabel, QMainWindow, QMessageBox, QProgressBar,
                                QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget)
 
-from cwtool import __version__, calibration, devices, pipeline
+from cwtool import __version__, calibration, devices, palette, pipeline
 from cwtool.fit import fit_calibration
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.photometry_dialog import PhotometryDialog
@@ -89,7 +89,7 @@ class MainWindow(QMainWindow):
             "QToolBar { spacing: 8px; padding: 6px; }"
             "QToolButton { font-size: 14px; padding: 7px 16px; border: 1px solid palette(mid);"
             " border-radius: 6px; background: palette(button); }"
-            "QToolButton:hover { background: palette(light); }"
+            f"QToolButton:hover {{ background: palette(light); border-color: {palette.ACCENT}; }}"
             "QToolButton:pressed { background: palette(midlight); }"
             "QToolButton:disabled { color: palette(mid); }")
         for a in (self.open_action, self.load_params_action, self.save_params_action, self.export_action):
@@ -264,7 +264,7 @@ class MainWindow(QMainWindow):
         else:
             r = self.result
             gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
-            warn = "".join(f"<br><span style='color:#c00'>⚠ {w}</span>" for w in r.warnings)
+            warn = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {w}</span>" for w in r.warnings)
             ends = (f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
                     if np.isfinite(r.expected_black) else f"luminance from {r.luminance_mode} &nbsp;&nbsp; ")
             self.summary_label.setText(
@@ -457,7 +457,7 @@ class MainWindow(QMainWindow):
                if fit.params.dynamics else "")
         if fit.transient > 0:
             dyn += f"<br>transient {fit.transient:.2f} mm, escape τ {fit.escape:.2f} s"
-        notes = "".join(f"<br><span style='color:#c00'>⚠ {n}</span>" for n in fit.notes)
+        notes = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {n}</span>" for n in fit.notes)
         box = QMessageBox(QMessageBox.Question, "Calibration fit",
                           f"<b>ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b><br><br>"
                           f"latency {fit.delay:.2f} s{dyn}<br>"
@@ -477,7 +477,7 @@ class MainWindow(QMainWindow):
             return
         exposure = (f" at {params.camera_exposure_ms:g} ms" if params.camera_exposure_ms > 0
                     else " (enter the recording exposure first to reuse it at other exposures)")
-        notes = "".join(f"<br><span style='color:#c00'>⚠ {n}</span>" for n in cal.notes)
+        notes = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {n}</span>" for n in cal.notes)
         box = QMessageBox(QMessageBox.Question, "Camera calibration",
                           f"<b>Full scale: {cal.white:.0f} cd/m²</b>{exposure}<br>"
                           f"from {cal.samples} video samples, spread ×{cal.spread:.2f} (90th / 10th percentile)"

@@ -32,8 +32,8 @@ Varjo capture takes under a minute on a 4-core laptop.
 
 ## 4. Read the plots
 
-- **Top:** measured pupil (black, grey = lightly smoothed) and expected pupil for the estimated luminance (blue).
-- **Bottom:** ΔPD, measured minus expected. Positive values mean a pupil larger than light alone explains.
+- **Top:** measured pupil (black, grey = lightly smoothed) and expected pupil for the estimated luminance (green).
+- **Bottom:** ΔPD (red), measured minus expected. Positive values mean a pupil larger than light alone explains.
 - Shaded orange regions are events from the event log; click on either plot to move the video preview to that
   moment.
 
