@@ -26,7 +26,8 @@ The gaze circle and background means are then weighted, with \(w\) = `fixation_w
 ## Display devices
 
 For the Varjo, the capture shows what the display showed, so the colours map to luminance through the
-**display photometry** (the paper's per-channel extension of the WCAG 2.1 relative luminance):
+**display photometry** (the per-channel extension of the WCAG 2.1 relative luminance proposed in the Varjo manuscript,
+[in preparation](../reference/references.md)):
 
 \[
 L = \sum_{c \in \{R,G,B\}} k_c \left( L_\text{max}\, \frac{g_c}{\bar g}\, C_{w,c} + L_\text{min}\,(1 - C_{w,c}) \right)
@@ -36,9 +37,9 @@ L = \sum_{c \in \{R,G,B\}} k_c \left( L_\text{max}\, \frac{g_c}{\bar g}\, C_{w,c
 - \(g_c\): channel gains (`gain_r/g/b`), divided by their mean \(\bar g\) so they act as a relative balance;
 - \(k_c\) = 0.2126, 0.7152, 0.0722: the photopic weights of the BT.709/sRGB primaries.
 
-**Change from the paper (September 2026).** The paper divides the whole sum by \(\bar g\), black-point term included:
+**Change from the manuscript (September 2026).** The manuscript divides the whole sum by \(\bar g\), black-point term included:
 \(L = \frac{1}{\bar g}\sum_c k_c (L_\text{max} g_c C_{w,c} + L_\text{min}(1 - C_{w,c}))\). Black then maps to
-\(L_\text{min}/\bar g\) rather than \(L_\text{min}\) whenever the gains do not average 1, and the paper's statement that
+\(L_\text{min}/\bar g\) rather than \(L_\text{min}\) whenever the gains do not average 1, and the manuscript's statement that
 uniform gains reduce to the plain linear mapping holds only for gains of 1. In the calibration fit the gains are free,
 so their overall scale also changed the black level during the fit, and normalising the reported weights to a mean of
 1 afterwards changed it again. 2.0 applies the gains to the white-point term only: black is always \(L_\text{min}\),
@@ -71,7 +72,7 @@ L = \bar L \cdot \frac{Y_w}{Y_\text{frame}}
 Looking at something brighter than the average of the view raises \(L\) above the sensor's average, and vice versa.
 The camera's exposure cancels in the ratio. Set `lux_use_video` off to use the sensor's average alone.
 
-In the paper the area of interest was selected around the gaze with a Grab Cut algorithm and used alone
+In the 2021 paper the area of interest was selected around the gaze with a Grab Cut algorithm and used alone
 (\(L = \bar L \cdot rL_\text{AOI} / rL_\text{frame}\)). 2.0 uses the fixed gaze circle weighted against the background,
 as for the display devices, so \(Y_w\) replaces \(rL_\text{AOI}\).
 

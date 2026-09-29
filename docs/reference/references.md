@@ -9,8 +9,9 @@ The methods implemented here:
   [doi:10.1109/JSEN.2020.3038291](https://doi.org/10.1109/JSEN.2020.3038291). The lux sensor method (eq. 5–8) used
   for the glasses (Pupil Core, Neon, Glasses 3).
 - Pignoni, G., Grandi, F., & Peruzzini, M. *Toward Reliable Pupillometry in Extended Reality Environments: A
-  Video-Based Pipeline for Isolating Cognitive Workload from Pupil Data* (draft). Display photometric calibration,
-  two-area luminance and the calibration sequence used for the Varjo XR-4.
+  Video-Based Pipeline for Isolating Cognitive Workload from Pupil Data*. **Manuscript in preparation, not yet
+  published**; the method may change before publication. Display photometric calibration, two-area luminance and the
+  calibration sequence used for the Varjo XR-4. Pages that refer to "the Varjo manuscript" mean this text.
 
 Related publications using the tool and its lux sensor:
 

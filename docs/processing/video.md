@@ -6,7 +6,7 @@
 - the **background**: the rest of the visible scene. On circular Varjo captures the visible scene is a centred
   circle of `field_radius` × half the frame height (default 0.8), which excludes the black corners; on other
   devices it is the whole frame. By default the gaze circle is removed from the background
-  (`background_excludes_fixation`), as in the paper and Eckert et al.
+  (`background_excludes_fixation`), as in the Varjo manuscript (in preparation) and Eckert et al.
 
 The luminance used later is a weighted sum of the two (default 65 % gaze circle, 35 % background).
 

@@ -16,19 +16,19 @@ The sequence is a **timeline**: one block per step, coloured with the step's col
   (2022): 8 gray levels, 6 s each, pseudo-random (their most robust sequence); dark-to-light and light-to-dark ramps at
   3, 6 and 10 s; blue and red ramps (shades, then tints) at 3 s; and cwtool's 20-step built-in. The paper describes
   its orders rather than listing them, so the pseudo-random order here is generated (fixed seed), not copied from its
-  Fig. 1. The realistic *room* scene of the paper is not supported.
+  Fig. 1. The realistic *room* scene of Eckert et al. is not supported.
 - **Generate…** builds gray, blue, red, green or gray + RGB primaries ramps of any length, order and duration.
 - **Export CSV** / **Import CSV…** use the format of *Load sequence…* in cwtool (`time,r,g,b,label,duration`), so the
   same file drives the presenter and the analysis.
 
 ## The default: full calibration
 
-One sequence for both of cwtool's fits, about 5 minutes (34 steps, 291 s), built from the paper and from what the
+One sequence for both of cwtool's fits, about 5 minutes (34 steps, 291 s), built from Eckert et al. (2022) and from what the
 recordings showed (open issues 36, 40, 43):
 
 | Part | Steps | Why |
 |---|---|---|
-| Gray, 8 levels (0, 36, 73, 109, 146, 182, 219, 255) | 20, 15, 10, 8, 6, 6, 6 and 12 s | the paper's levels; the light sensitivity comes from where the pupil stops shrinking. Darker grays last longer because dilation is slow (time constants 1.6 to 9.6 s), so the end of the step is near its steady state; 255 is long to show the sustained level after the initial constriction |
+| Gray, 8 levels (0, 36, 73, 109, 146, 182, 219, 255) | 20, 15, 10, 8, 6, 6, 6 and 12 s | Eckert et al.'s levels; the light sensitivity comes from where the pupil stops shrinking. Darker grays last longer because dilation is slow (time constants 1.6 to 9.6 s), so the end of the step is near its steady state; 255 is long to show the sustained level after the initial constriction |
 | Red, green, blue at 64, 128, 191, 255 | 8 s each, every one after a linked black step of 8 s | the channel weights; the black step gives a known dark start, so the colour step is a brightening from the same state, and its end is near steady state |
 | Gray 73 and 182 again | 8 s | repeats, so a reproducible model error can be told from the participant's state at that moment |
 

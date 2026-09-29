@@ -50,7 +50,7 @@ One recording is analysed at a time. A new device needs only a reader module; th
 
 - Pignoni G., Komandur S., Volden F. (2021). *Accounting for Effects of Variation in Luminance in Pupillometry for
   Field Measurements of Cognitive Workload*. IEEE Sensors Journal. The lux sensor method used for the glasses trackers.
-- Pignoni G., Grandi F., Peruzzini M. *Toward Reliable Pupillometry in Extended Reality Environments* (draft). The
+- Pignoni G., Grandi F., Peruzzini M. *Toward Reliable Pupillometry in Extended Reality Environments*. Manuscript in preparation, not yet published. The
   Varjo method: display photometric calibration and the two-circle luminance estimate.
 
 Earlier and related publications (2019–2022), the models and related work are listed in

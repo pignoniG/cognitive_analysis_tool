@@ -1,5 +1,6 @@
 """RGB to absolute luminance, following the per-channel extension of the
-WCAG 2.1 relative luminance definition described in the Varjo paper.
+WCAG 2.1 relative luminance definition described in the Varjo manuscript (Pignoni, Grandi & Peruzzini,
+in preparation).
 
 Code values are decoded with a plain power law, C_lin = C'^γ. At the default
 γ = 2.2 this is the standard approximation of the sRGB curve (within 1 % of full
@@ -33,7 +34,7 @@ def absolute_luminance(linear_rgb, l_min: float, l_max: float, gains=(1.0, 1.0, 
     balance, scale the white-point term only. Black therefore maps to ``l_min``
     whatever the gains, and multiplying all gains by a constant changes nothing.
     With unit gains this is a linear mapping of relative luminance onto
-    [l_min, l_max]. (The paper divided the whole sum by the mean gain, which also
+    [l_min, l_max]. (The manuscript divided the whole sum by the mean gain, which also
     scaled the black point: open issue 9.)
     """
     lin = np.asarray(linear_rgb, dtype=float)

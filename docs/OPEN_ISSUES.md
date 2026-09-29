@@ -1,8 +1,9 @@
 # Open issues
 
 Inconsistencies and suspected errors found while porting the Varjo build (`legacy-varjo`, legacy
-`pupil_code/`) to the 2.0 `cwtool` package, and between the code and the paper draft
-("Toward Reliable Pupillometry in Extended Reality Environments", second draft).
+`pupil_code/`) to the 2.0 `cwtool` package, and between the code and the Varjo manuscript
+("Toward Reliable Pupillometry in Extended Reality Environments", second draft, in preparation and not yet published).
+Unless stated otherwise, "the paper" below means this manuscript.
 
 The legacy code has since been removed from `master_v2.0`; file references such as `lum_analysis.py` or `data_tools.py`
 point to `legacy-varjo`.

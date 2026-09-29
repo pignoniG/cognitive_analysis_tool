@@ -81,7 +81,7 @@ Known problems and decisions still open are tracked in `docs/OPEN_ISSUES.md`.
 
 - Pignoni G., Komandur S., Volden F. (2021). *Accounting for Effects of Variation in Luminance in Pupillometry for
   Field Measurements of Cognitive Workload*. IEEE Sensors Journal. The lux sensor method.
-- Pignoni G., Grandi F., Peruzzini M. *Toward Reliable Pupillometry in Extended Reality Environments* (draft). The
+- Pignoni G., Grandi F., Peruzzini M. *Toward Reliable Pupillometry in Extended Reality Environments*. Manuscript in preparation, not yet published. The
   Varjo method.
 
 Earlier and related publications (2019–2022) are listed in the documentation's
