@@ -1,5 +1,5 @@
 # name,duration in seconds (blank = press Enter to end the phase)
-# Protocol of the February tests.
+# Protocol of the February 2026 Varjo pilot (a master's thesis testing the system in a flight simulator).
 Riposo,60
 Briefing,
 CountB_7,

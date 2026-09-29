@@ -42,7 +42,7 @@ python tools/event_logger.py PROTOCOL.csv [--out FOLDER]
 
 The protocol file has one `name,duration` line per phase (seconds). A blank duration means the phase lasts until
 you press Enter; lines starting with `#` are comments. `tools/example_protocol.csv` is the protocol of the
-February tests:
+February 2026 Varjo pilot, a master's thesis that tested the system in a flight simulator:
 
 ```text
 # name,duration in seconds (blank = press Enter to end the phase)
