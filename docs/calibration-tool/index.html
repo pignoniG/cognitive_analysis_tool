@@ -1,0 +1,1086 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibration Sequence Tool</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1c2030; --muted: #667085; --line: #d9dde5;
+  --accent: #3f51b5; --accent-text: #ffffff; --danger: #c62828; --track: #e9ecf2; --focus: #3f51b5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161c; --panel: #1d2028; --text: #e7e9ef; --muted: #9aa1b2; --line: #333846;
+    --accent: #8c9eff; --accent-text: #0e1020; --danger: #ef7b7b; --track: #262a35; --focus: #8c9eff;
+  }
+}
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 20px 16px 8px; max-width: 1200px; margin: 0 auto; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+p.lead { margin: 0; color: var(--muted); max-width: 70ch; }
+main { max-width: 1200px; margin: 0 auto; padding: 8px 16px 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+section.card { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; }
+.row + .row { margin-top: 12px; }
+label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+label.check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 14px; }
+input, select, button, textarea { font: inherit; color: var(--text); }
+input[type=text], input[type=number], select {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0;
+}
+input[type=number] { width: 84px; }
+input[type=color] { width: 44px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+button {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+button.danger { color: var(--danger); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.grow { flex: 1 1 200px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg label { display: block; color: var(--text); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg span { display: block; padding: 7px 18px; cursor: pointer; }
+.seg input:checked + span { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.seg input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* timeline */
+.tl-wrap { border: 1px solid var(--line); border-radius: 8px; background: var(--track); }
+.tl-scroll { overflow-x: auto; padding: 0 12px 12px; }
+.tl-inner { position: relative; min-width: 100%; padding-top: 26px; }
+.ruler { position: absolute; left: 0; right: 0; top: 0; height: 24px; }
+.tick { position: absolute; top: 14px; bottom: 0; border-left: 1px solid var(--line); }
+.tick.major { top: 6px; border-color: var(--muted); }
+.tick span { position: absolute; top: -2px; left: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.track { display: flex; height: 92px; }
+.blk {
+  position: relative; height: 100%; flex: none; container-type: inline-size; cursor: grab; user-select: none;
+  touch-action: none; border-right: 1px solid rgba(128,128,128,.55); display: flex; flex-direction: column;
+  justify-content: space-between; padding: 6px 8px; overflow: hidden;
+}
+.blk:first-child { border-radius: 6px 0 0 6px; }
+.blk.selected { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 2; }
+.blk.dragging { cursor: grabbing; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.4); opacity: .92; }
+.blk .idx { font-size: 11px; opacity: .8; }
+.blk.keep { box-shadow: inset 5px 0 0 var(--accent); padding-left: 12px; }
+.blk .lbl { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blk .d { font-size: 12px; opacity: .85; }
+.blk .grip { position: absolute; top: 0; right: 0; bottom: 0; width: 10px; cursor: ew-resize; background: linear-gradient(90deg, transparent, rgba(128,128,128,.55)); }
+.blk .grip::after { content: ""; position: absolute; top: 34%; bottom: 34%; right: 3px; width: 2px; background: currentColor; opacity: .7; border-radius: 1px; }
+@container (max-width: 70px) { .lbl, .idx { display: none; } }
+@container (max-width: 40px) { .d { display: none; } }
+.ins { position: absolute; top: 24px; height: 92px; width: 3px; margin-left: -1px; background: var(--accent); border-radius: 2px; z-index: 6; pointer-events: none; }
+.tl-empty { padding: 32px; text-align: center; color: var(--muted); }
+.inspector { margin-top: 12px; }
+.inspector[hidden] { display: none; }
+.swatch-strip { display: flex; height: 22px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); min-width: 220px; }
+.swatch-strip i { flex: 1; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; }
+td.actions { white-space: nowrap; text-align: right; }
+#status { min-height: 1.4em; }
+#status.err { color: var(--danger); }
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 16px; max-width: 460px; }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+details { color: var(--muted); }
+details summary { cursor: pointer; color: var(--text); }
+details ul { margin: 8px 0 0; padding-left: 20px; }
+kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; font-size: 12px; }
+
+/* the stimulus itself: nothing but a flat field */
+#stage { position: fixed; inset: 0; z-index: 10000; display: none; cursor: none; background: #000; }
+#stage.on { display: block; }
+#hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 18px system-ui, sans-serif; text-align: center; padding: 12px 18px; border-radius: 8px; background: rgba(128,128,128,.55); color: #fff; }
+#hint[hidden] { display: none; }
+@media (max-width: 640px) {
+  input[type=number] { width: 72px; }
+  .row > label:not(.check), .row > button, .row > .seg { flex: 1 1 140px; }
+  .row input[type=text], .row select { width: 100%; }
+  .seg { display: flex; } .seg label { flex: 1; text-align: center; }
+  #runs thead { display: none; }
+  #runs, #runs tbody, #runs tr, #runs td { display: block; width: 100%; }
+  #runs tr { border-bottom: 1px solid var(--line); padding: 6px 0; }
+  #runs td { border: 0; padding: 2px 8px; } td.actions { text-align: left; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Calibration Sequence Tool</h1>
+  <p class="lead">Show a full-field colour sequence on a screen or in a VR headset, build and scramble your own
+  sequences, and log every run to CSV. Made for the participant calibration of the
+  <a href="../">Cognitive Workload Tool</a>. Everything runs in this page; nothing is uploaded.</p>
+</header>
+
+<main>
+<section class="card" aria-labelledby="h-seq">
+  <h2 id="h-seq">1. Sequence</h2>
+  <div class="row">
+    <label>Preset
+      <select id="preset"></select>
+    </label>
+    <button id="btn-generate" title="Generate steps from a ramp">Generate…</button>
+    <label class="grow">Name
+      <input type="text" id="seq-name" autocomplete="off">
+    </label>
+    <button id="btn-import">Import CSV…</button>
+    <button id="btn-export">Export CSV</button>
+    <button id="btn-undo" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+    <button id="btn-redo" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+    <input type="file" id="file-import" accept=".csv,text/csv,text/plain" hidden>
+  </div>
+
+  <div class="row">
+    <button id="btn-add">Add step</button>
+    <label>Zoom
+      <input type="range" id="zoom" min="8" max="120" value="40">
+    </label>
+    <span class="muted" id="total" aria-live="polite"></span>
+  </div>
+
+  <div class="tl-wrap" style="margin-top:12px">
+    <div class="tl-scroll" id="tl-scroll">
+      <div class="tl-inner" id="tl-inner">
+        <div class="ruler" id="ruler"></div>
+        <div class="track" id="track" role="listbox" aria-label="Sequence timeline" aria-orientation="horizontal"></div>
+      </div>
+    </div>
+  </div>
+  <p class="muted" style="margin:8px 0 0;font-size:13px">Drag a block to reorder it, drag its right edge to change its length
+  (0.5 s steps, hold <kbd>Alt</kbd> for 0.1 s). With a block selected: <kbd>←</kbd><kbd>→</kbd> select,
+  <kbd>Alt</kbd>+<kbd>←</kbd><kbd>→</kbd> move, <kbd>+</kbd><kbd>−</kbd> length, <kbd>Del</kbd> remove.</p>
+
+  <div class="inspector" id="inspector" hidden>
+    <div class="row">
+      <label class="grow">Label <input type="text" id="i-label" autocomplete="off"></label>
+      <label>Colour <input type="color" id="i-color"></label>
+      <label>R <input type="number" id="i-r" min="0" max="255" step="1"></label>
+      <label>G <input type="number" id="i-g" min="0" max="255" step="1"></label>
+      <label>B <input type="number" id="i-b" min="0" max="255" step="1"></label>
+      <label>Length (s) <input type="number" id="i-dur" min="0.1" step="0.5"></label>
+      <span class="muted" id="i-y"></span>
+    </div>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="i-keep"> Keep with the previous step when scrambling (e.g. a dark step before a colour)</label>
+    </div>
+    <div class="row">
+      <button id="i-left">◀ Earlier</button>
+      <button id="i-right">Later ▶</button>
+      <button id="i-dup">Duplicate</button>
+      <button id="i-del" class="danger">Delete</button>
+    </div>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-run">
+  <h2 id="h-run">2. Run</h2>
+  <div class="row">
+    <div class="seg" role="radiogroup" aria-label="Presentation mode">
+      <label><input type="radio" name="mode" value="screen" checked><span>On screen</span></label>
+      <label><input type="radio" name="mode" value="vr"><span>In VR (WebXR)</span></label>
+    </div>
+    <label>Participant ID <input type="text" id="participant" autocomplete="off" placeholder="P01"></label>
+    <label>Order
+      <select id="scramble">
+        <option value="none">As designed</option>
+        <option value="seeded" selected>Scrambled, seeded by participant</option>
+        <option value="random">Scrambled, new random seed each run</option>
+      </select>
+    </label>
+    <label>Seed <input type="text" id="seed" autocomplete="off" placeholder="participant ID"></label>
+    <label class="check"><input type="checkbox" id="avoid" checked> Keep neighbouring brightness levels apart</label>
+  </div>
+  <div class="row">
+    <label>Lead-in (s) <input type="number" id="leadin" min="0" step="1" value="5"></label>
+    <label>Lead-in grey <input type="number" id="lead-grey" min="0" max="255" step="1" value="128"></label>
+    <label class="check"><input type="checkbox" id="wait" checked> Wait for a start signal (<kbd>Space</kbd>, click, or VR trigger)</label>
+    <label class="check"><input type="checkbox" id="autodl" checked> Download the CSV when the run ends</label>
+    <label class="check" id="exit-wrap"><input type="checkbox" id="exitvr" checked> Leave VR at the end</label>
+  </div>
+  <div class="row">
+    <div>
+      <div class="muted" style="font-size:13px;margin-bottom:4px" id="order-label">Order for this run</div>
+      <div class="swatch-strip" id="order-strip" aria-hidden="true"></div>
+    </div>
+    <button id="btn-dl-participant">Save this order as CSV</button>
+  </div>
+  <div class="row">
+    <button class="primary" id="btn-start">Start run</button>
+    <button id="btn-abort" disabled>Abort</button>
+    <span id="status" role="status"></span>
+  </div>
+  <details style="margin-top:12px">
+    <summary>Before you start</summary>
+    <ul>
+      <li>Fix the display: constant brightness (no auto-brightness, night shift or adaptive contrast), sRGB profile, HDR off.
+      Sequence colours are sent as plain sRGB values; the actual light depends on the display.</li>
+      <li>On screen the field fills the whole window in full screen; <kbd>Esc</kbd> aborts. The cursor is hidden.</li>
+      <li>In VR the participant sits at the centre of a sphere painted in one colour, on a headset browser or a desktop
+      browser with a WebXR runtime (SteamVR, Varjo Base, …). The page must be served over HTTPS or from localhost.
+      Control the run from the desktop window; the participant can start it with the trigger.</li>
+      <li>Timings are logged per frame: <code>time</code> is when the frame carrying the new colour was submitted; the
+      display adds a fixed delay of about one frame.</li>
+    </ul>
+  </details>
+</section>
+
+<section class="card" aria-labelledby="h-runs">
+  <h2 id="h-runs">3. Runs</h2>
+  <p class="muted" style="margin-top:0">Stored in this browser only. Download what you need.</p>
+  <table id="runs">
+    <thead><tr><th>When</th><th>Participant</th><th>Mode</th><th>Sequence</th><th>Steps</th><th>Status</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="row">
+    <button id="btn-dl-all">Download all as one CSV</button>
+    <button id="btn-clear" class="danger">Delete all runs</button>
+  </div>
+</section>
+</main>
+
+<dialog id="dlg-gen">
+  <form method="dialog" id="gen-form">
+    <h2>Generate steps</h2>
+    <div class="row">
+      <label>Ramp
+        <select id="g-kind">
+          <option value="gray">Gray</option>
+          <option value="blue">Blue (shades, then tints)</option>
+          <option value="red">Red (shades, then tints)</option>
+          <option value="green">Green (shades, then tints)</option>
+          <option value="full">Full calibration: gray + RGB, steady-state lengths</option>
+          <option value="cwtool20">Gray + RGB primaries (20)</option>
+        </select>
+      </label>
+      <label>Levels <input type="number" id="g-n" min="2" max="32" value="8"></label>
+      <label>Length (s) <input type="number" id="g-dur" min="0.1" step="0.5" value="6"></label>
+    </div>
+    <div class="row" id="g-range">
+      <label>Darkest <input type="number" id="g-min" min="0" max="255" value="0"></label>
+      <label>Lightest <input type="number" id="g-max" min="0" max="255" value="255"></label>
+    </div>
+    <div class="row">
+      <label>Order
+        <select id="g-order">
+          <option value="dtl">Dark to light</option>
+          <option value="ltd">Light to dark</option>
+          <option value="random">Pseudo-random (no neighbours next to each other)</option>
+        </select>
+      </label>
+      <label>Seed <input type="text" id="g-seed" value="calibration"></label>
+    </div>
+    <div class="row">
+      <label class="check"><input type="radio" name="g-how" value="replace" checked> Replace the sequence</label>
+      <label class="check"><input type="radio" name="g-how" value="append"> Append</label>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button value="cancel" formnovalidate>Cancel</button>
+      <button class="primary" value="ok" id="g-ok">Generate</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="stage" aria-hidden="true"><div id="hint" hidden></div></div>
+
+<script type="module">
+"use strict";
+const TOOL = "cwtool calibration page 1";
+const $ = (s) => document.querySelector(s);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const uid = () => Math.random().toString(36).slice(2, 9);
+const round = (v, d = 3) => Math.round(v * 10 ** d) / 10 ** d;
+const safeName = (s) => String(s).trim().replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "x";
+const oneLine = (v) => String(v).replace(/[\r\n]+/g, " ");
+const MIN_DUR = 0.1;
+
+/* ---------- colour ---------- */
+const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+// Y of CIE XYZ from sRGB code values (Eckert et al. 2022, eq. 1); 0 = black, 1 = white
+const lum = (r, g, b) => 0.2125 * lin(r) + 0.7154 * lin(g) + 0.072 * lin(b);
+const hex = (r, g, b) => "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+const inkFor = (s) => (lum(s.r, s.g, s.b) > 0.3 ? "#101318" : "#f4f6fb");
+const byte = (v) => clamp(Math.round(Number(v) || 0), 0, 255);
+
+/* ---------- seeded scrambling ---------- */
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  return () => { h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return (h ^= h >>> 16) >>> 0; };
+}
+function mulberry32(a) {
+  return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const rngFrom = (seed) => mulberry32(xmur3(String(seed))());
+function shuffled(n, rng) {
+  const a = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+/** Steps that are linked to their predecessor (`keep`) move with it: the groups are what gets ordered. */
+function groupsOf(steps) {
+  const g = [];
+  steps.forEach((s, i) => { if (s.keep && g.length) g[g.length - 1].push(i); else g.push([i]); });
+  return g;
+}
+const groupY = (steps, g) => { const s = steps[g[g.length - 1]]; return lum(s.r, s.g, s.b); };
+/** Order (indices) for `steps` from `seed`. With `avoid`, no two consecutive groups are neighbours in brightness
+ *  rank (of their last step), so no level follows the one just next to it (Eckert et al. 2022, pseudo-random order). */
+function scrambleIndices(steps, seed, avoid) {
+  const groups = groupsOf(steps), n = groups.length, rng = rngFrom(seed);
+  const rank = new Array(n);
+  [...groups.keys()].sort((a, b) => groupY(steps, groups[a]) - groupY(steps, groups[b]) || a - b)
+    .forEach((i, k) => { rank[i] = k; });
+  let best = null, bestBad = Infinity;
+  for (let tries = 0; tries < 4000; tries++) {
+    const o = shuffled(n, rng);
+    let bad = 0;
+    if (avoid && n >= 4) for (let i = 1; i < n; i++) if (Math.abs(rank[o[i]] - rank[o[i - 1]]) === 1) bad++;
+    if (bad === 0) return o.flatMap((gi) => groups[gi]);
+    if (bad < bestBad) { best = o; bestBad = bad; }
+  }
+  return best.flatMap((gi) => groups[gi]);
+}
+const randomSeed = () => Array.from(crypto.getRandomValues(new Uint8Array(5)), (b) => b.toString(16).padStart(2, "0")).join("");
+
+/* ---------- sequence model ---------- */
+const mk = (label, r, g, b, dur, keep = false) => ({ id: uid(), label, r, g, b, dur, keep });
+let seq = { name: "gray-8-pseudo-random-6s", steps: [] };
+let selected = null;
+const undoStack = [], redoStack = [];
+const snap = () => JSON.stringify(seq);
+function pushHistory() { undoStack.push(snap()); if (undoStack.length > 200) undoStack.shift(); redoStack.length = 0; updateHistoryButtons(); }
+function restore(json) {
+  seq = JSON.parse(json);
+  if (!seq.steps.some((s) => s.id === selected)) selected = null;
+  renderAll();
+}
+function undo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); }
+function redo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); }
+function updateHistoryButtons() { $("#btn-undo").disabled = !undoStack.length; $("#btn-redo").disabled = !redoStack.length; }
+const find = (id) => seq.steps.find((s) => s.id === id);
+const totalDur = () => seq.steps.reduce((a, s) => a + s.dur, 0);
+
+function grays(n, lo, hi, dur) {
+  return Array.from({ length: n }, (_, i) => {
+    const v = byte(lo + ((hi - lo) * i) / Math.max(1, n - 1));
+    return mk(`Gray ${v}`, v, v, v, dur);
+  });
+}
+function hueRamp(axis, n, dur) {
+  const name = ["Red", "Green", "Blue"][axis];
+  const half = Math.floor(n / 2), rest = n - half, out = [];
+  for (let i = 0; i < half; i++) {
+    const v = byte((255 * i) / Math.max(1, half - 1)), c = [0, 0, 0]; c[axis] = v;
+    out.push(mk(v === 0 ? "Black" : `${name} ${v}`, ...c, dur));
+  }
+  for (let k = 1; k <= rest; k++) {
+    const t = k / (rest + 1), o = byte(255 * t), c = [o, o, o]; c[axis] = 255;
+    out.push(mk(`${name} tint ${Math.round(t * 100)}%`, ...c, dur));
+  }
+  return out;
+}
+function cwtool20(dur) {   // the built-in sequence of cwtool.calibration
+  const out = grays(8, 0, 255, dur);
+  ["Red", "Green", "Blue"].forEach((name, axis) => [64, 128, 191, 255].forEach((v) => {
+    const c = [0, 0, 0]; c[axis] = v; out.push(mk(`${name} ${v}`, ...c, dur));
+  }));
+  return out;
+}
+/** Gray and RGB calibration for cwtool's light-sensitivity and latency/dynamics fits (issues 36, 40, 43):
+ *  the 8 grays of Eckert et al. 2022 and R, G, B at 4 levels, each colour preceded by a linked black step;
+ *  lengths vary, with the long ones where the pupil is slowest (dilation, tau up to about 10 s): the darker
+ *  the gray, the longer; two grays repeated. Play it in pseudo-random order so luminance is not confounded with time. */
+function fullCalibration() {
+  const out = [], long = { 0: 20, 36: 15, 73: 10, 109: 8, 146: 6, 182: 6, 219: 6, 255: 12 };
+  for (const v of [0, 36, 73, 109, 146, 182, 219, 255]) out.push(mk(`Gray ${v}`, v, v, v, long[v]));
+  ["Red", "Green", "Blue"].forEach((name, axis) => [64, 128, 191, 255].forEach((v) => {
+    const c = [0, 0, 0]; c[axis] = v;
+    out.push(mk("Black", 0, 0, 0, 8), mk(`${name} ${v}`, ...c, 8, true));
+  }));
+  for (const v of [73, 182]) out.push(mk(`Gray ${v} (repeat)`, v, v, v, 8));
+  return out;
+}
+function generate({ kind, n, dur, lo, hi, order, seed }) {
+  let list = kind === "gray" ? grays(n, lo, hi, dur)
+    : kind === "full" ? fullCalibration()
+    : kind === "cwtool20" ? cwtool20(dur)
+    : hueRamp({ red: 0, green: 1, blue: 2 }[kind], n, dur);
+  const groups = groupsOf(list), Y = (g) => groupY(list, g);
+  if (order === "dtl") groups.sort((a, b) => Y(a) - Y(b));
+  else if (order === "ltd") groups.sort((a, b) => Y(b) - Y(a));
+  else if (order === "random") return scrambleIndices(list, seed, true).map((i) => list[i]);
+  return groups.flat().map((i) => list[i]);
+}
+const PRESETS = [
+  ["Full calibration: gray + RGB, steady-state lengths, pseudo-random (default, about 5 min)", "full-calibration-gray-rgb", { kind: "full", n: 0, dur: 0, order: "random" }],
+  ["Gray, 8 levels, 6 s, pseudo-random (Eckert et al. 2022)", "gray-8-pseudo-random-6s", { kind: "gray", n: 8, dur: 6, order: "random" }],
+  ["Gray, dark to light, 3 s", "gray-8-dark-to-light-3s", { kind: "gray", n: 8, dur: 3, order: "dtl" }],
+  ["Gray, dark to light, 6 s", "gray-8-dark-to-light-6s", { kind: "gray", n: 8, dur: 6, order: "dtl" }],
+  ["Gray, dark to light, 10 s", "gray-8-dark-to-light-10s", { kind: "gray", n: 8, dur: 10, order: "dtl" }],
+  ["Gray, light to dark, 6 s", "gray-8-light-to-dark-6s", { kind: "gray", n: 8, dur: 6, order: "ltd" }],
+  ["Blue, dark to light, 3 s", "blue-8-dark-to-light-3s", { kind: "blue", n: 8, dur: 3, order: "dtl" }],
+  ["Red, dark to light, 3 s", "red-8-dark-to-light-3s", { kind: "red", n: 8, dur: 3, order: "dtl" }],
+  ["Gray + RGB primaries, 20 steps, 6 s (cwtool built-in)", "cwtool-builtin-20", { kind: "cwtool20", n: 20, dur: 6, order: "as-is" }],
+];
+const PRESET_SEED = "calibration";
+function loadPreset(i) {
+  const [, name, p] = PRESETS[i];
+  pushHistory();
+  seq = { name, steps: generate({ ...p, lo: 0, hi: 255, seed: PRESET_SEED }) };
+  selected = null;
+  renderAll();
+}
+
+/* ---------- CSV ---------- */
+const csvCell = (v) => { const s = String(v ?? ""); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+const csvRow = (a) => a.map(csvCell).join(",");
+function parseCsv(text) {
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+    else cell += c;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.length && r[0].trim() !== "" && !r[0].trimStart().startsWith("#"));
+}
+function sequenceToCsv(steps) {
+  let t = 0;
+  const lines = [csvRow(["time", "r", "g", "b", "label", "duration", "keep"])];
+  for (const s of steps) { lines.push(csvRow([round(t), s.r, s.g, s.b, s.label, round(s.dur), s.keep ? 1 : 0])); t += s.dur; }
+  return lines.join("\n") + "\n";
+}
+/** Same layouts as cwtool.calibration.load_sequence: a header with time/start/onset (s, or ms) or duration,
+ *  r/g/b, optional label, or four columns time, R, G, B. Colours 0-255 or 0-1. */
+function csvToSteps(text) {
+  const rows = parseCsv(text);
+  if (!rows.length) throw new Error("The file has no rows.");
+  const num = (r) => r.slice(0, 4).every((x) => x.trim() !== "" && !isNaN(Number(x)));
+  const key = (h) => h.trim().toLowerCase().split("(")[0].trim().replace(/_s$|_ms$/, "");
+  const col = (hdr, names) => { const i = hdr.findIndex((h) => names.includes(key(h))); return i < 0 ? null : i; };
+  let tc, rgb, dc = null, lc = null, kc = null, ms = false, data = rows;
+  if (num(rows[0])) { tc = 0; rgb = [1, 2, 3]; }
+  else {
+    const hdr = rows[0]; data = rows.slice(1);
+    tc = col(hdr, ["time", "t", "timestamp", "start", "seconds", "onset"]);
+    rgb = [["r", "red"], ["g", "green"], ["b", "blue"]].map((n) => col(hdr, n));
+    dc = col(hdr, ["duration", "dur", "length"]);
+    lc = col(hdr, ["label", "name", "colour", "color"]);
+    kc = col(hdr, ["keep", "linked"]);
+    if (rgb.includes(null) || (tc === null && dc === null)) throw new Error("Need R, G, B columns and a time or duration column.");
+    ms = tc !== null && /ms/i.test(hdr[tc]);
+  }
+  if (!data.length) throw new Error("The file has no steps.");
+  const k = ms ? 1000 : 1;
+  let cols = data.map((r) => rgb.map((c) => Number(r[c])));
+  if (cols.some((c) => c.some(isNaN))) throw new Error("Colour values must be numbers.");
+  if (Math.max(...cols.flat()) <= 1) cols = cols.map((c) => c.map((v) => v * 255));
+  let durs;
+  if (tc !== null) {
+    const starts = data.map((r) => Number(r[tc]) / k);
+    if (starts.some(isNaN)) throw new Error("Times must be numbers.");
+    if (starts.some((s, i) => i && s <= starts[i - 1])) throw new Error("Step times must increase.");
+    durs = starts.slice(1).map((s, i) => s - starts[i]);
+    const lastCell = dc !== null ? data[data.length - 1][dc] : "";
+    const sorted = [...durs].sort((a, b) => a - b);
+    durs.push(lastCell && lastCell.trim() !== "" ? Number(lastCell) / k : sorted.length ? sorted[sorted.length >> 1] : 6);
+  } else durs = data.map((r) => Number(r[dc]) / k);
+  if (durs.some((d) => !(d > 0))) throw new Error("Step lengths must be positive.");
+  return data.map((r, i) => {
+    const [R, G, B] = cols[i].map(byte);
+    const label = lc !== null && (r[lc] || "").trim() ? r[lc].trim() : `RGB ${R}, ${G}, ${B}`;
+    const keep = i > 0 && kc !== null && /^(1|true|yes)$/i.test((r[kc] || "").trim());
+    return mk(label, R, G, B, round(Math.max(MIN_DUR, durs[i])), keep);
+  });
+}
+function download(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/* ---------- persistence (per browser, optional) ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window, quota */ } },
+};
+const saveSequence = () => store.set("cal.sequence", seq);
+
+/* ---------- timeline ---------- */
+const track = $("#track"), inner = $("#tl-inner"), scroller = $("#tl-scroll");
+const px = () => Number($("#zoom").value);
+const snapStep = (e) => (e.altKey ? 0.1 : 0.5);
+const fmtDur = (d) => `${round(d, 2)} s`;
+
+function renderRuler() {
+  const ruler = $("#ruler"), total = totalDur();
+  ruler.replaceChildren();
+  inner.style.width = `${Math.max(total * px() + 24, 0)}px`;
+  const labelEvery = [1, 2, 5, 10, 30, 60, 300].find((s) => s * px() >= 56) ?? 600;
+  for (let t = 0; t <= total + 1e-9; t += 1) {
+    if (px() < 14 && t % labelEvery) continue;
+    const el = document.createElement("div");
+    const major = t % labelEvery === 0;
+    el.className = "tick" + (major ? " major" : "");
+    el.style.left = `${t * px()}px`;
+    if (major) el.innerHTML = `<span>${t} s</span>`;
+    ruler.append(el);
+  }
+}
+function paintBlock(el, s, i) {
+  el.style.width = `${s.dur * px()}px`;
+  el.style.background = `rgb(${s.r},${s.g},${s.b})`;
+  el.style.color = inkFor(s);
+  el.title = `${i + 1}. ${s.label}: RGB ${s.r}, ${s.g}, ${s.b}, ${fmtDur(s.dur)}`;
+  el.classList.toggle("keep", !!s.keep && i > 0);
+  el.querySelector(".idx").textContent = s.keep && i > 0 ? `${i + 1} ↳ linked` : i + 1;
+  el.querySelector(".lbl").textContent = s.label;
+  el.querySelector(".d").textContent = fmtDur(s.dur);
+}
+function renderTimeline() {
+  track.replaceChildren();
+  if (!seq.steps.length) {
+    track.innerHTML = '<div class="tl-empty">No steps. Load a preset, generate a ramp or add a step.</div>';
+    track.style.height = "auto";
+  } else track.style.height = "";
+  seq.steps.forEach((s, i) => {
+    const el = document.createElement("div");
+    el.className = "blk" + (s.id === selected ? " selected" : "");
+    el.dataset.id = s.id; el.tabIndex = 0; el.setAttribute("role", "option");
+    el.setAttribute("aria-selected", s.id === selected);
+    el.innerHTML = '<span class="idx"></span><span class="lbl"></span><span class="d"></span><span class="grip" title="Drag to change the length"></span>';
+    paintBlock(el, s, i);
+    track.append(el);
+  });
+  renderRuler();
+  $("#total").textContent = seq.steps.length ? `${seq.steps.length} steps, ${fmtDur(totalDur())} in total` : "";
+}
+function select(id, focus = false) {
+  selected = id;
+  track.querySelectorAll(".blk").forEach((b) => {
+    const on = b.dataset.id === id;
+    b.classList.toggle("selected", on); b.setAttribute("aria-selected", on);
+    if (on && focus) b.focus({ preventScroll: true });
+    if (on) b.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+  renderInspector();
+}
+function renderInspector() {
+  const s = find(selected), box = $("#inspector");
+  box.hidden = !s;
+  if (!s) return;
+  const set = (id, v) => { const el = $(id); if (document.activeElement !== el) el.value = v; };
+  set("#i-label", s.label); set("#i-color", hex(s.r, s.g, s.b));
+  set("#i-r", s.r); set("#i-g", s.g); set("#i-b", s.b); set("#i-dur", round(s.dur));
+  $("#i-y").textContent = `Y = ${lum(s.r, s.g, s.b).toFixed(3)}`;
+  const i = seq.steps.indexOf(s);
+  $("#i-keep").checked = !!s.keep && i > 0; $("#i-keep").disabled = i === 0;
+  $("#i-left").disabled = i === 0; $("#i-right").disabled = i === seq.steps.length - 1;
+}
+function renderAll() {
+  renderTimeline(); renderInspector(); updateHistoryButtons();
+  $("#seq-name").value = seq.name; renderOrderPreview(); saveSequence();
+}
+function move(from, to) {
+  if (from === to || to < 0 || to >= seq.steps.length) return;
+  pushHistory();
+  seq.steps.splice(to, 0, seq.steps.splice(from, 1)[0]);
+  renderAll(); select(selected, true);
+}
+function removeSelected() {
+  const i = seq.steps.findIndex((s) => s.id === selected);
+  if (i < 0) return;
+  pushHistory();
+  seq.steps.splice(i, 1);
+  selected = seq.steps[Math.min(i, seq.steps.length - 1)]?.id ?? null;
+  renderAll(); if (selected) select(selected, true);
+}
+
+// pointer interaction: select, reorder by dragging the block, resize by dragging its right edge
+track.addEventListener("pointerdown", (e) => {
+  const blk = e.target.closest(".blk");
+  if (!blk || e.button !== 0) return;
+  select(blk.dataset.id);
+  if (e.target.classList.contains("grip")) startResize(e, blk); else startDrag(e, blk);
+});
+function startResize(e, blk) {
+  const s = find(blk.dataset.id), x0 = e.clientX, d0 = s.dur, before = snap();
+  let changed = false;
+  blk.setPointerCapture(e.pointerId);
+  const onMove = (ev) => {
+    const step = snapStep(ev);
+    const d = Math.max(MIN_DUR, round(Math.round((d0 + (ev.clientX - x0) / px()) / step) * step));
+    if (d === s.dur) return;
+    if (!changed) { undoStack.push(before); redoStack.length = 0; changed = true; updateHistoryButtons(); }
+    s.dur = d;
+    paintBlock(blk, s, seq.steps.indexOf(s));
+    renderRuler(); renderInspector();
+    $("#total").textContent = `${seq.steps.length} steps, ${fmtDur(totalDur())} in total`;
+  };
+  const onUp = () => {
+    blk.removeEventListener("pointermove", onMove); blk.removeEventListener("pointerup", onUp);
+    blk.removeEventListener("pointercancel", onUp);
+    if (changed) { renderOrderPreview(); saveSequence(); }
+  };
+  blk.addEventListener("pointermove", onMove); blk.addEventListener("pointerup", onUp); blk.addEventListener("pointercancel", onUp);
+}
+function startDrag(e, blk) {
+  const x0 = e.clientX, id = blk.dataset.id;
+  const blocks = [...track.querySelectorAll(".blk")];
+  const from = blocks.indexOf(blk), others = blocks.filter((b) => b !== blk);
+  const bounds = others.map((b) => [b.offsetLeft, b.offsetLeft + b.offsetWidth]);
+  const origLeft = blk.offsetLeft, w = blk.offsetWidth;
+  const grab = x0 - inner.getBoundingClientRect().left - origLeft;
+  let dragging = false, lastX = x0, target = from, raf = 0;
+  const marker = document.createElement("div"); marker.className = "ins";
+  const update = () => {
+    const left = inner.getBoundingClientRect().left;
+    const dx = lastX - left - grab - origLeft;
+    blk.style.transform = `translateX(${dx}px)`;
+    const centre = origLeft + dx + w / 2;
+    target = bounds.filter(([a, b]) => (a + b) / 2 < centre).length;
+    const at = target < bounds.length ? bounds[target][0] : bounds.length ? bounds[bounds.length - 1][1] : 0;
+    marker.style.left = `${at}px`;
+  };
+  const auto = () => {
+    const r = scroller.getBoundingClientRect();
+    if (lastX < r.left + 40) scroller.scrollLeft -= 14; else if (lastX > r.right - 40) scroller.scrollLeft += 14;
+    update(); raf = requestAnimationFrame(auto);
+  };
+  const onMove = (ev) => {
+    lastX = ev.clientX;
+    if (!dragging) {
+      if (Math.abs(lastX - x0) < 5) return;
+      dragging = true; blk.classList.add("dragging"); inner.append(marker); raf = requestAnimationFrame(auto);
+    }
+    update();
+  };
+  const onUp = () => {
+    cancelAnimationFrame(raf);
+    blk.removeEventListener("pointermove", onMove); blk.removeEventListener("pointerup", onUp);
+    blk.removeEventListener("pointercancel", onUp);
+    if (!dragging) return;
+    marker.remove(); blk.classList.remove("dragging"); blk.style.transform = "";
+    const to = target;   // index among the other blocks = index in the new order
+    if (to !== from) { pushHistory(); seq.steps.splice(to, 0, seq.steps.splice(from, 1)[0]); }
+    renderAll(); select(id, true);
+  };
+  blk.setPointerCapture(e.pointerId);
+  blk.addEventListener("pointermove", onMove); blk.addEventListener("pointerup", onUp); blk.addEventListener("pointercancel", onUp);
+}
+track.addEventListener("keydown", (e) => {
+  const blk = e.target.closest(".blk");
+  if (!blk) return;
+  const i = seq.steps.findIndex((s) => s.id === blk.dataset.id), s = seq.steps[i];
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    e.preventDefault();
+    const d = e.key === "ArrowLeft" ? -1 : 1;
+    if (e.altKey || e.shiftKey) move(i, i + d); else if (seq.steps[i + d]) select(seq.steps[i + d].id, true);
+  } else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeSelected(); }
+  else if (["+", "=", "-", "_"].includes(e.key)) {
+    e.preventDefault(); pushHistory();
+    s.dur = Math.max(MIN_DUR, round(s.dur + (e.key === "+" || e.key === "=" ? 1 : -1) * snapStep(e)));
+    renderAll(); select(s.id, true);
+  } else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#i-label").focus(); }
+});
+$("#zoom").addEventListener("input", () => { renderTimeline(); store.set("cal.zoom", px()); });
+
+// inspector edits: one undo step per focus
+let editSnap = null;
+const beginEdit = () => { editSnap = snap(); };
+const endEdit = () => { if (editSnap && editSnap !== snap()) { undoStack.push(editSnap); redoStack.length = 0; updateHistoryButtons(); } editSnap = null; };
+for (const id of ["#i-label", "#i-color", "#i-r", "#i-g", "#i-b", "#i-dur"]) {
+  $(id).addEventListener("focus", beginEdit); $(id).addEventListener("blur", endEdit);
+}
+function editSelected(fn) {
+  const s = find(selected); if (!s) return;
+  if (editSnap === null) beginEdit();
+  fn(s); renderTimeline(); renderInspector(); renderOrderPreview(); saveSequence();
+}
+$("#i-label").addEventListener("input", (e) => editSelected((s) => { s.label = e.target.value; }));
+$("#i-color").addEventListener("input", (e) => editSelected((s) => {
+  const v = parseInt(e.target.value.slice(1), 16); s.r = v >> 16; s.g = (v >> 8) & 255; s.b = v & 255;
+}));
+for (const c of ["r", "g", "b"]) $(`#i-${c}`).addEventListener("input", (e) => editSelected((s) => { s[c] = byte(e.target.value); }));
+$("#i-dur").addEventListener("input", (e) => { const v = Number(e.target.value); if (v >= MIN_DUR) editSelected((s) => { s.dur = round(v); }); });
+$("#i-keep").addEventListener("change", (e) => { pushHistory(); const s = find(selected); s.keep = e.target.checked; renderAll(); select(selected); });
+$("#i-left").addEventListener("click", () => move(seq.steps.findIndex((s) => s.id === selected), seq.steps.findIndex((s) => s.id === selected) - 1));
+$("#i-right").addEventListener("click", () => move(seq.steps.findIndex((s) => s.id === selected), seq.steps.findIndex((s) => s.id === selected) + 1));
+$("#i-del").addEventListener("click", removeSelected);
+$("#i-dup").addEventListener("click", () => {
+  const i = seq.steps.findIndex((s) => s.id === selected); if (i < 0) return;
+  pushHistory();
+  const c = { ...seq.steps[i], id: uid() };
+  seq.steps.splice(i + 1, 0, c); selected = c.id; renderAll(); select(c.id, true);
+});
+$("#btn-add").addEventListener("click", () => {
+  pushHistory();
+  const last = seq.steps[seq.steps.length - 1], s = mk("Gray 128", 128, 128, 128, last ? last.dur : 6);
+  seq.steps.push(s); selected = s.id; renderAll(); select(s.id);
+  scroller.scrollLeft = scroller.scrollWidth;
+});
+$("#seq-name").addEventListener("input", (e) => { seq.name = e.target.value; saveSequence(); });
+$("#btn-undo").addEventListener("click", undo);
+$("#btn-redo").addEventListener("click", redo);
+window.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
+  if (e.target.closest?.("input[type=text], input[type=number], textarea")) return;
+  e.preventDefault(); e.shiftKey ? redo() : undo();
+});
+
+// presets, generator, import/export
+const presetSel = $("#preset");
+presetSel.innerHTML = '<option value="">Load a preset…</option>' + PRESETS.map((p, i) => `<option value="${i}">${p[0]}</option>`).join("");
+presetSel.addEventListener("change", () => { if (presetSel.value !== "") loadPreset(Number(presetSel.value)); presetSel.value = ""; });
+const dlg = $("#dlg-gen");
+$("#btn-generate").addEventListener("click", () => dlg.showModal());
+$("#g-kind").addEventListener("change", () => {
+  const k = $("#g-kind").value;
+  $("#g-range").hidden = k !== "gray"; $("#g-n").disabled = k === "cwtool20" || k === "full";
+  $("#g-dur").disabled = k === "full";
+});
+$("#g-order").addEventListener("change", () => { $("#g-seed").disabled = $("#g-order").value !== "random"; });
+$("#g-seed").disabled = true; $("#g-range").hidden = false;
+dlg.addEventListener("close", () => {
+  if (dlg.returnValue !== "ok") return;
+  const kind = $("#g-kind").value;
+  const p = { kind, n: clamp(Number($("#g-n").value) || 8, 2, 32), dur: Math.max(MIN_DUR, Number($("#g-dur").value) || 6),
+    lo: byte($("#g-min").value), hi: byte($("#g-max").value), order: $("#g-order").value, seed: $("#g-seed").value || PRESET_SEED };
+  const list = generate(p);
+  pushHistory();
+  if (document.querySelector("input[name=g-how]:checked").value === "replace") {
+    seq = { name: `${kind}-${list.length}-${p.order}-${round(p.dur, 2)}s`, steps: list };
+  } else seq.steps.push(...list);
+  selected = null; renderAll();
+});
+$("#btn-import").addEventListener("click", () => $("#file-import").click());
+$("#file-import").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  try {
+    const steps = csvToSteps(await f.text());
+    pushHistory(); seq = { name: f.name.replace(/\.[^.]+$/, ""), steps }; selected = null; renderAll();
+    setStatus(`Imported ${steps.length} steps from ${f.name}.`);
+  } catch (err) { setStatus(`${f.name}: ${err.message}`, true); }
+});
+$("#btn-export").addEventListener("click", () => {
+  if (!seq.steps.length) return setStatus("Nothing to export: the sequence is empty.", true);
+  download(`sequence_${safeName(seq.name)}.csv`, sequenceToCsv(seq.steps));
+});
+
+/* ---------- run plan ---------- */
+const val = (id) => $(id).value;
+const participantId = () => val("#participant").trim();
+function plan(forRun) {
+  const mode = val("#scramble"), avoid = $("#avoid").checked;
+  let seed = "", order = seq.steps.map((_, i) => i);
+  if (mode !== "none") {
+    seed = mode === "random" ? randomSeed() : val("#seed").trim() || participantId();
+    if (seq.steps.length && (mode === "random" ? forRun : seed)) order = scrambleIndices(seq.steps, seed, avoid);
+  }
+  return { mode, seed, avoid, order, steps: order.map((i) => ({ ...seq.steps[i], source: i })) };
+}
+function renderOrderPreview() {
+  const strip = $("#order-strip"), mode = val("#scramble");
+  $("#seed").disabled = mode !== "seeded";
+  const need = mode === "seeded" && !val("#seed").trim() && !participantId();
+  const showRandom = mode === "random";
+  $("#btn-dl-participant").disabled = showRandom || need || !seq.steps.length;
+  const p = need || showRandom ? { steps: mode === "none" ? seq.steps : [] } : plan(false);
+  strip.replaceChildren();
+  const tot = p.steps.reduce((a, s) => a + s.dur, 0) || 1;
+  for (const s of p.steps) {
+    const i = document.createElement("i"); i.style.flex = `${s.dur / tot}`; i.style.background = `rgb(${s.r},${s.g},${s.b})`;
+    i.title = `${s.label} (${fmtDur(s.dur)})`; strip.append(i);
+  }
+  $("#order-label").textContent = showRandom ? "Order is drawn when the run starts"
+    : need ? "Enter a participant ID (or a seed) to see the order"
+    : mode === "none" ? "Order for this run: as designed"
+    : `Order for this run (seed “${p.seed}”): ${p.order.map((i) => i + 1).join(" ")}`;
+}
+$("#btn-dl-participant").addEventListener("click", () => {
+  const p = plan(false);
+  download(`sequence_${safeName(seq.name)}_${safeName(p.seed || participantId() || "ordered")}.csv`, sequenceToCsv(p.steps));
+});
+for (const id of ["#participant", "#seed", "#scramble", "#avoid"]) $(id).addEventListener("input", renderOrderPreview);
+
+/* ---------- the run: one state machine driven by frame timestamps, for both display modes ---------- */
+class Run {
+  /** io: { show(r, g, b), hint(text|null) }. Frame times are DOMHighResTimeStamps (ms, performance.now clock). */
+  constructor(p, cfg, io, onEnd) {
+    this.plan = p; this.cfg = cfg; this.io = io; this.onEnd = onEnd;
+    this.phase = cfg.wait ? "waiting" : "leadin";
+    this.starts = []; let t = 0;
+    for (const s of p.steps) { this.starts.push(t); t += s.dur; }
+    this.total = t; this.idx = -1; this.onsets = []; this.leadStart = null; this.t0 = null; this.frames = [];
+    this.startedAtIso = new Date().toISOString();
+  }
+  signal() { if (this.phase === "waiting") this.phase = "leadin"; }
+  frame(t) {
+    if (this.phase === "done") return;
+    const { io, cfg } = this;
+    if (this.phase === "waiting") { io.show(...cfg.lead); io.hint(cfg.hint); return; }
+    io.hint(null);
+    if (this.phase === "leadin") {
+      io.show(...cfg.lead);
+      if (this.leadStart === null) this.leadStart = t;
+      if (t - this.leadStart < cfg.leadin * 1000) return;
+      this.phase = "running"; this.t0 = t;
+    }
+    if (this.frames.length < 1e6) this.frames.push(t);
+    const e = (t - this.t0) / 1000;
+    let changed = false;   // a step is logged even if a stalled frame jumped over its whole duration
+    while (this.idx + 1 < this.starts.length && e >= this.starts[this.idx + 1]) { this.idx++; this.onsets[this.idx] = t; changed = true; }
+    if (e >= this.total) return this.end(t, "completed");
+    if (changed) { const s = this.plan.steps[this.idx]; io.show(s.r, s.g, s.b); }
+  }
+  abort(reason) { if (this.phase !== "done") this.end(performance.now(), `aborted (${reason})`); }
+  end(t, status) {
+    const started = this.phase === "running";
+    this.phase = "done";
+    this.io.show(...this.cfg.lead); this.io.hint(null);
+    const shown = this.onsets.length, rows = [];
+    for (let i = 0; i < shown; i++) {
+      const s = this.plan.steps[i], off = i + 1 < shown ? this.onsets[i + 1] : t;
+      rows.push({
+        time: (this.onsets[i] - this.t0) / 1000, duration: (off - this.onsets[i]) / 1000,
+        r: s.r, g: s.g, b: s.b, label: s.label, index: i + 1, source_index: s.source + 1,
+        planned_start_s: this.starts[i], planned_duration_s: s.dur,
+        onset_unix_ms: performance.timeOrigin + this.onsets[i], Y: lum(s.r, s.g, s.b), completed: status === "completed" || i + 1 < shown,
+      });
+    }
+    const gaps = this.frames.slice(1).map((f, i) => f - this.frames[i]).sort((a, b) => a - b);
+    this.result = {
+      status, started, rows,
+      t0_unix_ms: started ? performance.timeOrigin + this.t0 : null,
+      total_s: started ? (t - this.t0) / 1000 : 0,
+      frames: this.frames.length,
+      frame_median_ms: gaps.length ? gaps[gaps.length >> 1] : null,
+      frame_max_ms: gaps.length ? gaps[gaps.length - 1] : null,
+    };
+    this.onEnd(this.result, this);
+  }
+}
+
+const stage = $("#stage"), hintEl = $("#hint");
+const stageIo = {
+  show(r, g, b) { const c = `rgb(${r},${g},${b})`; if (stage.dataset.c !== c) { stage.dataset.c = c; stage.style.background = c; } },
+  hint(t) { hintEl.hidden = !t; if (t) hintEl.textContent = t; },
+};
+let active = null;     // { run, stop() }
+function setStatus(text, err = false) { const s = $("#status"); s.textContent = text; s.className = err ? "err" : ""; }
+function setBusy(b) { $("#btn-start").disabled = b; $("#btn-abort").disabled = !b; }
+
+function settings() {
+  const g = byte(val("#lead-grey"));
+  return { participant: participantId(), mode: document.querySelector("input[name=mode]:checked").value,
+    leadin: Math.max(0, Number(val("#leadin")) || 0), lead: [g, g, g], wait: $("#wait").checked,
+    autodl: $("#autodl").checked, exitvr: $("#exitvr").checked };
+}
+async function startRun() {
+  if (active) return;
+  if (!seq.steps.length) return setStatus("The sequence is empty.", true);
+  const cfg = settings();
+  if (!cfg.participant) { $("#participant").focus(); return setStatus("Enter a participant ID first.", true); }
+  const p = plan(true);
+  cfg.hint = "Press Space or click when ready. Esc cancels.";
+  const runId = `${safeName(cfg.participant)}_${cfg.mode}_${new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}`;
+  const done = (result, r) => finishRun(runId, cfg, p, r, result);
+  let run;
+  setBusy(true); setStatus("Starting…");
+  try {
+    if (cfg.mode === "screen") run = await startScreen(p, cfg, done);
+    else run = await startVR(p, cfg, done);
+  } catch (err) {
+    console.error(err); active = null; setBusy(false);
+    setStatus(`Could not start: ${err.message || err}`, true);
+  }
+}
+$("#btn-start").addEventListener("click", startRun);
+$("#btn-abort").addEventListener("click", () => active?.run.abort("button"));
+window.addEventListener("keydown", (e) => {
+  if (!active) return;
+  if (e.key === "Escape") active.run.abort("escape");
+  else if ((e.key === " " || e.key === "Enter") && active.run.phase === "waiting") { e.preventDefault(); active.run.signal(); }
+});
+
+async function startScreen(p, cfg, done) {
+  stage.dataset.c = ""; stage.classList.add("on");
+  let wake = null;
+  const stop = () => {
+    cancelAnimationFrame(raf); document.removeEventListener("fullscreenchange", onFs); stage.removeEventListener("pointerdown", onClick);
+    wake?.release?.().catch(() => {});
+    setTimeout(() => { stage.classList.remove("on"); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }, 700);
+  };
+  const run = new Run(p, cfg, stageIo, (r, self) => { stop(); done(r, self); });
+  const onFs = () => { if (!document.fullscreenElement) run.abort("left fullscreen"); };
+  const onClick = () => run.signal();
+  let raf = 0;
+  const loop = (t) => { run.frame(t); if (run.phase !== "done") { raf = requestAnimationFrame(loop); tickStatus(run); } };
+  active = { run };
+  try { await stage.requestFullscreen({ navigationUI: "hide" }); document.addEventListener("fullscreenchange", onFs); }
+  catch { /* no fullscreen API: the fixed overlay still covers the window */ }
+  navigator.wakeLock?.request("screen").then((w) => { wake = w; }).catch(() => {});
+  stage.addEventListener("pointerdown", onClick);
+  raf = requestAnimationFrame(loop);
+  return run;
+}
+
+let threeLoad = null;
+const loadThree = () => (threeLoad ??= import("./vendor/three-slim.module.js").catch((e) => { threeLoad = null; throw e; }));
+async function startVR(p, cfg, done) {
+  if (!navigator.xr) throw new Error("WebXR is not available here. Use HTTPS or localhost and a WebXR browser.");
+  const sessionP = navigator.xr.requestSession("immersive-vr");   // needs the click's user activation: ask first
+  sessionP.catch(() => {});
+  const THREE = await loadThree();
+  const session = await sessionP;
+  const renderer = new THREE.WebGLRenderer({ antialias: false });
+  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NoToneMapping;
+  renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local"); renderer.xr.setFoveation(0);
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(70, 1, 0.1, 100);
+  const material = new THREE.MeshBasicMaterial({ side: THREE.BackSide, toneMapped: false });
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(20, 48, 24), material);   // the participant is at its centre
+  sphere.frustumCulled = false; scene.add(sphere);
+  const io = {
+    show(r, g, b) { material.color.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace); renderer.setClearColor(material.color); },
+    hint() {},
+  };
+  const run = new Run(p, cfg, io, (r, self) => {
+    if (cfg.exitvr) session.end().catch(() => {});
+    done(r, self);
+  });
+  const onSignal = () => run.signal();
+  session.addEventListener("selectstart", onSignal); session.addEventListener("squeezestart", onSignal);
+  session.addEventListener("end", () => {
+    renderer.setAnimationLoop(null); renderer.dispose(); material.dispose(); sphere.geometry.dispose();
+    run.abort("VR session ended");
+  });
+  active = { run };
+  await renderer.xr.setSession(session);
+  run.vr = { frameRate: session.frameRate ?? null };
+  renderer.setAnimationLoop((t) => { run.frame(t); renderer.render(scene, camera); tickStatus(run); });
+  return run;
+}
+let lastTick = 0;
+function tickStatus(run) {
+  const now = performance.now(); if (now - lastTick < 200) return; lastTick = now;
+  const n = run.plan.steps.length;
+  const t = run.phase === "waiting" ? "Waiting for the start signal…"
+    : run.phase === "leadin" ? "Lead-in…"
+    : `Step ${Math.max(run.idx, 0) + 1} of ${n}: ${run.plan.steps[Math.max(run.idx, 0)]?.label ?? ""}, ${((performance.now() - run.t0) / 1000).toFixed(0)} of ${round(run.total, 1)} s`;
+  setStatus(t);
+}
+
+/* ---------- run log ---------- */
+let runs = store.get("cal.runs", []);
+const COLUMNS = ["time", "duration", "r", "g", "b", "label", "index", "source_index", "planned_start_s", "planned_duration_s", "onset_unix_ms", "Y", "completed"];
+const cellFor = (k, v) => (typeof v === "number" ? (k === "onset_unix_ms" ? v.toFixed(3) : k === "Y" ? v.toFixed(5) : String(round(v, 4))) : v);
+function runCsv(run) {
+  const m = run.meta, lines = [];
+  for (const [k, v] of Object.entries(m)) lines.push(`# ${k}: ${oneLine(v ?? "")}`);
+  lines.push(csvRow(COLUMNS));
+  for (const r of run.rows) lines.push(csvRow(COLUMNS.map((k) => cellFor(k, r[k]))));
+  return lines.join("\n") + "\n";
+}
+function combinedCsv() {
+  const head = ["run_id", "participant", "mode", "status", "seed", ...COLUMNS];
+  const lines = [csvRow(head)];
+  for (const run of runs) for (const r of run.rows)
+    lines.push(csvRow([run.meta.run_id, run.meta.participant, run.meta.mode, run.meta.status, run.meta.seed, ...COLUMNS.map((k) => cellFor(k, r[k]))]));
+  return lines.join("\n") + "\n";
+}
+function finishRun(runId, cfg, p, run, r) {
+  active = null; setBusy(false); lastTick = 0;
+  if (!r.started || !r.rows.length) { setStatus(`Run cancelled before the sequence started (${r.status}).`, true); return; }
+  const meta = {
+    tool: TOOL, run_id: runId, participant: cfg.participant, mode: cfg.mode, status: r.status,
+    sequence_name: seq.name, order: p.mode === "none" ? "as designed" : p.mode === "random" ? "scrambled, random seed" : "scrambled, seeded by participant",
+    seed: p.seed, keep_neighbours_apart: p.mode === "none" ? "" : p.avoid,
+    started_iso: run.startedAtIso, sequence_start_unix_ms: r.t0_unix_ms.toFixed(3),
+    planned_total_s: round(run.total, 3), actual_total_s: round(r.total_s, 3),
+    lead_in_s: cfg.leadin, lead_in_rgb: cfg.lead.join(" "), waited_for_start_signal: cfg.wait,
+    frames: r.frames, frame_interval_median_ms: r.frame_median_ms === null ? "" : r.frame_median_ms.toFixed(2),
+    frame_interval_max_ms: r.frame_max_ms === null ? "" : r.frame_max_ms.toFixed(2),
+    xr_frame_rate_hz: run.vr?.frameRate ?? "",
+    time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen: `${screen.width}x${screen.height} @${window.devicePixelRatio}`,
+    color_gamut_p3: matchMedia("(color-gamut: p3)").matches, hdr: matchMedia("(dynamic-range: high)").matches,
+    user_agent: navigator.userAgent,
+    note: "time = frame timestamp (s from the first step); display latency of about one frame is not included",
+  };
+  const rec = { id: runId, meta, rows: r.rows };
+  runs.unshift(rec); store.set("cal.runs", runs); renderRuns();
+  const name = `calibration_run_${runId}.csv`;
+  setStatus(`${r.status === "completed" ? "Run complete" : "Run " + r.status}: ${r.rows.length} steps logged.${cfg.autodl ? " Saved as " + name + "." : ""}`, r.status !== "completed");
+  if (cfg.autodl) download(name, runCsv(rec));
+}
+function renderRuns() {
+  const tb = $("#runs tbody"); tb.replaceChildren();
+  if (!runs.length) { tb.innerHTML = '<tr><td colspan="7" class="muted">No runs yet.</td></tr>'; }
+  for (const r of runs) {
+    const tr = document.createElement("tr"), m = r.meta;
+    tr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td><td class="actions"><button data-a="dl">Download</button> <button data-a="rm" class="danger">Delete</button></td>`;
+    const vals = [new Date(m.started_iso).toLocaleString(), m.participant, m.mode === "vr" ? "VR" : "Screen", m.sequence_name, `${r.rows.length}`, m.status];
+    tr.querySelectorAll("td").forEach((td, i) => { if (i < 6) td.textContent = vals[i]; });
+    tr.querySelector("[data-a=dl]").addEventListener("click", () => download(`calibration_run_${r.id}.csv`, runCsv(r)));
+    tr.querySelector("[data-a=rm]").addEventListener("click", () => { runs = runs.filter((x) => x !== r); store.set("cal.runs", runs); renderRuns(); });
+    tb.append(tr);
+  }
+  $("#btn-dl-all").disabled = $("#btn-clear").disabled = !runs.length;
+}
+$("#btn-dl-all").addEventListener("click", () => download("calibration_runs_all.csv", combinedCsv()));
+$("#btn-clear").addEventListener("click", () => {
+  if (confirm(`Delete all ${runs.length} stored runs from this browser? Download them first if you need them.`)) { runs = []; store.set("cal.runs", runs); renderRuns(); }
+});
+
+/* ---------- mode, saved settings, start-up ---------- */
+const SAVED = ["#participant", "#seed", "#scramble", "#leadin", "#lead-grey"], SAVED_CHECK = ["#avoid", "#wait", "#autodl", "#exitvr"];
+function saveSettings() {
+  store.set("cal.settings", { mode: settings().mode, v: Object.fromEntries(SAVED.map((k) => [k, val(k)])), c: Object.fromEntries(SAVED_CHECK.map((k) => [k, $(k).checked])) });
+}
+function applyMode() {
+  const vr = settings().mode === "vr";
+  $("#exit-wrap").hidden = !vr;
+  if (vr) loadThree().catch(() => {});
+  $("#btn-start").textContent = vr ? "Start run in VR" : "Start run full screen";
+}
+async function checkXr() {
+  const vrLabel = document.querySelector("input[name=mode][value=vr]").nextElementSibling;
+  try {
+    const ok = navigator.xr && (await navigator.xr.isSessionSupported("immersive-vr"));
+    vrLabel.title = ok ? "A WebXR headset is available" : "No immersive-vr session is available in this browser right now";
+    if (!ok) vrLabel.textContent = "In VR (not detected)";
+  } catch { vrLabel.textContent = "In VR (not detected)"; }
+}
+function init() {
+  const st = store.get("cal.settings", null);
+  if (st) {
+    for (const [k, v] of Object.entries(st.v ?? {})) if ($(k)) $(k).value = v;
+    for (const [k, v] of Object.entries(st.c ?? {})) if ($(k)) $(k).checked = v;
+    const radio = document.querySelector(`input[name=mode][value=${st.mode}]`); if (radio) radio.checked = true;
+  }
+  $("#zoom").value = store.get("cal.zoom", 40);
+  const saved = store.get("cal.sequence", null);
+  if (saved?.steps?.length) seq = saved; else seq = { name: PRESETS[0][1], steps: generate({ ...PRESETS[0][2], lo: 0, hi: 255, seed: PRESET_SEED }) };
+  for (const k of [...SAVED, ...SAVED_CHECK]) $(k).addEventListener("input", saveSettings);
+  document.querySelectorAll("input[name=mode]").forEach((r) => r.addEventListener("change", () => { applyMode(); saveSettings(); }));
+  renderAll(); renderRuns(); applyMode(); checkXr();
+}
+init();
+</script>
+</body>
+</html>

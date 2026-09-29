@@ -529,6 +529,10 @@ is revised; they remain in the git history of this file.
   - a pseudo-random step order (Eckert et al., 2022) so that luminance is not confounded with time, and a dark
     step between colours;
   - fix the step level estimator (issue 40).
+- **Presenter (September 2026):** the calibration presenter's default sequence (`docs/calibration-tool`, see
+  *Calibration presenter*) is meant to do this: 8 grays and R, G, B at four levels in a pseudo-random order, each colour
+  after a black step, irregular and partly long steps, two repeats. It has not been recorded yet; the fits need to be
+  re-run on it.
 - **Status:** decided (display photometry separate, sensitivity per participant); the per-participant sensitivity is
   not reliable on the current sequence (seven participants, September 2026); paper text to follow.
 
@@ -785,7 +789,8 @@ is revised; they remain in the git history of this file.
     constriction.
   - In g, escape τ (7.2 s) and dilation τ (9.6 s) still trade off; that is step 2 (two-phase dilation).
 - **Status:** steps 1 (transient) and 3 (two-stage constriction) done; dynamics are on by default with two stages,
-  the transient 0 until fitted (issue 26); steps 2 and 4 wait for the new calibration sequence.
+  the transient 0 until fitted (issue 26); steps 2 and 4 wait for the new calibration sequence. The presenter's default sequence
+  (irregular lengths, return-to-dark steps, some long steps, repeats) provides the data for them.
 - **What remains (September 2026)**, with two stages and the transient fitted on a–g:
   - after brightening, the mean residual is gone (within ±0.06 mm at every time from 0.5 to 9.5 s);
   - after darkening, the pupil still dilates later than the model: −0.12, −0.15 and −0.13 mm at 0.5, 1 and 1.5 s,
@@ -858,3 +863,15 @@ is revised; they remain in the git history of this file.
   eyes (from at least 20 samples with both), for every device. Varjo results are unchanged (no one-eye samples).
 - **Status:** needs data (the real-recording checks above).
 
+
+### 46. The VR calibration presenter has not been run in a headset
+- **Where:** `docs/calibration-tool/index.html` (WebXR path, `startVR`), with `vendor/three-slim.module.js`.
+- **Checked:** the sphere renders the requested sRGB code exactly to a normal canvas (seven levels read back); the
+  screen mode, editor, seeded scrambling and CSV files were run in a browser, and the CSVs load in
+  `cwtool.calibration.load_sequence`.
+- **Not checked:** the `immersive-vr` session itself. Points to settle on a headset (Varjo XR-4 through Varjo Base or
+  SteamVR): that the framebuffer keeps the sRGB value (compare the lux sensor's reading of the grey levels with the
+  screen mode's), that the frame timestamps in the log match the display (the page logs the frame's submission,
+  not its scan-out), that the selectstart trigger and session end behave, and how the runtime's refresh rate
+  affects steps of a few seconds.
+- **Status:** needs data.

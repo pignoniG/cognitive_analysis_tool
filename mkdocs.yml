@@ -50,6 +50,7 @@ nav:
       - Desktop app: usage/gui.md
       - Command line: usage/cli.md
       - Participant calibration: usage/calibration.md
+      - Calibration presenter: usage/calibration-tool.md
       - Lux and event loggers: usage/tools.md
   - Devices:
       - Overview: devices/index.md

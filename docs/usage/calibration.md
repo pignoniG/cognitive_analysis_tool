@@ -16,7 +16,8 @@ file and applied to their other recordings.
 
 The built-in sequence has 20 full-field steps: grey levels 0, 36, 73, 109, 146, 182, 219, 255, then red, green and
 blue at 64, 128, 191, 255. The built-in timing is 6 s per step (120 s). Other orders and timings, such as the
-pseudo-random order recommended by Eckert et al. (2022), are loaded from a CSV (**Load sequence…**):
+pseudo-random order recommended by Eckert et al. (2022), are loaded from a CSV (**Load sequence…**), which the
+[calibration presenter](calibration-tool.md) can build, scramble per participant and play on a screen or in VR:
 
 ```text
 time,r,g,b,label
