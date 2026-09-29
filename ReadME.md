@@ -1,5 +1,11 @@
 # Cognitive workload tool for the Pupil eye tracker
 
+> [!IMPORTANT]
+> **Archive only.** This branch keeps the 1.x macOS application for the Pupil Core (the former `master`). It is no longer developed or supported.
+> The current tool is **cwtool 2.0**, on the [`master_v2.0`](https://github.com/pignoniG/cognitive_analysis_tool/tree/master_v2.0) branch,
+> with documentation at https://pignonig.github.io/cognitive_analysis_tool/ (Varjo XR-4, Pupil Core, Pupil Neon and Tobii Pro Glasses 3).
+
+
 ## Notes on the branches
 
 The develope branch is the most up to date version for pupil labs glasses, if you are interested in using the software with tobii glasses 3 see the relative branch, which has been modified to work with the tobii pro 3 glasses, the software works as well as the other versions, but the documentation and part of the interface are not updated completely.
