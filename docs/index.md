@@ -42,8 +42,9 @@ One recording is analysed at a time. A new device needs only a reader module; th
 - Known problems and decisions still open: [Open issues](OPEN_ISSUES.md).
 
 !!! note "Version 2.0 is in development"
-    This documentation describes the `v2.0` branch. Version 1.x (the macOS application for the Pupil Core and
-    the Varjo build) lives on `master` and `develop-varjo`.
+    This documentation describes the `master_v2.0` branch. Version 1.x lives on the legacy branches:
+    `legacy-pupilCore` (the macOS application for the Pupil Core), `legacy-varjo` (the Varjo build) and
+    `legacy-TobiiProIII` (the Tobii Pro Glasses 3 build).
 
 ## Publications
 

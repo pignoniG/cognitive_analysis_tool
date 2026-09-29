@@ -1,6 +1,6 @@
 """Tobii Pro Glasses 3 recordings (experimental).
 
-Written from the 1.x Tobii branch (``develop-for-Tobii-Pro-III``, 2022) and Tobii's recording format,
+Written from the 1.x Tobii branch (``legacy-TobiiProIII``, 2022) and Tobii's recording format,
 without a sample recording to check it against; see open issue 45 for what a real recording must confirm.
 
 A recording folder, as copied from the recording unit's SD card, holds:

@@ -1,7 +1,7 @@
 # Tobii Pro Glasses 3
 
 !!! warning "Experimental support"
-    The reader (`cwtool/devices/tobii_g3.py`) was written from the 1.x Tobii branch (`develop-for-Tobii-Pro-III`,
+    The reader (`cwtool/devices/tobii_g3.py`) was written from the 1.x Tobii branch (`legacy-TobiiProIII`,
     2022) and Tobii's recording format, and is tested on synthetic recordings only. Every result carries a warning
     until a real recording has confirmed it. [Open issue 45](../OPEN_ISSUES.md) lists what to check.
 

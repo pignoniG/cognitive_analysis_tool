@@ -63,7 +63,7 @@ Standalone scripts in `tools/`:
   and write the `event_log` CSV the analysis reads.
 
 The legacy macOS application (`analysisTool.py`, `pupil_code/`) has been removed from this branch;
-it is still on `develop-varjo`.
+it is still on `legacy-varjo`.
 
 ## The following has not been updated
 

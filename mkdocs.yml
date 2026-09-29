@@ -3,7 +3,7 @@ site_description: Luminance-compensated pupillometry for cognitive workload, fro
 site_url: https://pignonig.github.io/cognitive_analysis_tool/
 repo_url: https://github.com/pignoniG/cognitive_analysis_tool
 repo_name: pignoniG/cognitive_analysis_tool
-edit_uri: edit/v2.0/docs/
+edit_uri: edit/master_v2.0/docs/
 copyright: Giovanni Pignoni
 
 theme:

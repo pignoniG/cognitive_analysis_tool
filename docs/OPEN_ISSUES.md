@@ -1,11 +1,11 @@
 # Open issues
 
-Inconsistencies and suspected errors found while porting the Varjo build (`develop-varjo`, legacy
+Inconsistencies and suspected errors found while porting the Varjo build (`legacy-varjo`, legacy
 `pupil_code/`) to the 2.0 `cwtool` package, and between the code and the paper draft
 ("Toward Reliable Pupillometry in Extended Reality Environments", second draft).
 
-The legacy code has since been removed from `v2.0`; file references such as `lum_analysis.py` or `data_tools.py`
-point to `develop-varjo`.
+The legacy code has since been removed from `master_v2.0`; file references such as `lum_analysis.py` or `data_tools.py`
+point to `legacy-varjo`.
 
 Each issue says where it is, why it matters, what 2.0 currently does and what is proposed.
 **Status** is one of: *open* (needs a decision), *kept* (2.0 reproduces the legacy behaviour until decided),
@@ -166,7 +166,7 @@ is revised; they remain in the git history of this file.
 - **Problem:** the legacy function is not the paper's equation. It adds `rCoeff − gCoeff/2 − bCoeff/2`
   (and so on) to the sRGB weights and then maps the result linearly between Lmin and Lmax. With the Table 2a
   gains (e.g. b_C = 20) that gives negative or extreme weights, so Table 2 was probably not computed with the
-  code on `develop-varjo`. 2.0 implements the paper's equation, with the black-point correction of issue 9.
+  code on `legacy-varjo`. 2.0 implements the paper's equation, with the black-point correction of issue 9.
 - **Answer (G. Pignoni, September 2026):** the table came from one of several colour-weighting approaches tried on the
   Varjo branch, and that version may be lost. The paper is a draft that will be reworked to describe 2.0, so its
   pilot numbers do not need to be reproduced.
@@ -302,9 +302,9 @@ is revised; they remain in the git history of this file.
 - **Where:** `data_tools.readLux` (`1.706061 * x + 0.66935`, then `/ 2.2`, time × 0.001, one file per local hour).
 - **Problem:** needed for Pupil Core and Neon. The origin of the constants (sensor calibration? lux → cd/m²?)
   is not documented, and hour-named files depend on the logger's local time.
-- **Proposal:** document or re-derive while porting the Pupil readers (the legacy reader is on `develop-varjo`;
+- **Proposal:** document or re-derive while porting the Pupil readers (the legacy reader is on `legacy-varjo`;
   the logger that writes these files is now `tools/lux_logger.py`).
-- **2.0:** ported from master: average luminance = (1.706061 · lux + 0.66935) / 2.2 sr, with the three constants
+- **2.0:** ported from the 1.x Pupil Core build (`legacy-pupilCore`): average luminance = (1.706061 · lux + 0.66935) / 2.2 sr, with the three constants
   editable as "lux sensor" parameters. For a uniform field seen by a sensor with half-angle θ, E = π·L·sin²θ
   (L ≈ E / 0.79 for the 60° sensor field of view in the 2021 paper), which differs from dividing by 2.2; the origin
   of the calibration line should still be documented.
@@ -384,7 +384,7 @@ is revised; they remain in the git history of this file.
 - **Status:** needs data.
 
 ### 29. Master combines the lux sensor and camera differently from the 2021 paper
-- **Where:** master `lum_analysis.py` (`useCamera`): Lmin = lux / (10 · frame + 1), Lmax = 11 · Lmin, and the
+- **Where:** `legacy-pupilCore` `lum_analysis.py` (`useCamera`): Lmin = lux / (10 · frame + 1), Lmax = 11 · Lmin, and the
   result is halved.
 - **Problem:** the published method (Pignoni et al. 2021, eq. 5-8) is Lmax = avgL / avgRL, Lmin = 0,
   L = Lmax · aoiRL. The two give different absolute luminances.
@@ -403,7 +403,7 @@ is revised; they remain in the git history of this file.
 - **Status:** open; waiting for a Pupil sample recording (G. Pignoni, expected early October 2026).
 
 ### 30. Master pooled both eyes and used pixel diameters for Pupil Core
-- **Where:** master `processPupil` (column 6 = 2D diameter in px, eye0 and eye1 rows in one series).
+- **Where:** `legacy-pupilCore` `processPupil` (column 6 = 2D diameter in px, eye0 and eye1 rows in one series).
 - **2.0:** eyes are kept separate (eye0 = right, eye1 = left) and combined per sample; the 3D model's diameter in mm
   is used when available, pixels (scaled by the 2021 ratio method) otherwise.
 - **Status:** changed in 2.0 (results differ from 1.x).
@@ -671,7 +671,7 @@ is revised; they remain in the git history of this file.
 
 ### 42. The sensitivity prior breaks the display–sensitivity equivalence
 - **Where:** 2.0 `photometry.fit_light_response` (`PRIOR_LOG_SENSITIVITY`);
-  `tests/test_photometry.py::test_display_error_is_absorbed_by_the_sensitivity`, which fails on `v2.0`.
+  `tests/test_photometry.py::test_display_error_is_absorbed_by_the_sensitivity`, which fails on `master_v2.0`.
 - **The equivalence:** the model sees luminance only through `sensitivity · L`, and `L` scales with the display
   photometry (Lmin, Lmax). Doubling the datasheet luminance and halving the sensitivity gives identical predictions,
   so the data alone cannot tell them apart. The docs rely on this: "doubling the datasheet luminance halves the
@@ -829,7 +829,7 @@ is revised; they remain in the git history of this file.
 - **Status:** fixed in 2.0.
 
 ### 45. The Tobii Pro Glasses 3 reader is written without a sample recording
-- **Where:** `cwtool/devices/tobii_g3.py` (experimental), from the 1.x branch `develop-for-Tobii-Pro-III` (2022) and
+- **Where:** `cwtool/devices/tobii_g3.py` (experimental), from the 1.x branch `legacy-TobiiProIII` (2022) and
   Tobii's recording format.
 - **To check on a real recording:**
   - the direction of `gaze2d` y: 2.0 takes the origin at the top left (Tobii's convention as understood here); 1.x

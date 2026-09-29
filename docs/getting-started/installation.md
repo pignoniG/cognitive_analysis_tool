@@ -5,7 +5,7 @@ The tool needs Python 3.10 or newer and runs on Windows, macOS and Linux.
 ## From the repository
 
 ```bash
-git clone -b v2.0 https://github.com/pignoniG/cognitive_analysis_tool.git
+git clone -b master_v2.0 https://github.com/pignoniG/cognitive_analysis_tool.git
 cd cognitive_analysis_tool
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate

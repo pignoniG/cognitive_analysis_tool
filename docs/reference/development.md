@@ -31,5 +31,5 @@ mkdocs serve          # live preview at http://127.0.0.1:8000
 mkdocs build --strict # what the deployment runs
 ```
 
-Pushes to `v2.0` that touch the docs publish the site to GitHub Pages through `.github/workflows/docs.yml`
+Pushes to `master_v2.0` that touch the docs publish the site to GitHub Pages through `.github/workflows/docs.yml`
 (repository **Settings → Pages → Source: GitHub Actions**).
