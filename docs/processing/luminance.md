@@ -72,6 +72,12 @@ L = \bar L \cdot \frac{Y_w}{Y_\text{frame}}
 Looking at something brighter than the average of the view raises \(L\) above the sensor's average, and vice versa.
 The camera's exposure cancels in the ratio. Set `lux_use_video` off to use the sensor's average alone.
 
+The ratio follows where the gaze looks. On a uniform view, such as a full-field calibration sequence on a screen that
+fills only part of the camera's view, it should stay near 1 but wanders with the frame, and it is noisy on dark
+frames; the video then adds noise, not information. The analysis flags this: when the 10th to 90th percentile spread of
+the ratio (frames that are not nearly black) exceeds ×1.5, a warning suggests turning `lux_use_video` off. The app
+plots the sensor average, the luminance used and the ratio, so the effect of the video can be seen.
+
 In the 2021 paper the area of interest was selected around the gaze with a Grab Cut algorithm and used alone
 (\(L = \bar L \cdot rL_\text{AOI} / rL_\text{frame}\)). 2.0 uses the fixed gaze circle weighted against the background,
 as for the display devices, so \(Y_w\) replaces \(rL_\text{AOI}\).

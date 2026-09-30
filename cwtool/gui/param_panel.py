@@ -44,9 +44,10 @@ NUMBERS = {
                  "Recalibration of the sensor's lux (1 = as reported): average luminance = (gain·lux + offset) / "
                  "field factor. 1.x used 1.706061"),
     "lux_offset": ("Lux offset", -1000, 1000, 0.01, 5, "Recalibration offset in lux (1.x used 0.66935)"),
-    "lux_solid_angle": ("Sensor field factor", 0.01, 12.6, 0.1, 3,
-                        "Illuminance / average luminance for the sensor in its housing: the sensor's angular "
-                        "response integrated over its field (2.2 for the TSL2591 kit; π for a bare cosine sensor)"),
+    "lux_solid_angle": ("Lux ÷ luminance (Ω)", 0.01, 12.6, 0.1, 3,
+                        "Ratio of illuminance to average luminance for the sensor in its housing: the sensor's "
+                        "angular response integrated over its field (2.2 for the TSL2591 kit; π for a bare "
+                        "cosine sensor). Average luminance = (gain·lux + offset) / Ω"),
     "camera_white": ("Camera full scale (cd/m²)", 0.1, 1e7, 50, 1,
                      "Luminance that saturates the scene camera (code 255) at the reference exposure; "
                      "set it with 'Calibrate camera from lux' on a recording made with the same exposure"),
@@ -67,7 +68,7 @@ INTS = {
 BOOLS = {
     "dynamics": "Dynamics on (time constants, constriction stages, transient)",
     "background_excludes_fixation": "Background excludes gaze area",
-    "lux_use_video": "Distribute sensor luminance with the scene video",
+    "lux_use_video": "Distribute sensor luminance with the scene video (× gaze / frame ratio)",
 }
 CHOICES = {
     "eye": ("Pupil", ["both", "left", "right"]),
@@ -86,7 +87,7 @@ GROUPS = [
     ("Participant light response", ["sensitivity", "gain_r", "gain_g", "gain_b", "fixation_weight"]),
     ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
                       "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
-    ("Lux sensor (glasses)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
+    ("Luminance from lux sensor (glasses)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
     ("Scene camera without lux log (glasses)",
      ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
@@ -257,6 +258,12 @@ class ParameterPanel(QWidget):
         self._video.changed.connect(self.video_settings_changed)
         layout.addWidget(self._params)
         layout.addStretch(1)
+        # A line at the top of the lux sensor group saying which route the luminance takes.
+        _, lux_form, _ = next(b for b in self._params._boxes if "lux_use_video" in b[2])
+        self.route_label = QLabel()
+        self.route_label.setWordWrap(True)
+        self.route_label.setStyleSheet("font-style: italic;")
+        lux_form.insertRow(0, self.route_label)
 
         video = QWidget()
         video_layout = QVBoxLayout(video)
@@ -296,6 +303,11 @@ class ParameterPanel(QWidget):
         hidden = unused_parameters(self._recording, params)
         for form in (self._params, self._dynamics, self._video):
             form.hide_fields(hidden)
+        self.route_label.setText(
+            "Route: L = sensor average × (gaze weighted / whole frame) relative luminance from the video, using "
+            "the Fixation weight. It follows where the gaze looks; on a uniform view the ratio only adds noise, "
+            "so turn it off there."
+            if params.lux_use_video else "Route: L = sensor average, the video is not used.")
         # One switch: the dynamics settings apply only with it on (the delay always applies).
         for name in DYNAMICS_SWITCHED:
             self._dynamics._editors[name].setEnabled(params.dynamics)

@@ -40,6 +40,11 @@ class Result:
     gap_fraction: float         # share of the grid inside gaps longer than max_gap
     warnings: list = field(default_factory=list)
     luminance_mode: str = "display"   # see Prepared.mode
+    # Lux sensor route (None otherwise): the sensor's average luminance and the video ratio Y_w / Y_frame
+    # that distributes it, both on ``time``; the ratio is None with ``lux_use_video`` off.
+    luminance_sensor: Optional[np.ndarray] = None       # cd/m²
+    luminance_ratio: Optional[np.ndarray] = None
+    fixation_weight: float = 0.65     # weight of the gaze circle in the weighted colour
 
 
 def _odd(n: int, minimum: int = 3) -> int:
@@ -230,6 +235,8 @@ class Prepared:
     # How the luminance was obtained: "display", "lux sensor", "camera, fixed exposure" or
     # "camera, relative" (lux device without lux data, mapped onto Lmin–Lmax like a display)
     mode: str = "display"
+    lux_average: Optional[np.ndarray] = None     # cd/m², the sensor's average luminance (lux route)
+    video_ratio: Optional[np.ndarray] = None     # Y_w / Y_frame (lux route with the video)
 
     @property
     def photometric(self) -> bool:
@@ -274,15 +281,24 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
     order = np.argsort(video.time)
     vt = video.time[order] - params.timelag
     notes = []
+    lux_average = video_ratio = None
     if rec.luminance_source == "lux_sensor" and rec.lux_values is not None and len(rec.lux_values) >= 2:
         # Pignoni et al. 2021, eq. 5-8: the sensor gives the average luminance of the view; the
         # video distributes it: L = avgL · rL(gaze-weighted) / rL(whole frame).
         avg = luminance_from_lux(rec, params, time)
+        lux_average = avg
         lum = avg
         if params.lux_use_video:
             y_w, y_frame = relative_luminances(video, params)
             ratio = np.where(y_frame[order] > 1e-4, y_w[order] / np.maximum(y_frame[order], 1e-4), 1.0)
-            lum = avg * np.interp(time, vt, ratio)
+            video_ratio = np.interp(time, vt, ratio)
+            lum = avg * video_ratio
+            spread = ratio_spread(ratio[y_frame[order] > RATIO_MIN_FRAME])
+            if spread > RATIO_SPREAD_WARNING:
+                notes.append(f"The video ratio that distributes the sensor's luminance varies ×{spread:.1f} "
+                             "(10th to 90th percentile). It follows where the gaze looks, but on a uniform "
+                             "view (a calibration sequence on a screen, a dark room) it only adds noise: "
+                             "consider turning off 'Distribute sensor luminance with the scene video'.")
         mode = "lux sensor"
     elif rec.luminance_source == "lux_sensor" and params.camera_exposure == "fixed":
         # Fixed exposure: pixel values are proportional to scene luminance up to saturation.
@@ -301,7 +317,23 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
                          "exposure was fixed, set camera exposure to 'fixed'.")
             mode = "camera, relative"
         lum = np.interp(time, vt, scene_luminance(video, params)[order])
-    return Prepared(time, fs, smooth, fast, valid, lum, scale, notes, mode)
+    return Prepared(time, fs, smooth, fast, valid, lum, scale, notes, mode, lux_average, video_ratio)
+
+
+# The video ratio Y_w / Y_frame is judged on frames that are not nearly black, and flagged when its
+# 10th to 90th percentile spread exceeds this factor.
+RATIO_MIN_FRAME = 0.005
+RATIO_SPREAD_WARNING = 1.5
+
+
+def ratio_spread(ratio: np.ndarray) -> float:
+    """90th / 10th percentile of ``ratio`` (1 = constant); 0 without samples."""
+    ratio = np.asarray(ratio, dtype=float)
+    ratio = ratio[np.isfinite(ratio) & (ratio > 0)]
+    if len(ratio) < 10:
+        return 0.0
+    p10, p90 = np.percentile(ratio, [10, 90])
+    return float(p90 / p10)
 
 
 # Mean code value above which an area counts as saturated, and the share of saturated samples
@@ -432,7 +464,24 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
                   cw_sd=float(np.nanstd(cw)) if good.any() else float("nan"),
                   expected_black=float(ends[0]), expected_white=float(ends[1]), offset=offset,
                   pupil_scale=scale, rate=fs, measured_rate=rec.measured_rate,
-                  gap_fraction=float(1 - valid.mean()), warnings=notes, luminance_mode=prep.mode)
+                  gap_fraction=float(1 - valid.mean()), warnings=notes, luminance_mode=prep.mode,
+                  luminance_sensor=prep.lux_average, luminance_ratio=prep.video_ratio,
+                  fixation_weight=params.fixation_weight)
+
+
+def luminance_route(r: Result) -> Optional[dict]:
+    """How the luminance was built from the lux sensor, over the valid part of the recording: the median
+    sensor luminance, and, with the video, the median and 10th–90th percentile of its ratio. None for
+    the other routes."""
+    if r.luminance_sensor is None:
+        return None
+    sensor = r.luminance_sensor[np.isfinite(r.luminance_sensor)]
+    out = {"sensor": float(np.median(sensor)) if len(sensor) else float("nan"), "ratio": None}
+    if r.luminance_ratio is not None:
+        ratio = r.luminance_ratio[np.isfinite(r.luminance_ratio)]
+        if len(ratio):
+            out["ratio"] = (float(np.median(ratio)), *(float(x) for x in np.percentile(ratio, [10, 90])))
+    return out
 
 
 def event_means(result: Result, events) -> list[tuple[str, float, float, float]]:

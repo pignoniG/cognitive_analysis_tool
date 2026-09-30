@@ -88,6 +88,39 @@ def test_pipeline_with_lux_sensor(tmp_path):
     assert np.allclose(sensor_only.luminance, avg, rtol=0.02)
 
 
+def test_result_keeps_the_sensor_average_and_the_video_ratio(tmp_path):
+    rec = devices.load(write_core_recording(tmp_path / "core", GRAYS, FRAME_TIMES, lux=lambda t: 200.0))
+    video = _video(rec)
+    r = pipeline.run(rec, video, Parameters(delay=0.0))
+    assert np.allclose(r.luminance, r.luminance_sensor * r.luminance_ratio)
+    assert np.nanmedian(r.luminance_ratio) == pytest.approx(1.0, abs=0.02)      # a uniform frame
+    route = pipeline.luminance_route(r)
+    assert route["sensor"] == pytest.approx(np.nanmedian(r.luminance_sensor)) and route["ratio"][0] == pytest.approx(1, abs=0.02)
+    sensor_only = pipeline.run(rec, video, Parameters(delay=0.0, lux_use_video=False))
+    assert sensor_only.luminance_ratio is None and pipeline.luminance_route(sensor_only)["ratio"] is None
+    without_lux = pipeline.run(devices.load(write_core_recording(tmp_path / "nolux", GRAYS, FRAME_TIMES)),
+                               video, Parameters())
+    assert without_lux.luminance_sensor is None and pipeline.luminance_route(without_lux) is None
+
+
+def test_ratio_spread():
+    assert pipeline.ratio_spread(np.ones(50)) == pytest.approx(1.0)
+    assert pipeline.ratio_spread(np.r_[np.full(50, 0.5), np.full(50, 2.0)]) == pytest.approx(4.0)
+    assert pipeline.ratio_spread(np.ones(3)) == 0.0             # too few samples to judge
+
+
+def test_unstable_video_ratio_is_flagged(tmp_path, monkeypatch):
+    rec = devices.load(write_core_recording(tmp_path / "core", GRAYS, FRAME_TIMES, lux=lambda t: 200.0))
+    video = _video(rec)
+    y_w, y_frame = pipeline.relative_luminances(video, Parameters())
+    swing = np.where(np.arange(len(y_w)) % 2, 0.4, 2.5)
+    monkeypatch.setattr(pipeline, "relative_luminances", lambda v, p: (y_frame * swing, y_frame))
+    r = pipeline.run(rec, video, Parameters(delay=0.0))
+    assert any("video ratio" in w for w in r.warnings)
+    r = pipeline.run(rec, video, Parameters(delay=0.0, lux_use_video=False))
+    assert not any("video ratio" in w for w in r.warnings)
+
+
 def test_without_lux_the_camera_is_used_with_a_warning(tmp_path):
     rec = devices.load(write_core_recording(tmp_path / "core", GRAYS, FRAME_TIMES))
     r = pipeline.run(rec, _video(rec), Parameters())

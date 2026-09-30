@@ -14,8 +14,8 @@ pg.setConfigOptions(background="w", foreground="k", antialias=True)
 
 
 class ResultPlots(pg.GraphicsLayoutWidget):
-    """Two stacked plots sharing the time axis. The calibration sequence start
-    is a draggable vertical line on the pupil plot.
+    """Stacked plots sharing the time axis: pupil, luminance, the video ratio (lux route only) and ΔPD.
+    The calibration sequence start is a draggable vertical line on the pupil plot.
 
     The view follows the data (:meth:`fit_to_data`) until the user pans or zooms; after
     that it stays put until :meth:`fit_to_data` is called again (double-click, or the
@@ -27,11 +27,16 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pupil = self.addPlot(row=0, col=0)
-        self.cw = self.addPlot(row=1, col=0)
-        self.ci.layout.setRowStretchFactor(0, 3)
-        self.ci.layout.setRowStretchFactor(1, 2)
-        self.cw.setXLink(self.pupil)
-        for p in (self.pupil, self.cw):
+        self.lum = self.addPlot(row=1, col=0)
+        self.ratio = self.addPlot(row=2, col=0)
+        self.cw = self.addPlot(row=3, col=0)
+        self._plots = (self.pupil, self.lum, self.ratio, self.cw)
+        self._stretch = (3, 1.6, 1.1, 2)
+        for row, stretch in enumerate(self._stretch):
+            self.ci.layout.setRowStretchFactor(row, stretch)
+        for p in (self.lum, self.ratio, self.cw):
+            p.setXLink(self.pupil)
+        for p in self._plots:
             p.showGrid(x=True, y=True, alpha=0.2)
             p.setClipToView(True)
             p.setDownsampling(auto=True, mode="peak")
@@ -39,12 +44,17 @@ class ResultPlots(pg.GraphicsLayoutWidget):
                 p.getAxis(side).enableAutoSIPrefix(False)  # keep values in mm and s
         self._follow = True
         self._data = (None, None, None)    # time, pupil values, ΔPD values the view is fitted to
-        for p in (self.pupil, self.cw):
+        self._lum_data = (None, None)      # luminance and video ratio values the view is fitted to
+        for p in self._plots:
             p.vb.sigRangeChangedManually.connect(self._moved_by_user)
             p.hideButtons()   # pyqtgraph's own auto-range button would include the overlays
         self.pupil.setLabel("left", "Pupil diameter (mm)")
         self.cw.setLabel("left", "ΔPD (mm)")
+        self.lum.setLabel("left", "Luminance (cd/m²)")
+        self.ratio.setLabel("left", "Video ratio")
         self.cw.setLabel("bottom", "Time (s)")
+        for p in (self.pupil, self.lum, self.ratio):
+            p.getAxis("bottom").setStyle(showValues=False)     # the time axis is at the bottom of the stack
         self.pupil.addLegend(offset=(-10, 44), brush=pg.mkBrush(255, 255, 255, 210))   # below Reset view
 
         self.reset_button = QToolButton(self)
@@ -67,6 +77,16 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.pupil.addItem(self.black_line, ignoreBounds=True)
         self.pupil.addItem(self.white_line, ignoreBounds=True)
 
+        self.lum.addLegend(offset=(-10, 10), brush=pg.mkBrush(255, 255, 255, 210))
+        self.lum_curve = self.lum.plot(pen=pg.mkPen(palette.ACCENT, width=1.8), name="Luminance used",
+                                       connect="finite")
+        self.sensor_curve = self.lum.plot(pen=pg.mkPen((120, 120, 120), width=1.5, style=pg.QtCore.Qt.DashLine),
+                                          name="Sensor average", connect="finite")
+        self.ratio_curve = self.ratio.plot(pen=pg.mkPen(palette.ACCENT, width=1.2), connect="finite")
+        self.ratio.addItem(pg.InfiniteLine(angle=0, pos=1, pen=pg.mkPen((120, 120, 120), width=1)), ignoreBounds=True)
+        self.ratio.setToolTip("Y_gaze / Y_frame: how much brighter the gazed area is than the whole frame. "
+                              "1 = the same; it should stay near 1 on a uniform view")
+        self.set_lux_route(False, False)
         self.cw_curve = self.cw.plot(pen=pg.mkPen(palette.DELTA_PD, width=1.5), connect="finite")
         self.cw.addItem(pg.InfiniteLine(angle=0, pos=0, pen=pg.mkPen((120, 120, 120), width=1)), ignoreBounds=True)
 
@@ -86,11 +106,11 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         red = palette.rgb(palette.CURSOR)
         self._moving_cursor = False
         self.cursors = [pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(red, width=2),
-                                        hoverPen=pg.mkPen(red, width=4)) for _ in range(2)]
+                                        hoverPen=pg.mkPen(red, width=4)) for _ in self._plots]
         self.cursors[0].label = pg.InfLineLabel(self.cursors[0], text="{value:.2f} s", position=0.97,
                                                 anchors=[(0, 0), (0, 0)], color=red,
                                                 fill=pg.mkBrush(255, 255, 255, 200))
-        for plot, line in zip((self.pupil, self.cw), self.cursors):
+        for plot, line in zip(self._plots, self.cursors):
             line.setZValue(20)                  # above the curves and overlays, so it can always be grabbed
             line.setCursor(pg.QtCore.Qt.SizeHorCursor)
             plot.addItem(line, ignoreBounds=True)
@@ -126,15 +146,16 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         if event.double():
             self.fit_to_data()
             return
-        for plot in (self.pupil, self.cw):
-            if plot.sceneBoundingRect().contains(event.scenePos()):
+        for plot in self._plots:
+            if plot.isVisible() and plot.sceneBoundingRect().contains(event.scenePos()):
                 t = float(plot.vb.mapSceneToView(event.scenePos()).x())
                 self.set_cursor(t)
                 self.cursor_changed.emit(t)
                 return
 
     def clear_result(self) -> None:
-        for c in (self.raw_curve, self.measured_curve, self.expected_curve, self.cw_curve):
+        for c in (self.raw_curve, self.measured_curve, self.expected_curve, self.cw_curve, self.lum_curve,
+                  self.sensor_curve, self.ratio_curve):
             c.setData([], [])
         self._follow = True   # the next result (a new recording) is fitted
 
@@ -156,13 +177,28 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             lo, hi = data_range(values)
             if lo is not None:
                 plot.setYRange(lo, hi, padding=0.08)
+        lum, ratio = self._lum_data
+        for plot, values in ((self.lum, lum), (self.ratio, ratio)):
+            lo, hi = data_range(values)
+            if lo is not None:
+                plot.setYRange(lo, hi, padding=0.1)
 
     def show_result(self, r: Result) -> None:
         self.raw_curve.setData(r.time, r.measured_raw)
         self.measured_curve.setData(r.time, r.measured)
         self.expected_curve.setData(r.time, r.expected)
         self.cw_curve.setData(r.cw_time, r.cw)
+        self.lum_curve.setData(r.time, r.luminance)
+        has_sensor = r.luminance_sensor is not None
+        has_ratio = has_sensor and r.luminance_ratio is not None
+        self.sensor_curve.setData(r.time, r.luminance_sensor if has_sensor else [], connect="finite")
+        self.ratio_curve.setData(r.time, r.luminance_ratio if has_ratio else [])
+        self.set_lux_route(has_sensor, has_ratio)
+        self.lum.setLabel("left", "Luminance (cd/m², relative)" if r.luminance_mode == "camera, relative"
+                          else "Luminance (cd/m²)")
         self._data = (np.asarray(r.time), np.concatenate([r.measured, r.expected]), np.asarray(r.cw))
+        self._lum_data = (np.concatenate([r.luminance] + ([r.luminance_sensor] if has_sensor else [])),
+                          r.luminance_ratio if has_ratio else None)
         if self._follow:
             self.fit_to_data()
         markers = np.isfinite(r.expected_black)   # not defined when luminance comes from a lux sensor
@@ -172,12 +208,19 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             self.black_line.setValue(r.expected_black)
             self.white_line.setValue(r.expected_white)
 
+    def set_lux_route(self, sensor: bool, ratio: bool) -> None:
+        """Show the sensor curve (lux route) and the video ratio panel (lux route with the video)."""
+        self.sensor_curve.setVisible(sensor)
+        self.ratio.setVisible(ratio)
+        self.ci.layout.setRowStretchFactor(2, self._stretch[2] if ratio else 0)
+        self.ci.layout.setRowMaximumHeight(2, 16777215 if ratio else 0)
+
     def show_events(self, events) -> None:
         for plot, item in self._event_items:
             plot.removeItem(item)
         self._event_items = []
         for e in events:
-            for plot in (self.pupil, self.cw):
+            for plot in self._plots:
                 region = pg.LinearRegionItem((e.start, e.end), movable=False,
                                              brush=pg.mkBrush(*palette.rgb(palette.EVENT), 35), pen=pg.mkPen(None))
                 region.setZValue(-20)

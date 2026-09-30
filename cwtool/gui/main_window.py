@@ -146,6 +146,13 @@ class MainWindow(QMainWindow):
         cal_layout = QFormLayout(self.sequence_controls)
         cal_layout.setContentsMargins(0, 0, 0, 0)
         cal_box_layout.addWidget(self.sequence_controls)
+        self.cal_note = QLabel("The calibration sequence and its fits need the display photometry, so they are "
+                               "available for display devices (Varjo) only. For glasses, the light comes from the "
+                               "lux sensor: set the dynamics by hand here.")
+        self.cal_note.setWordWrap(True)
+        self.cal_note.setStyleSheet("font-style: italic;")
+        self.cal_note.setVisible(False)
+        cal_box_layout.addWidget(self.cal_note)
         cal_box_layout.addWidget(self.params_panel.dynamics_section)
         self.sequence_check = QCheckBox("Show sequence overlay")
         self.sequence_check.toggled.connect(self._sequence_changed)
@@ -266,7 +273,7 @@ class MainWindow(QMainWindow):
             gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
             warn = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {w}</span>" for w in r.warnings)
             ends = (f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
-                    if np.isfinite(r.expected_black) else f"luminance from {r.luminance_mode} &nbsp;&nbsp; ")
+                    if np.isfinite(r.expected_black) else self._route_text(r) + " &nbsp;&nbsp; ")
             self.summary_label.setText(
                 f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm &nbsp;&nbsp; {ends}"
                 f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
@@ -276,6 +283,21 @@ class MainWindow(QMainWindow):
             name += ", display " + (self._display_path.name if self._display_path else "defaults")
         rec = f": {self.recording.name}" if has_rec else ""
         self.setWindowTitle(f"Cognitive Workload Tool {__version__}{rec} ({name})")
+
+    @staticmethod
+    def _route_text(r) -> str:
+        """Where the luminance comes from, with the typical values of the lux sensor route (medians over the
+        recording; the range is the 10th to 90th percentile of the video ratio)."""
+        route = pipeline.luminance_route(r)
+        if route is None:
+            return f"luminance from {r.luminance_mode}"
+        text = f"luminance: lux sensor {route['sensor']:.1f} cd/m² (median)"
+        if route["ratio"] is not None:
+            med, lo, hi = route["ratio"]
+            text += f" × video ratio {med:.2f} (10–90 %: {lo:.2f}–{hi:.2f})"
+        else:
+            text += ", video not used"
+        return text
 
     def _error(self, title: str, message: str) -> None:
         box = QMessageBox(QMessageBox.Warning, title, message.split("\n\n")[0], parent=self)
@@ -334,6 +356,7 @@ class MainWindow(QMainWindow):
             self.sequence_check.setChecked(False)
         # Without a display there is no calibration sequence, but the dynamics still apply.
         self.sequence_controls.setVisible(on_display)
+        self.cal_note.setVisible(not on_display)
         self.cal_box.setTitle("Calibration sequence" if on_display else "Pupil dynamics")
         self.preview.set_recording(rec, self.params_panel.video_settings())
         if len(rec.time):

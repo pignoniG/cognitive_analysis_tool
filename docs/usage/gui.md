@@ -7,8 +7,8 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 | Area | Contents |
 |---|---|
 | Left panel | Recording, Scene video, Calibration sequence and the parameter editors |
-| Summary line | ΔPD RMS and SD, expected pupil at the display's black and white points (display devices) or where the luminance comes from (lux sensor, or camera with fixed exposure), pupil scale and offset applied, sampling rates, share of the recording in gaps, and warnings in red |
-| Plots | Measured vs expected pupil (top) and ΔPD (bottom), sharing the time axis |
+| Summary line | ΔPD RMS and SD, expected pupil at the display's black and white points (display devices) or where the luminance comes from (with the lux sensor: its median luminance × the median video ratio and its 10th–90th percentile range), pupil scale and offset applied, sampling rates, share of the recording in gaps, and warnings in red |
+| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis |
 | Video preview (dock) | The scene frame at the cursor with the analysis circles; toggle it in **View** |
 
 ## Menus
@@ -42,7 +42,7 @@ fixed-exposure scene camera, for recordings of the same exposure without a lux l
 ## Parameters
 
 Parameters are grouped as in [Parameters](../reference/parameters.md): Participant, Display photometry, Participant
-light response, Pupil signal, Lux sensor, Scene camera without lux log, ΔPD, with Dynamics in a drop-down under the
+light response, Pupil signal, Luminance from lux sensor, Scene camera without lux log, ΔPD, with Dynamics in a drop-down under the
 calibration controls and the video analysis settings in one under the scene video buttons. Every change re-runs the
 analysis from the cached video pass, so the plots follow instantly.
 
@@ -56,7 +56,10 @@ options keep their values and are still saved in the parameter file:
 | Pupil Core / Neon / Glasses 3 without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
 
 Without a calibration sequence (glasses) the calibration box is titled **Pupil dynamics** and holds only the
-Dynamics drop-down.
+Dynamics drop-down, with a note that the sequence and its fits need the display photometry and so exist for
+display devices only. The lux sensor group starts with a line saying which route the luminance takes (sensor ×
+video ratio, or sensor only); the video preview shows the same product for the frame at the cursor, and the weights
+of the gaze circle and the background.
 
 ## Plots
 
@@ -69,6 +72,12 @@ Dynamics drop-down.
 - The dark orange bar marks the current video frame; its time is shown at its top. Click on either plot to move it, or drag it to
   scrub the video: the preview follows while dragging, skipping frames if decoding cannot keep up. **◀ Frame / Frame ▶**
   in the preview move it frame by frame.
+- **Luminance** (second plot): the luminance the model uses, in cd/m². With a lux sensor the sensor's average is drawn
+  dashed behind it, so the video's contribution is the difference between the two.
+- **Video ratio** (third plot, lux sensor with the video): gaze-weighted over whole-frame relative luminance, the
+  factor that turns the sensor's average into the luminance used. It follows where the gaze looks; on a uniform view
+  it should stay near 1, and a wide spread means the video only adds noise (the summary line then warns; turn off
+  *Distribute sensor luminance with the scene video*).
 - The dashed green lines are the expected pupil at the display's black and white points: the range the model can
   explain on that device.
 - Events from the event log are shaded orange and labelled in the ΔPD plot.

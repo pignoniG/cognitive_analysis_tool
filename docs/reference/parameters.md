@@ -39,7 +39,7 @@ not in participant files.
 |---|---|---|
 | `lux_gain` | 1 | recalibration of the sensor's lux (1.x: 1.706061, a field-of-view correction from one test) |
 | `lux_offset` | 0 | recalibration offset, lux (1.x: 0.66935) |
-| `lux_solid_angle` | 2.2 | illuminance / average luminance for the sensor in its housing (not a solid angle; see [Lux sensor](../hardware/lux-sensor.md)) |
+| `lux_solid_angle` | 2.2 | illuminance / average luminance ("Lux ÷ luminance (Ω)" in the app) for the sensor in its housing (not a solid angle; see [Lux sensor](../hardware/lux-sensor.md)) |
 | `lux_use_video` | on | distribute the sensor's average over the view with the scene video |
 
 ## Scene camera without a lux log (glasses)

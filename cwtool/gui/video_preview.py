@@ -223,8 +223,15 @@ class VideoPreview(QWidget):
             j = int(np.argmin(np.abs(self._result.time - t)))
             r = self._result
             unit = " (relative)" if r.luminance_mode == "camera, relative" else ""
-            out.append(f"luminance {r.luminance[j]:.1f} cd/m²{unit} &nbsp; measured {r.measured[j]:.2f} mm"
-                       f" &nbsp; expected {r.expected[j]:.2f} mm")
+            out.append(f"gaze area {r.fixation_weight:.0%}, background {1 - r.fixation_weight:.0%} of the weighted colour")
+            if r.luminance_sensor is not None and r.luminance_ratio is not None:
+                out.append(f"luminance {r.luminance_sensor[j]:.1f} (sensor) × {r.luminance_ratio[j]:.2f} (video ratio)"
+                           f" = {r.luminance[j]:.1f} cd/m²")
+            elif r.luminance_sensor is not None:
+                out.append(f"luminance {r.luminance[j]:.1f} cd/m² (sensor only)")
+            else:
+                out.append(f"luminance {r.luminance[j]:.1f} cd/m²{unit}")
+            out.append(f"measured {r.measured[j]:.2f} mm &nbsp; expected {r.expected[j]:.2f} mm")
         return out
 
     def resizeEvent(self, event) -> None:

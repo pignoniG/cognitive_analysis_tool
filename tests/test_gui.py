@@ -310,3 +310,26 @@ def test_a_failed_read_makes_the_preview_seek_next_time(app, varjo_folder):
     p2._read(2)
     p2._read(10_000)
     assert np.array_equal(p2._read(4), reference)                # seeks instead of reading on from 2
+
+
+def test_lux_route_is_shown(app, tmp_path):
+    from conftest import write_core_recording
+    from cwtool import devices, pipeline
+    from cwtool.gui.plots import ResultPlots
+    from cwtool.params import VideoSettings
+    from cwtool.video import analyse_video
+
+    frame_times = np.arange(30) / 30
+    rec = devices.load(write_core_recording(tmp_path / "core", [40] * 5 + [220] * 25, frame_times,
+                                            lux=lambda t: 200.0))
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec),
+                          frame_times=rec.scene_frame_times)
+    plots = ResultPlots()
+    r = pipeline.run(rec, video, Parameters(delay=0.0))
+    plots.show_result(r)
+    assert plots.ratio.isVisible() and plots.sensor_curve.isVisible()
+    text = MainWindow._route_text(r)
+    assert "lux sensor" in text and "video ratio" in text
+    plots.show_result(pipeline.run(rec, video, Parameters(delay=0.0, lux_use_video=False)))
+    assert not plots.ratio.isVisible() and plots.sensor_curve.isVisible()     # the sensor alone: no ratio panel
+    assert "video not used" in MainWindow._route_text(pipeline.run(rec, video, Parameters(delay=0.0, lux_use_video=False)))
