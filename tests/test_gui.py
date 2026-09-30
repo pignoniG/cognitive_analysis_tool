@@ -333,3 +333,22 @@ def test_lux_route_is_shown(app, tmp_path):
     plots.show_result(pipeline.run(rec, video, Parameters(delay=0.0, lux_use_video=False)))
     assert not plots.ratio.isVisible() and plots.sensor_curve.isVisible()     # the sensor alone: no ratio panel
     assert "video not used" in MainWindow._route_text(pipeline.run(rec, video, Parameters(delay=0.0, lux_use_video=False)))
+
+
+def test_peak_decimate_keeps_extremes_and_gaps():
+    from cwtool.gui.plots import peak_decimate
+    t = np.arange(20000) / 100.0
+    y = np.sin(t)
+    y[7000] = 5.0                       # a one-sample peak
+    y[9000:9400] = np.nan               # a gap
+    x, d = peak_decimate(t, y, bins=500)
+    assert len(d) < 1200 and np.nanmax(d) == 5.0 and np.isnan(d).any()
+    assert np.all(np.diff(x) >= 0)
+    x2, d2 = peak_decimate(t[:100], y[:100], bins=500)
+    assert len(d2) == 100                 # short signals are left alone
+
+
+def test_long_warning_does_not_widen_the_window(app):
+    w = MainWindow()
+    w.summary_label.setText("⚠ " + "a very long warning " * 30)
+    assert w.summary_label.wordWrap() and w.minimumSizeHint().width() < 1200

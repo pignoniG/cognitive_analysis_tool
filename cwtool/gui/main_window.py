@@ -218,6 +218,7 @@ class MainWindow(QMainWindow):
         right_layout = QVBoxLayout(right)
         self.summary_label = QLabel()
         self.summary_label.setStyleSheet("font-size: 14px; padding: 4px;")
+        self.summary_label.setWordWrap(True)     # long warnings must not set the window's minimum width
         self.plots = ResultPlots()
         self.plots.sequence_start_changed.connect(self._sequence_dragged)
         right_layout.addWidget(self.summary_label)

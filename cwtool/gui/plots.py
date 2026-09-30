@@ -86,6 +86,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.ratio.addItem(pg.InfiniteLine(angle=0, pos=1, pen=pg.mkPen((120, 120, 120), width=1)), ignoreBounds=True)
         self.ratio.setToolTip("Y_gaze / Y_frame: how much brighter the gazed area is than the whole frame. "
                               "1 = the same; it should stay near 1 on a uniform view")
+        for p in (self.lum, self.ratio):
+            p.setDownsampling(auto=False)          # decimated once in show_result
         self.set_lux_route(False, False)
         self.cw_curve = self.cw.plot(pen=pg.mkPen(palette.DELTA_PD, width=1.5), connect="finite")
         self.cw.addItem(pg.InfiniteLine(angle=0, pos=0, pen=pg.mkPen((120, 120, 120), width=1)), ignoreBounds=True)
@@ -188,11 +190,13 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.measured_curve.setData(r.time, r.measured)
         self.expected_curve.setData(r.time, r.expected)
         self.cw_curve.setData(r.cw_time, r.cw)
-        self.lum_curve.setData(r.time, r.luminance)
         has_sensor = r.luminance_sensor is not None
         has_ratio = has_sensor and r.luminance_ratio is not None
-        self.sensor_curve.setData(r.time, r.luminance_sensor if has_sensor else [], connect="finite")
-        self.ratio_curve.setData(r.time, r.luminance_ratio if has_ratio else [])
+        # The luminance curves are dense and jagged: decimate them once, keeping each bin's extremes, so
+        # that repainting on every cursor move and pan stays fast.
+        self.lum_curve.setData(*peak_decimate(r.time, r.luminance))
+        self.sensor_curve.setData(*(peak_decimate(r.time, r.luminance_sensor) if has_sensor else ([], [])))
+        self.ratio_curve.setData(*(peak_decimate(r.time, r.luminance_ratio) if has_ratio else ([], [])))
         self.set_lux_route(has_sensor, has_ratio)
         self.lum.setLabel("left", "Luminance (cd/m², relative)" if r.luminance_mode == "camera, relative"
                           else "Luminance (cd/m²)")
@@ -268,6 +272,30 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         for region, step in zip(self._sequence_items, self._sequence.steps):
             region.setRegion((self._sequence_start + step.start, self._sequence_start + step.end))
         self.sequence_start_changed.emit(self._sequence_start)
+
+
+DECIMATED_BINS = 1500
+
+
+def peak_decimate(x, y, bins: int = DECIMATED_BINS):
+    """``x`` and ``y`` reduced to the minimum and the maximum of each of ``bins`` consecutive bins, in time
+    order, so peaks survive. Bins without finite values give NaN (a gap in the curve). Short signals are
+    returned as they are."""
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if len(y) <= 2 * bins:
+        return x, y
+    edges = np.linspace(0, len(y), bins + 1).astype(int)
+    xs, ys = [], []
+    for a, b in zip(edges[:-1], edges[1:]):
+        seg = y[a:b]
+        if not np.isfinite(seg).any():
+            xs.append(x[a]); ys.append(np.nan)
+            continue
+        i_lo, i_hi = int(np.nanargmin(seg)), int(np.nanargmax(seg))
+        for i in sorted({i_lo, i_hi}):
+            xs.append(x[a + i]); ys.append(seg[i])
+    return np.asarray(xs), np.asarray(ys)
 
 
 def rms_in(result: Result, start: float, end: float) -> float:
