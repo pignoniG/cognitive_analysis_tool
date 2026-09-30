@@ -52,12 +52,13 @@ options keep their values and are still saved in the parameter file:
 | Recording | Hidden |
 |---|---|
 | Varjo | Lux sensor, Scene camera without lux log |
-| Pupil Core / Neon / Glasses 3 with a lux log | Lmin, Lmax, Scene camera without lux log, Calibration sequence, scene circle radius |
+| Pupil Core / Neon / Glasses 3 with a lux log | Lmin, Lmax, Scene camera without lux log, scene circle radius |
 | Pupil Core / Neon / Glasses 3 without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
 
-Without a calibration sequence (glasses) the calibration box is titled **Pupil dynamics** and holds only the
-Dynamics drop-down, with a note that the sequence and its fits need the display photometry and so exist for
-display devices only. The lux sensor group starts with a line saying which route the luminance takes (sensor ×
+The calibration box depends on the device. A display device (Varjo) has the whole sequence and both fits. Glasses
+with a lux log have the sequence overlay and one fit, **Fit sensitivity and offset**, with a note that they have no
+display photometry (see below). Glasses without a lux log have only **Pupil dynamics**, the Dynamics drop-down, and
+a note saying what the sequence would need. The lux sensor group starts with a line saying which route the luminance takes (sensor ×
 video ratio, or sensor only); the video preview shows the same product for the frame at the cursor, and the weights
 of the gaze circle and the background.
 
@@ -87,7 +88,10 @@ of the gaze circle and the background.
 
 See [Participant calibration](calibration.md) for the procedure.
 
-- **Load sequence… / Built-in**: the colour sequence to overlay: the built-in 20 steps or a CSV.
+- **Load sequence… / Built-in**: the colour sequence to overlay: the built-in 20 steps, a CSV, or a run file saved by
+  the [calibration presenter](calibration-tool.md). A run file's onset times are on the presenting computer's clock,
+  so they place the sequence in the recording (the start and the overlay are set; a run played for another recording
+  is reported as outside it).
 - **Find in recording**: locates the sequence in the analysed video and adapts its step length.
 - **Show sequence overlay**: shades each step in its colour on the pupil plot; drag the grey line to move it.
 - **Start**: the sequence start in seconds.
@@ -97,6 +101,10 @@ See [Participant calibration](calibration.md) for the procedure.
   result window showing each step's steady-state pupil against the model.
 - **2. Fit latency, scale and offset**: the participant's timing, pupil scale and offset, optionally with the
   transient constriction after brightening (pupillary escape).
+- **Fit sensitivity and offset** (glasses with a lux log): the participant's light sensitivity and the pupil offset by
+  least squares on ΔPD over the sequence, with the luminance the analysis builds from the sensor (and the video). The
+  result window gives the RMS before and after, the sensitivity with its interval, the correlation and warnings;
+  Apply also sets the alignment to `fixed` (see [Calibration fit](../processing/calibration-fit.md#glasses-with-a-lux-sensor)).
 - **Dynamics** (drop-down): the latency, always applied, and one switch for the rest: dilation and constriction time
   constants, constriction stages, transient and escape τ (greyed out while the switch is off).
 

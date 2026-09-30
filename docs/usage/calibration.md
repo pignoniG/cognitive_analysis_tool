@@ -93,6 +93,14 @@ If a value ends on a search limit, or the fitted scale is implausible, a warning
 sensitivity fit needs another look (sequence start, display photometry). See
 [Calibration fit](../processing/calibration-fit.md) for how it works.
 
+## Glasses with a lux sensor
+
+Pupil Core, Neon and Glasses 3 have no display photometry, so the two fits above are not available. With a lux log
+(and the presenter played on the computer that recorded the tracker), **Load sequence…** takes the presenter's run
+file, which places the sequence, and **Fit sensitivity and offset** fits the light sensitivity and the pupil offset
+on it: see [Calibration fit](../processing/calibration-fit.md#glasses-with-a-lux-sensor). Check first that the sensor
+sees the screen: a sensor dominated by room light barely follows the steps, and the fit says so.
+
 ## 4. Save
 
 **File → Save parameters as…** and name the file after the participant. Load it with their other recordings, or

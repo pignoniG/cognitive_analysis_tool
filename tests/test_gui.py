@@ -133,12 +133,14 @@ def test_options_follow_the_recording(app, varjo_folder, tmp_path):
 
     w.open_recording(write_neon_recording(tmp_path / "lux", GRAYS, FRAME_TIMES, lux=lambda t: 300.0))
     assert wait_for(app, lambda: w.result is not None and w.recording.device == "pupil_neon")
-    assert shown("lux_gain") and shown("gamma") and w.sequence_controls.isHidden()
-    assert not w.cal_box.isHidden() and w.cal_box.title() == "Pupil dynamics" and shown("attack")
+    assert shown("lux_gain") and shown("gamma") and not w.sequence_controls.isHidden()    # the lux fit
+    assert w._cal_layout.isRowVisible(w.lux_fit_button) and not w._cal_layout.isRowVisible(w.light_button)
+    assert not w.cal_box.isHidden() and w.cal_box.title() == "Calibration sequence" and shown("attack")
     assert not shown("l_max") and not shown("camera_exposure") and not shown("field_radius")
 
     w.open_recording(write_neon_recording(tmp_path / "nolux", GRAYS, FRAME_TIMES))
     assert wait_for(app, lambda: w.result is not None and w.recording.lux_values is None)
+    assert w.sequence_controls.isHidden() and w.cal_box.title() == "Pupil dynamics"     # no lux log: dynamics only
     assert shown("camera_exposure") and shown("l_max") and not shown("camera_white") and not shown("lux_gain")
     p = w.params_panel.params()
     p.camera_exposure = "fixed"
@@ -359,3 +361,36 @@ def test_side_panel_can_shrink(app):
     w = MainWindow()
     side = w.findChildren(QScrollArea)[0].widget()
     assert side.minimumSizeHint().width() <= 360      # no checkbox or label may force a horizontal scrollbar
+
+
+def test_glasses_calibration_controls_and_run_file(app, tmp_path):
+    from conftest import write_core_recording
+    from cwtool import calibration, devices
+
+    rec = devices.load(write_core_recording(tmp_path / "core", [128] * 300, np.arange(300) / 30, lux=lambda t: 100.0))
+    w = MainWindow()
+    w.recording = rec
+    layout = w._cal_layout
+    w._show_sequence_controls("lux")
+    assert w.cal_box.title() == "Calibration sequence" and not w.sequence_controls.isHidden()
+    assert layout.isRowVisible(w.lux_fit_button) and not layout.isRowVisible(w.light_button)
+    assert not layout.isRowVisible(w.fit_button) and not layout.isRowVisible(w.find_sequence_button)
+    w._show_sequence_controls("display")
+    assert layout.isRowVisible(w.light_button) and not layout.isRowVisible(w.lux_fit_button)
+    w._show_sequence_controls("none")
+    assert w.cal_box.title() == "Pupil dynamics" and w.sequence_controls.isHidden()
+
+    # A presenter run file places the sequence from its onset times on the computer's clock.
+    run = tmp_path / "run.csv"
+    run.write_text("time,duration,r,g,b,label,onset_unix_ms\n"
+                   f"0,3,73,73,73,Gray,{(rec.epoch_start + 2.0) * 1000:.0f}\n3,3,0,0,0,Black,0\n")
+    sequence = calibration.load_sequence(run)
+    w.set_sequence(sequence)
+    w._place_from_run(str(run), sequence)
+    assert w.sequence_start.value() == pytest.approx(2.0, abs=0.01) and w.sequence_check.isChecked()
+    far = tmp_path / "far.csv"
+    far.write_text(f"time,duration,r,g,b,label,onset_unix_ms\n0,3,1,1,1,x,{(rec.epoch_start + 5000) * 1000:.0f}\n")
+    w.sequence_check.setChecked(False)
+    w._place_from_run(str(far), calibration.load_sequence(far))
+    assert not w.sequence_check.isChecked() and "outside" in w.statusBar().currentMessage()
+

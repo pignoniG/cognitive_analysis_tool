@@ -20,7 +20,7 @@ from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
 from cwtool.params import DisplayPhotometry, Parameters
-from cwtool.photometry import fit_light_response
+from cwtool.photometry import fit_light_response, fit_lux_response
 from cwtool.video import VideoResult, analyse_video
 
 RECOMPUTE_DELAY_MS = 150
@@ -146,9 +146,7 @@ class MainWindow(QMainWindow):
         cal_layout = QFormLayout(self.sequence_controls)
         cal_layout.setContentsMargins(0, 0, 0, 0)
         cal_box_layout.addWidget(self.sequence_controls)
-        self.cal_note = QLabel("The calibration sequence and its fits need the display photometry, so they are "
-                               "available for display devices (Varjo) only. For glasses, the light comes from the "
-                               "lux sensor: set the dynamics by hand here.")
+        self.cal_note = QLabel()
         self.cal_note.setWordWrap(True)
         self.cal_note.setStyleSheet("font-style: italic;")
         self.cal_note.setVisible(False)
@@ -169,12 +167,13 @@ class MainWindow(QMainWindow):
         self.sequence_label.setWordWrap(True)
         sequence_buttons = QHBoxLayout()
         load_sequence = QPushButton("Load sequence…")
-        load_sequence.setToolTip("The timestamped RGB CSV played by the calibration scene")
         load_sequence.clicked.connect(self.choose_sequence)
         default_sequence = QPushButton("Built-in")
         default_sequence.clicked.connect(lambda: self.set_sequence(calibration.DEFAULT))
         sequence_buttons.addWidget(load_sequence)
         sequence_buttons.addWidget(default_sequence)
+        load_sequence.setToolTip("The sequence CSV, or a run file saved by the calibration presenter: its "
+                                 "onset times place the start in the recording")
         self.find_sequence_button = QPushButton("Find in recording")
         self.find_sequence_button.setToolTip("Locate the sequence in the analysed video and adapt its step "
                                              "length if the recording used different timing")
@@ -205,6 +204,14 @@ class MainWindow(QMainWindow):
         self.fit_button.clicked.connect(self.fit_sequence)
         cal_layout.addRow(self.fit_dynamics_check)
         cal_layout.addRow(self.fit_button)
+        self.lux_fit_button = QPushButton("Fit sensitivity and offset")
+        self.lux_fit_button.setToolTip("Glasses with a lux sensor: fits the light sensitivity and the pupil offset "
+                                       "by least squares on ΔPD over the sequence, with the luminance the analysis "
+                                       "builds from the sensor (and the video)")
+        self.lux_fit_button.clicked.connect(self.fit_lux)
+        cal_layout.addRow(self.lux_fit_button)
+        self._cal_layout = cal_layout
+        self._sequence_buttons = sequence_buttons
         side_layout.addWidget(cal_box)
         side_layout.addWidget(self.params_panel)
 
@@ -251,6 +258,26 @@ class MainWindow(QMainWindow):
                 pass
         self.set_sequence(sequence)
 
+    def _show_sequence_controls(self, mode: str) -> None:
+        """The calibration box for a display device (both fits), a glasses recording with a lux log (the
+        sensitivity and offset fit) or neither (only the dynamics)."""
+        layout = self._cal_layout
+        layout.setRowVisible(self._sequence_buttons, True)
+        for widget in (self.find_sequence_button, self.fit_gamma_check, self.light_button, self.fit_dynamics_check,
+                       self.fit_button):
+            layout.setRowVisible(widget, mode == "display")
+        layout.setRowVisible(self.lux_fit_button, mode == "lux")
+        self.sequence_controls.setVisible(mode != "none")
+        self.cal_box.setTitle("Calibration sequence" if mode != "none" else "Pupil dynamics")
+        self.cal_note.setText({
+            "lux": "Glasses have no display photometry, so the light comes from the lux sensor. Load the "
+                   "presenter's run file: its onset times place the start. The fit sets the light sensitivity "
+                   "and the pupil offset; set the dynamics by hand.",
+            "none": "The calibration sequence and its fits need the display photometry (Varjo) or a lux sensor "
+                    "log (glasses). Set the dynamics by hand here.",
+        }.get(mode, ""))
+        self.cal_note.setVisible(mode != "display")
+
     def _update_state(self) -> None:
         busy = self._task is not None and self._task.isRunning()
         has_rec = self.recording is not None
@@ -263,6 +290,7 @@ class MainWindow(QMainWindow):
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
         self.light_button.setEnabled(self.fit_button.isEnabled())
+        self.lux_fit_button.setEnabled(self.fit_button.isEnabled())
         self.find_sequence_button.setEnabled(self.video is not None and not busy)
         has_lux = has_rec and self.recording.lux_values is not None
         self.camera_button.setVisible(has_rec and self.recording.luminance_source == "lux_sensor")
@@ -356,9 +384,8 @@ class MainWindow(QMainWindow):
         if not on_display:
             self.sequence_check.setChecked(False)
         # Without a display there is no calibration sequence, but the dynamics still apply.
-        self.sequence_controls.setVisible(on_display)
-        self.cal_note.setVisible(not on_display)
-        self.cal_box.setTitle("Calibration sequence" if on_display else "Pupil dynamics")
+        with_lux = rec.luminance_source == "lux_sensor" and rec.lux_values is not None
+        self._show_sequence_controls("display" if on_display else ("lux" if with_lux else "none"))
         self.preview.set_recording(rec, self.params_panel.video_settings())
         if len(rec.time):
             self.plots.set_cursor(float(rec.time[0]))
@@ -464,6 +491,30 @@ class MainWindow(QMainWindow):
         if PhotometryDialog(fit, self).exec():
             self.params_panel.set_params(fit.params)
 
+    def fit_lux(self) -> None:
+        rec, video, params = self.recording, self.video, self.params_panel.params()
+        start, sequence = self.sequence_start.value(), self.sequence
+
+        def work(progress, cancelled):
+            return fit_lux_response(rec, video, params, start, sequence)
+
+        self._start_task(work, self._lux_done, "Fitting the light sensitivity and offset on the sequence…")
+
+    def _lux_done(self, fit) -> None:
+        lo, hi = fit.sensitivity_range
+        notes = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {n}</span>" for n in fit.notes)
+        box = QMessageBox(QMessageBox.Question, "Light sensitivity and offset",
+                          f"<b>ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b> "
+                          f"(before: the current parameters with their best offset)<br><br>"
+                          f"light sensitivity ×{fit.sensitivity:.3g} (95 % {lo:.3g}–{hi:.3g})<br>"
+                                                    f"pupil offset {fit.offset:+.3f} mm &nbsp; correlation with the expected pupil "
+                          f"{fit.correlation:.2f}<br>"
+                          f"{fit.steps} steps with pupil data, {fit.seconds:.0f} s{notes}<br><br>"
+                          f"Apply? Alignment will be set to 'fixed' so the offset carries over to this "
+                          f"participant's other recordings.", QMessageBox.Apply | QMessageBox.Cancel, self)
+        if box.exec() == QMessageBox.Apply:
+            self.params_panel.set_params(fit.params)
+
     def fit_sequence(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, dynamics = self.sequence_start.value(), self.fit_dynamics_check.isChecked()
@@ -538,6 +589,23 @@ class MainWindow(QMainWindow):
         self._settings.setValue("last_sequence_dir", str(Path(path).parent))
         self._settings.setValue("last_sequence", path)
         self.set_sequence(sequence)
+        self._place_from_run(path, sequence)
+
+    def _place_from_run(self, path: str, sequence: calibration.Sequence) -> None:
+        """A run file from the calibration presenter carries the onset of each step on the computer's clock:
+        that puts the sequence in the recording without searching for it."""
+        unix = calibration.run_start_unix(path)
+        rec = self.recording
+        if unix is None or rec is None or not np.isfinite(rec.epoch_start) or not len(rec.time):
+            return
+        start = unix - rec.epoch_start
+        if not rec.time[0] - sequence.duration <= start <= rec.time[-1]:
+            self.statusBar().showMessage(f"The run starts {start:.0f} s from this recording's start, outside it: "
+                                         "it was played for another recording.", 8000)
+            return
+        self.sequence_start.setValue(start)
+        self.sequence_check.setChecked(True)
+        self.statusBar().showMessage(f"Sequence placed at {start:.2f} s from the run file's onset times", 6000)
 
     def find_sequence(self) -> None:
         if self.video is None:

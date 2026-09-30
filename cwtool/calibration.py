@@ -116,6 +116,22 @@ def load_sequence(path: str | Path) -> Sequence:
     return Sequence(tuple(steps), path.name)
 
 
+def run_start_unix(path: str | Path) -> float | None:
+    """Unix time (s) of the first step of a calibration presenter run file (its ``onset_unix_ms`` column,
+    on the presenting computer's clock), or None for a file without one."""
+    with open(path, newline="") as f:
+        rows = [r for r in csv.reader(f) if r and r[0].strip() and not r[0].lstrip().startswith("#")]
+    if len(rows) < 2:
+        return None
+    header = [h.strip().lower() for h in rows[0]]
+    if "onset_unix_ms" not in header:
+        return None
+    try:
+        return float(rows[1][header.index("onset_unix_ms")]) / 1000.0
+    except (ValueError, IndexError):
+        return None
+
+
 def scaled(sequence: Sequence, factor: float) -> Sequence:
     """The sequence with every step's timing multiplied by ``factor``."""
     if abs(factor - 1.0) < 1e-6:

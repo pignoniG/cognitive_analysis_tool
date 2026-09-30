@@ -23,11 +23,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import numpy as np
-from scipy.optimize import least_squares
+from scipy.optimize import least_squares, minimize_scalar
 
 from cwtool import calibration, luminance
 from cwtool.params import Parameters
-from cwtool.pipeline import SCALE_RANGE, prepare, steady_pupil
+from cwtool.pipeline import SCALE_RANGE, expected_pupil, prepare, steady_pupil
 from cwtool.recording import Recording
 from cwtool.video import GAMMA_RANGE, VideoResult, at_gamma
 
@@ -227,3 +227,113 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
         uncertainty_after=float(k) * np.array([lv.uncertainty for lv in levels]),
         rms_before=float(np.sqrt(np.mean((m + before_offset - before) ** 2))),
         rms_after=float(np.sqrt(np.mean((measured_after - after) ** 2))), notes=notes)
+
+
+# ---------------------------------------------------------------------------------------------------
+# Glasses with a lux sensor: light sensitivity and offset on the calibration sequence
+
+MIN_LUX_SAMPLES = 100        # analysis samples the calibration window needs
+MIN_EXPECTED_SD = 0.1        # mm; below this the model's pupil barely moves, so the sensitivity is not determined
+MIN_CORRELATION = 0.3        # measured against expected; below this the model does not follow the pupil
+INDEPENDENT_PER_SECOND = 2.0  # the smoothed pupil carries about two independent values per second
+
+
+@dataclass
+class LuxFit:
+    params: Parameters              # input parameters with the sensitivity and offset applied, alignment 'fixed'
+    sensitivity: float
+    sensitivity_range: tuple        # approximate 95 % interval
+    offset: float                   # mm added to the measured pupil (the alignment offset)
+    rms_before: float               # mm, ΔPD RMS in the window: input sensitivity, best offset
+    rms_after: float
+    correlation: float              # measured against expected, fitted
+    steps: int                      # calibration steps with pupil data in the window
+    seconds: float                  # length of the window
+    time: np.ndarray                # s, samples of the window
+    measured: np.ndarray            # mm, with the fitted offset
+    expected_before: np.ndarray     # mm, input sensitivity
+    expected_after: np.ndarray      # mm, fitted
+    notes: list
+
+
+def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, start: float,
+                     sequence: calibration.Sequence = calibration.DEFAULT) -> LuxFit:
+    """Fit the participant's light sensitivity and the pupil offset on a calibration sequence played to
+    a glasses tracker with a lux sensor, by least squares on ΔPD over the sequence.
+
+    The luminance is whatever the analysis builds from the sensor (and the video) with the current
+    parameters, and the expected pupil includes the current latency and dynamics. The sensitivity
+    multiplies that luminance; for each value the best offset is the mean of expected − measured, so
+    only the sensitivity is searched (a grid over its range, then refined). The pupil scale is the
+    device's (millimetres), not fitted: with the luminance uncertain, scale and sensitivity cannot be
+    told apart on one sequence (open issue 36). Use it on a segment where light drives the pupil;
+    fitting a whole task recording would remove the workload signal.
+    """
+    if rec.luminance_source != "lux_sensor" or rec.lux_values is None or len(rec.lux_values) < 2:
+        raise ValueError("This fit is for glasses recordings with a lux sensor log")
+    prep = prepare(rec, video, params)
+    if prep.scale is None:
+        raise ValueError("The fit needs a device with a known pupil scale (not pixel data)")
+    end = start + sequence.duration
+    measured = prep.pupil * prep.scale
+    window = (prep.time >= start) & (prep.time <= end) & np.isfinite(measured) & prep.valid
+    if window.sum() < MIN_LUX_SAMPLES:
+        raise ValueError("Too little pupil data inside the calibration sequence: check its start")
+    area = rec.profile.field_area
+    t, m = prep.time[window], measured[window]
+
+    def expected(sensitivity: float) -> np.ndarray:
+        return expected_pupil(prep.luminance, prep.fs, replace(params, sensitivity=sensitivity), area)[window]
+
+    def sse(log_s: float) -> float:
+        e = expected(float(np.exp(log_s)))
+        return float(np.sum((m + np.mean(e - m) - e) ** 2))
+
+    grid = np.linspace(np.log(SENSITIVITY_RANGE[0]), np.log(SENSITIVITY_RANGE[1]), 49)
+    costs = np.array([sse(g) for g in grid])
+    k = int(np.argmin(costs))
+    bracket = (grid[max(k - 1, 0)], grid[min(k + 1, len(grid) - 1)])
+    log_s = float(minimize_scalar(sse, bounds=bracket, method="bounded", options={"xatol": 1e-3}).x)
+    s_fit = float(np.exp(log_s))
+
+    e_fit, e_before = expected(s_fit), expected(params.sensitivity)
+    offset = float(np.mean(e_fit - m))
+    off_before = float(np.mean(e_before - m))
+    rms_after = float(np.sqrt(np.mean((m + offset - e_fit) ** 2)))
+    rms_before = float(np.sqrt(np.mean((m + off_before - e_before) ** 2)))
+    seconds = float(t[-1] - t[0])
+    corr = float(np.corrcoef(m, e_fit)[0, 1]) if np.std(e_fit) > 1e-9 and np.std(m) > 1e-9 else 0.0
+
+    # Approximate 95 % interval of the sensitivity from the curvature of the cost at the solution.
+    n_eff = max(seconds * INDEPENDENT_PER_SECOND, 4.0)
+    h = 0.15
+    curvature = (sse(log_s + h) - 2 * sse(log_s) + sse(log_s - h)) / h ** 2
+    if curvature > 0:
+        half = 1.96 * float(np.sqrt(2 * (sse(log_s) / (n_eff - 2)) / curvature))
+    else:
+        half = float("inf")
+    s_range = (float(s_fit * np.exp(-half)), float(s_fit * np.exp(half)))
+
+    steps = sum(1 for st in sequence.steps
+                if ((prep.time >= start + st.start) & (prep.time < start + st.end) & window).sum() >= MIN_STEP_SAMPLES)
+    notes = []
+    if steps < 4:
+        notes.append(f"Only {steps} calibration steps have pupil data in the window: too few to fit reliably.")
+    if np.std(e_fit) < MIN_EXPECTED_SD:
+        notes.append(f"The expected pupil varies by only {np.std(e_fit):.2f} mm (SD) in the window: the luminance "
+                     "barely changes, so the sensitivity is not determined. Check that the sensor sees the screen "
+                     "and the sequence start.")
+    elif corr < MIN_CORRELATION:
+        notes.append(f"The expected pupil follows the measured one poorly (correlation {corr:.2f}): the luminance "
+                     "may not describe what the eye saw, or the sequence start is wrong.")
+    if np.isclose(s_fit, SENSITIVITY_RANGE, rtol=0.05).any():
+        notes.append("The sensitivity reached the limit of its range: check the luminance and the sequence start.")
+    elif s_range[1] / s_range[0] > 4:
+        notes.append(f"The sensitivity is weakly determined ({s_range[0]:.3g}–{s_range[1]:.3g}).")
+    if prep.mode != "lux sensor":
+        notes.append("The luminance does not come from the lux sensor.")
+
+    fitted = replace(params, sensitivity=s_fit, alignment="fixed", pupil_offset=offset)
+    return LuxFit(params=fitted, sensitivity=s_fit, sensitivity_range=s_range, offset=offset,
+                  rms_before=rms_before, rms_after=rms_after, correlation=corr, steps=steps, seconds=seconds,
+                  time=t, measured=m + offset, expected_before=e_before, expected_after=e_fit, notes=notes)

@@ -77,7 +77,9 @@ seed, lead-in, start time as Unix milliseconds, frame statistics, display and br
 | `Y` | nominal luminance of the sRGB colour (Eckert et al. 2022, eq. 1) |
 | `completed` | `false` for a step cut short by an abort |
 
-The file loads in cwtool's *Load sequence…* as it is, giving the sequence as actually presented.
+The file loads in cwtool's *Load sequence…* as it is, giving the sequence as actually presented. Its `onset_unix_ms`
+column is on the presenting computer's clock, so when that is the computer that recorded the eye tracker, cwtool
+places the sequence in the recording from it without searching.
 
 !!! note "Not yet checked in a headset"
     The colour of the sphere was checked on a normal canvas only. Check the light in the headset with the

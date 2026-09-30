@@ -150,3 +150,32 @@ participant's other recordings.
 On synthetic recordings the fit recovers latency, time constants, transient, scale and offset closely (see
 `tests/test_alignment_and_fit.py`). On the seven Varjo calibration recordings the transient lowers the ΔPD RMS in the
 sequence by 5–19 % and in the 4 s after brightening steps by 15–25 %; see [open issue 43](../OPEN_ISSUES.md).
+
+## Glasses with a lux sensor
+
+`photometry.fit_lux_response`. Glasses have no display photometry, and their luminance comes from the lux sensor and
+the scene video (see [Luminance](luminance.md#lux-sensor-devices)), so the display fit above does not apply. What is
+fitted is smaller: a **light sensitivity** \(s\) multiplying the luminance entering the model, and the pupil
+**offset** \(d\), by least squares on ΔPD over the sequence,
+
+\[
+\min_{s,d} \sum_t \big( PD_\text{measured}(t) + d - PD_\text{expected}(s \cdot L(t)) \big)^2 .
+\]
+
+The luminance \(L\) is what the analysis builds with the current parameters, and the expected pupil includes the
+current latency and dynamics. For each \(s\) the best offset is the mean of expected − measured, so only \(s\)
+is searched: a grid over 0.001–1000, then a bounded refinement. The interval of \(s\) comes from the curvature of the
+cost, with about two independent samples per second. The pupil scale is the device's (millimetres) and is not fitted:
+with the luminance uncertain, scale and sensitivity cannot be told apart on one sequence ([open issue 36](../OPEN_ISSUES.md)).
+Pixel data is refused, as above.
+
+Apply sets `sensitivity`, `pupil_offset` and `alignment` = `fixed`. The RMS before is the current sensitivity with its
+best offset, so the improvement shown is the sensitivity's alone; with the offset free, the sensitivity often improves
+the fit little. Notes say when the expected pupil barely varies over the window (the sensor saw no change), when it
+follows the measured one poorly (correlation below 0.3), when the sensitivity is at its limit or weakly determined,
+and when fewer than four steps have data.
+
+Fit on a segment where light drives the pupil, such as the calibration sequence or a rest period; a fit over a
+whole task recording would absorb the workload signal it is meant to leave in ΔPD. On the 30 September 2026 Pupil Core
+recording (81 s of the sequence, ten steps, laptop screen) it gives a sensitivity of 0.08 with an interval of
+0.02–0.37, ΔPD RMS 0.74 → 0.72 mm and a correlation of 0.51, and says the sensitivity is weakly determined.
