@@ -425,10 +425,31 @@ is revised; they remain in the git history of this file.
   it is what converts the gaze circle radius from degrees to pixels. It is right for a gaze circle near the centre
   and increasingly wrong towards the edges. The adapting field used by Watson & Yellott is unaffected (it is the
   binocular visual field).
-- **Pupil Core lenses:** the Core's scene camera takes different lenses (Pupil Labs offer more than one), so its field
-  of view depends on the lens fitted. The 2021 paper used a 100° lens at 1280×720; without `world.intrinsics` the
-  reader falls back to about 75° × 48.5°, the pinhole value of one default camera matrix. Which lenses exist, their
-  intrinsics and how to tell them apart in a recording is still to be investigated.
+- **Pupil Core lenses:** the Core's scene camera takes different lenses, so its field of view depends on the lens
+  fitted. The 2021 paper used a 100° lens at 1280×720; without `world.intrinsics` the reader falls back to about
+  75° × 48.5°, the pinhole value of one default camera matrix. Pupil Labs list the measured fields of view
+  ([Pupil Capture, camera field of view](https://docs.pupil-labs.com/core/software/pupil-capture/#camera-field-of-view-fov)):
+
+  | Lens (Pupil Cam1 ID2 unless noted) | Resolution | Horizontal | Vertical | Diagonal |
+  |---|---|---|---|---|
+  | Wide angle (default) | 1920×1080 | 155° | 85° | |
+  | Wide angle | 1280×720 | 103° | 54° | 122° |
+  | Wide angle | 640×480 | 103° | 73° | 134° |
+  | Narrow angle | 1920×1080 | 62° | 36° | 69° |
+  | Narrow angle | 1280×720 | 42° | 24° | 47.5° |
+  | Narrow angle | 640×480 | 42° | 32° | 51° |
+  | Logitech C930e (discontinued) | 1280×720 | 80° | 51° | 89° |
+
+  The `world.intrinsics` of the recordings of 29 and 30 September 2026 (1280×720) has fx = 794.3 px, fy = 793.5 px
+  and strong radial distortion (k1 = −0.376, k2 = 0.164). Its pinhole field of view is 77.7° × 48.8°, against the
+  103° × 54° of the wide-angle lens at that resolution, which this camera almost certainly is: the pinhole value
+  underestimates the horizontal field by about 25°. The gaze circle's radius in pixels is 5.25° divided by the
+  vertical field of view, times the frame height, so 48.8° instead of 54° makes it about 11 % too large. The lens
+  in a recording is best identified from its camera matrix and distortion coefficients (the two lenses have very
+  different focal lengths); no comparison with the narrow-angle and C930e intrinsics has been made yet.
+- **Diffuse field:** the scene camera's whole frame is the "diffuse field" the lux route compares the gaze area
+  with (`Y_frame`), and it covers only about 103° × 54° of the eye's 200° × 135°, so that field is a part of what the
+  eye sees, and the sensor's may not be the same part.
 - **Proposed:** undistort the gaze point and circle with the distortion coefficients, which both devices provide.
 - **Status:** open.
 
