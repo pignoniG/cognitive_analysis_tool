@@ -296,9 +296,10 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
             spread = ratio_spread(ratio[y_frame[order] > RATIO_MIN_FRAME])
             if spread > RATIO_SPREAD_WARNING:
                 notes.append(f"The video ratio that distributes the sensor's luminance varies ×{spread:.1f} "
-                             "(10th to 90th percentile). It follows where the gaze looks, but on a uniform "
-                             "view (a calibration sequence on a screen, a dark room) it only adds noise: "
-                             "consider turning off 'Distribute with the scene video'.")
+                             "(10th to 90th percentile). That is expected when the gazed area differs from the "
+                             "rest of the view, or when the sensor sees little of the changing screen; it is noise "
+                             "on a uniform view. Compare the luminance and ratio plots with and without "
+                             "'Distribute with the scene video'.")
         mode = "lux sensor"
     elif rec.luminance_source == "lux_sensor" and params.camera_exposure == "fixed":
         # Fixed exposure: pixel values are proportional to scene luminance up to saturation.

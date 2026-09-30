@@ -76,8 +76,9 @@ of the gaze circle and the background.
   dashed behind it, so the video's contribution is the difference between the two.
 - **Video ratio** (third plot, lux sensor with the video): gaze-weighted over whole-frame relative luminance, the
   factor that turns the sensor's average into the luminance used. It follows where the gaze looks; on a uniform view
-  it should stay near 1, and a wide spread means the video only adds noise (the summary line then warns; turn off
-  *Distribute with the scene video*).
+  it should stay near 1 on a uniform view, and a wide spread is a prompt to compare with *Distribute with the
+  scene video* turned off (the summary line then warns): it helps when the sensor sees little of the changing
+  screen and only adds noise on a uniform view.
 - The dashed green lines are the expected pupil at the display's black and white points: the range the model can
   explain on that device.
 - Events from the event log are shaded orange and labelled in the ΔPD plot.
