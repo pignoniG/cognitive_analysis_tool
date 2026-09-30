@@ -373,10 +373,12 @@ def test_glasses_calibration_controls_and_run_file(app, tmp_path):
     layout = w._cal_layout
     w._show_sequence_controls("lux")
     assert w.cal_box.title() == "Calibration sequence" and not w.sequence_controls.isHidden()
-    assert layout.isRowVisible(w.lux_fit_button) and not layout.isRowVisible(w.light_button)
+    assert layout.isRowVisible(w.lux_fit_button) and layout.isRowVisible(w.fit_weight_check)
+    assert not layout.isRowVisible(w.light_button)
     assert not layout.isRowVisible(w.fit_button) and not layout.isRowVisible(w.find_sequence_button)
     w._show_sequence_controls("display")
     assert layout.isRowVisible(w.light_button) and not layout.isRowVisible(w.lux_fit_button)
+    assert not layout.isRowVisible(w.fit_weight_check)
     w._show_sequence_controls("none")
     assert w.cal_box.title() == "Pupil dynamics" and w.sequence_controls.isHidden()
 

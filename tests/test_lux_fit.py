@@ -80,3 +80,56 @@ def test_run_start_from_the_presenter_file(tmp_path):
     plain.write_text("time,r,g,b\n0,0,0,0\n6,255,255,255\n")
     assert calibration.run_start_unix(plain) is None
 
+
+def scene(gaze_levels, background_levels):
+    """A VideoResult of 10 s at 30 Hz whose gaze area and background take the given linear grey levels in
+    three 3 s blocks (the whole frame is 10 % gaze area, 90 % background)."""
+    from cwtool.video import GAMMA_GRID, VideoResult
+    n, g = 300, len(GAMMA_GRID)
+    block = np.minimum(np.arange(n) // 90, 2)
+    gaze = np.asarray(gaze_levels, dtype=float)[block]
+    bg = np.asarray(background_levels, dtype=float)[block]
+
+    def lin(v):
+        return np.repeat(v[:, None, None], g, axis=1) * np.ones(3)
+
+    return VideoResult(np.arange(n) / 30.0, np.zeros((n, 3)), np.zeros((n, 3)), lin(gaze), lin(bg),
+                       lin(0.1 * gaze + 0.9 * bg))
+
+
+def synthetic_scene(tmp_path, video, weight, sensitivity, offset, params):
+    rec = devices.load(write_core_recording(tmp_path / "core", GRAYS, FRAME_TIMES, lux=lux))
+    p = replace(params, fixation_weight=weight)
+    prep = prepare(rec, video, p)
+    exp = expected_pupil(prep.luminance, prep.fs, replace(p, sensitivity=sensitivity), rec.profile.field_area)
+    pupil = np.interp(rec.time, prep.time, exp) - offset
+    return replace(rec, pupil_left=pupil, pupil_right=pupil.copy())
+
+
+def test_recovers_the_fixation_weight(tmp_path):
+    params = Parameters(delay=0.0, dynamics=False, alignment="none")
+    video = scene([0.05, 0.8, 0.3], [0.6, 0.1, 0.5])       # gaze and background move against each other
+    rec = synthetic_scene(tmp_path, video, weight=0.85, sensitivity=0.5, offset=0.3, params=params)
+    fit = fit_lux_response(rec, video, params, 0.0, STEPS, fit_fixation=True)
+    assert fit.weight_fitted and fit.fixation_weight == pytest.approx(0.85, abs=0.08)
+    assert fit.sensitivity == pytest.approx(0.5, rel=0.3)
+    assert fit.rms_after < 0.2        # the pipeline's smoothing blurs these large steps: about 0.145 even at the true values
+    assert fit.params.fixation_weight == fit.fixation_weight
+    fixed = fit_lux_response(rec, video, params, 0.0, STEPS)         # the weight is not fitted by default
+    assert not fixed.weight_fitted and fixed.fixation_weight == params.fixation_weight
+    assert fixed.rms_after > fit.rms_after
+
+
+def test_fixation_weight_is_flagged_on_a_uniform_scene(tmp_path):
+    params = Parameters(delay=0.0, dynamics=False, alignment="none")
+    video = scene([0.05, 0.8, 0.3], [0.05, 0.8, 0.3])       # gaze area and background alike
+    rec = synthetic_scene(tmp_path, video, weight=0.65, sensitivity=0.5, offset=0.3, params=params)
+    fit = fit_lux_response(rec, video, params, 0.0, STEPS, fit_fixation=True)
+    assert any("hardly depends" in n for n in fit.notes)
+
+
+def test_fixation_fit_needs_the_video_route(tmp_path):
+    params = Parameters(delay=0.0, dynamics=False, lux_use_video=False)
+    rec = devices.load(write_core_recording(tmp_path / "core", GRAYS, FRAME_TIMES, lux=lux))
+    with pytest.raises(ValueError, match="video route"):
+        fit_lux_response(rec, _video(rec), params, 0.0, STEPS, fit_fixation=True)

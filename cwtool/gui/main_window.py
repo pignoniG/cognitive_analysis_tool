@@ -204,6 +204,12 @@ class MainWindow(QMainWindow):
         self.fit_button.clicked.connect(self.fit_sequence)
         cal_layout.addRow(self.fit_dynamics_check)
         cal_layout.addRow(self.fit_button)
+        self.fit_weight_check = QCheckBox("Also fit the fixation weight")
+        self.fit_weight_check.setToolTip("Also fit the gaze circle's share of the weighted colour (open issue 47). It "
+                                         "needs a scene where the gaze area and the background differ, such as a "
+                                         "screen in a room; on a uniform field it cannot be determined. Check the "
+                                         "result on other recordings before relying on it")
+        cal_layout.addRow(self.fit_weight_check)
         self.lux_fit_button = QPushButton("Fit sensitivity and offset")
         self.lux_fit_button.setToolTip("Glasses with a lux sensor: fits the light sensitivity and the pupil offset "
                                        "by least squares on ΔPD over the sequence, with the luminance the analysis "
@@ -267,6 +273,7 @@ class MainWindow(QMainWindow):
                        self.fit_button):
             layout.setRowVisible(widget, mode == "display")
         layout.setRowVisible(self.lux_fit_button, mode == "lux")
+        layout.setRowVisible(self.fit_weight_check, mode == "lux")
         self.sequence_controls.setVisible(mode != "none")
         self.cal_box.setTitle("Calibration sequence" if mode != "none" else "Pupil dynamics")
         self.cal_note.setText({
@@ -494,9 +501,10 @@ class MainWindow(QMainWindow):
     def fit_lux(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, sequence = self.sequence_start.value(), self.sequence
+        weight = self.fit_weight_check.isChecked()
 
         def work(progress, cancelled):
-            return fit_lux_response(rec, video, params, start, sequence)
+            return fit_lux_response(rec, video, params, start, sequence, fit_fixation=weight)
 
         self._start_task(work, self._lux_done, "Fitting the light sensitivity and offset on the sequence…")
 
@@ -507,7 +515,8 @@ class MainWindow(QMainWindow):
                           f"<b>ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b> "
                           f"(before: the current parameters with their best offset)<br><br>"
                           f"light sensitivity ×{fit.sensitivity:.3g} (95 % {lo:.3g}–{hi:.3g})<br>"
-                                                    f"pupil offset {fit.offset:+.3f} mm &nbsp; correlation with the expected pupil "
+                          + (f"fixation weight {fit.fixation_weight:.2f}<br>" if fit.weight_fitted else "") +
+                          f"pupil offset {fit.offset:+.3f} mm &nbsp; correlation with the expected pupil "
                           f"{fit.correlation:.2f}<br>"
                           f"{fit.steps} steps with pupil data, {fit.seconds:.0f} s{notes}<br><br>"
                           f"Apply? Alignment will be set to 'fixed' so the offset carries over to this "

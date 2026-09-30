@@ -238,26 +238,49 @@ MIN_CORRELATION = 0.3        # measured against expected; below this the model d
 INDEPENDENT_PER_SECOND = 2.0  # the smoothed pupil carries about two independent values per second
 
 
+WEIGHT_RANGE = (0.05, 1.0)   # gaze circle's share of the weighted colour when it is fitted
+WEIGHT_GRID = 8              # values tried before refining
+WEIGHT_FLAT = 0.02           # relative change of the cost across the weights below which it is "not determined"
+
+
 @dataclass
 class LuxFit:
-    params: Parameters              # input parameters with the sensitivity and offset applied, alignment 'fixed'
+    params: Parameters              # input parameters with the fitted values applied, alignment 'fixed'
     sensitivity: float
     sensitivity_range: tuple        # approximate 95 % interval
     offset: float                   # mm added to the measured pupil (the alignment offset)
-    rms_before: float               # mm, ΔPD RMS in the window: input sensitivity, best offset
+    rms_before: float               # mm, ΔPD RMS in the window: input parameters, best offset
     rms_after: float
     correlation: float              # measured against expected, fitted
     steps: int                      # calibration steps with pupil data in the window
     seconds: float                  # length of the window
     time: np.ndarray                # s, samples of the window
     measured: np.ndarray            # mm, with the fitted offset
-    expected_before: np.ndarray     # mm, input sensitivity
+    expected_before: np.ndarray     # mm, input parameters
     expected_after: np.ndarray      # mm, fitted
     notes: list
+    fixation_weight: float = 0.65   # the fitted one with ``fit_fixation``, else the input's
+    weight_fitted: bool = False
+
+
+def _search_sensitivity(expected, m: np.ndarray, points: int = 49):
+    """Best log sensitivity for ``expected(s)`` against ``m``, each with its best offset (the mean of
+    expected − measured): a grid over the sensitivity range, then a bounded refinement. Returns
+    (log s, cost function, cost)."""
+    def sse(log_s: float) -> float:
+        e = expected(float(np.exp(log_s)))
+        return float(np.sum((m + np.mean(e - m) - e) ** 2))
+
+    grid = np.linspace(np.log(SENSITIVITY_RANGE[0]), np.log(SENSITIVITY_RANGE[1]), points)
+    costs = np.array([sse(g) for g in grid])
+    k = int(np.argmin(costs))
+    bracket = (grid[max(k - 1, 0)], grid[min(k + 1, len(grid) - 1)])
+    log_s = float(minimize_scalar(sse, bounds=bracket, method="bounded", options={"xatol": 1e-3}).x)
+    return log_s, sse, sse(log_s)
 
 
 def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, start: float,
-                     sequence: calibration.Sequence = calibration.DEFAULT) -> LuxFit:
+                     sequence: calibration.Sequence = calibration.DEFAULT, fit_fixation: bool = False) -> LuxFit:
     """Fit the participant's light sensitivity and the pupil offset on a calibration sequence played to
     a glasses tracker with a lux sensor, by least squares on ΔPD over the sequence.
 
@@ -268,39 +291,60 @@ def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, sta
     device's (millimetres), not fitted: with the luminance uncertain, scale and sensitivity cannot be
     told apart on one sequence (open issue 36). Use it on a segment where light drives the pupil;
     fitting a whole task recording would remove the workload signal.
+
+    With ``fit_fixation`` the gaze circle's weight in the weighted colour (``fixation_weight``, open
+    issue 47) is fitted too: a search over its range around the sensitivity search. It needs a scene
+    where the gaze area and the background differ (a screen in a room), not a uniform field, and the
+    video route (``lux_use_video``).
     """
     if rec.luminance_source != "lux_sensor" or rec.lux_values is None or len(rec.lux_values) < 2:
         raise ValueError("This fit is for glasses recordings with a lux sensor log")
-    prep = prepare(rec, video, params)
-    if prep.scale is None:
-        raise ValueError("The fit needs a device with a known pupil scale (not pixel data)")
+    if fit_fixation and not params.lux_use_video:
+        raise ValueError("Fitting the fixation weight needs the video route (turn on 'Distribute with the "
+                         "scene video')")
     end = start + sequence.duration
-    measured = prep.pupil * prep.scale
-    window = (prep.time >= start) & (prep.time <= end) & np.isfinite(measured) & prep.valid
-    if window.sum() < MIN_LUX_SAMPLES:
-        raise ValueError("Too little pupil data inside the calibration sequence: check its start")
     area = rec.profile.field_area
-    t, m = prep.time[window], measured[window]
+    state = {}
 
-    def expected(sensitivity: float) -> np.ndarray:
-        return expected_pupil(prep.luminance, prep.fs, replace(params, sensitivity=sensitivity), area)[window]
+    def setup(weight: float):
+        p = replace(params, fixation_weight=weight)
+        prep = prepare(rec, video, p)
+        if prep.scale is None:
+            raise ValueError("The fit needs a device with a known pupil scale (not pixel data)")
+        measured = prep.pupil * prep.scale
+        window = (prep.time >= start) & (prep.time <= end) & np.isfinite(measured) & prep.valid
+        if window.sum() < MIN_LUX_SAMPLES:
+            raise ValueError("Too little pupil data inside the calibration sequence: check its start")
+        m = measured[window]
 
-    def sse(log_s: float) -> float:
-        e = expected(float(np.exp(log_s)))
-        return float(np.sum((m + np.mean(e - m) - e) ** 2))
+        def expected(sensitivity: float) -> np.ndarray:
+            return expected_pupil(prep.luminance, prep.fs, replace(p, sensitivity=sensitivity), area)[window]
+        return p, prep, window, m, expected
 
-    grid = np.linspace(np.log(SENSITIVITY_RANGE[0]), np.log(SENSITIVITY_RANGE[1]), 49)
-    costs = np.array([sse(g) for g in grid])
-    k = int(np.argmin(costs))
-    bracket = (grid[max(k - 1, 0)], grid[min(k + 1, len(grid) - 1)])
-    log_s = float(minimize_scalar(sse, bounds=bracket, method="bounded", options={"xatol": 1e-3}).x)
+    weight_costs = None
+    weight = params.fixation_weight
+    if fit_fixation:
+        def cost_at(w: float) -> float:
+            _, _, _, m_w, exp_w = setup(w)
+            return _search_sensitivity(exp_w, m_w)[2]
+
+        grid = np.linspace(WEIGHT_RANGE[0], WEIGHT_RANGE[1], WEIGHT_GRID)
+        weight_costs = np.array([cost_at(w) for w in grid])
+        k = int(np.argmin(weight_costs))
+        bracket = (grid[max(k - 1, 0)], grid[min(k + 1, len(grid) - 1)])
+        weight = float(minimize_scalar(cost_at, bounds=bracket, method="bounded", options={"xatol": 0.002}).x)
+
+    p, prep, window, m, expected = setup(weight)
+    log_s, sse, cost = _search_sensitivity(expected, m)
     s_fit = float(np.exp(log_s))
+    t = prep.time[window]
+    p0, _, _, m0, expected_before_fn = setup(params.fixation_weight) if fit_fixation else (p, None, None, m, expected)
 
-    e_fit, e_before = expected(s_fit), expected(params.sensitivity)
+    e_fit, e_before = expected(s_fit), expected_before_fn(params.sensitivity)
     offset = float(np.mean(e_fit - m))
-    off_before = float(np.mean(e_before - m))
+    off_before = float(np.mean(e_before - m0))
     rms_after = float(np.sqrt(np.mean((m + offset - e_fit) ** 2)))
-    rms_before = float(np.sqrt(np.mean((m + off_before - e_before) ** 2)))
+    rms_before = float(np.sqrt(np.mean((m0 + off_before - e_before) ** 2)))
     seconds = float(t[-1] - t[0])
     corr = float(np.corrcoef(m, e_fit)[0, 1]) if np.std(e_fit) > 1e-9 and np.std(m) > 1e-9 else 0.0
 
@@ -309,7 +353,7 @@ def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, sta
     h = 0.15
     curvature = (sse(log_s + h) - 2 * sse(log_s) + sse(log_s - h)) / h ** 2
     if curvature > 0:
-        half = 1.96 * float(np.sqrt(2 * (sse(log_s) / (n_eff - 2)) / curvature))
+        half = 1.96 * float(np.sqrt(2 * (cost / (n_eff - 2)) / curvature))
     else:
         half = float("inf")
     s_range = (float(s_fit * np.exp(-half)), float(s_fit * np.exp(half)))
@@ -332,8 +376,18 @@ def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, sta
         notes.append(f"The sensitivity is weakly determined ({s_range[0]:.3g}–{s_range[1]:.3g}).")
     if prep.mode != "lux sensor":
         notes.append("The luminance does not come from the lux sensor.")
+    if fit_fixation:
+        spread = (weight_costs.max() - weight_costs.min()) / max(weight_costs.min(), 1e-12)
+        if spread < WEIGHT_FLAT:
+            notes.append(f"The fit hardly depends on the fixation weight (the cost changes by {spread:.1%} across "
+                         "its range): the gaze area and the background are too alike in this scene to fit it.")
+        elif weight > WEIGHT_RANGE[1] - 0.02 or weight < WEIGHT_RANGE[0] + 0.02:
+            notes.append(f"The fixation weight reached the limit of its range ({weight:.2f}).")
+        notes.append("The fixation weight is fitted on one recording: check it on others before relying on it "
+                     "(open issue 47).")
 
-    fitted = replace(params, sensitivity=s_fit, alignment="fixed", pupil_offset=offset)
+    fitted = replace(params, sensitivity=s_fit, alignment="fixed", pupil_offset=offset, fixation_weight=weight)
     return LuxFit(params=fitted, sensitivity=s_fit, sensitivity_range=s_range, offset=offset,
                   rms_before=rms_before, rms_after=rms_after, correlation=corr, steps=steps, seconds=seconds,
-                  time=t, measured=m + offset, expected_before=e_before, expected_after=e_fit, notes=notes)
+                  time=t, measured=m + offset, expected_before=e_before, expected_after=e_fit, notes=notes,
+                  fixation_weight=weight, weight_fitted=fit_fixation)

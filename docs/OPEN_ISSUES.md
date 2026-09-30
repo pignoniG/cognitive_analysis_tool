@@ -917,6 +917,27 @@ is revised; they remain in the git history of this file.
 - **Note:** the full-field calibration sequence cannot determine the weight, since fixation and background are the same
   colour on every step. A scene where the gaze moves between areas of different luminance is needed (as in Eckert's
   cube scene).
+- **Data (30 September 2026, Pupil Core, laptop screen in a room, lux sensor, 10 steps of the calibration sequence
+  over 81 s, right eye):** the sensitivity and offset fit of the calibration box (ΔPD least squares over the sequence)
+  with the weight held at each value:
+
+  | Gaze weight | Fitted sensitivity | ΔPD RMS (mm) | Correlation | Expected pupil range (mm) |
+  |---|---|---|---|---|
+  | 0.30 | 0.036 | 0.76 | 0.41 | 0.87 |
+  | 0.65 (default) | 0.084 | 0.72 | 0.51 | 1.21 |
+  | 0.90 | 0.245 | 0.685 | 0.57 | 1.48 |
+  | 1.00 (gaze area alone) | 2.6 | 0.67 | 0.59 | 1.51 |
+
+  The fit improves steadily towards the gaze area alone, and at 1 the sensitivity comes out near 1 (at lower weights
+  it was compensating for a luminance that hardly moved). The gaze area alone is the 2021 paper's choice. A geometric
+  sum over areas (gaze circle, rest of the camera frame, and the rest of the 200° × 135° field at the sensor's average)
+  was worse than any of these (correlation 0.31, the sensor alone), because the outside of the camera frame is 97 %
+  of the field and takes the sensor's level, which barely follows a screen. Caveats: one recording, one participant, a
+  screen that fills only part of the view, measured pupils that vary more than the light explains, and a modest gain
+  (RMS 0.72 → 0.67 mm). It says nothing about the Varjo, where the display fills the view.
+- **2.0:** the calibration box has *Also fit the fixation weight* for glasses with a lux log (`fit_lux_response(...,
+  fit_fixation=True)`). It flags a scene where the cost hardly depends on the weight, and a weight at the limit of its
+  range. The default stays 0.65 until more recordings are compared.
 - **Proposal:** choose the weight together with the circle radius from a reference (G. Pignoni has one suggesting a
   different weighting), possibly per device type, and report both.
 - **Status:** open.

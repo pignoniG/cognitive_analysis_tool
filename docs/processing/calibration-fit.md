@@ -175,7 +175,17 @@ the fit little. Notes say when the expected pupil barely varies over the window 
 follows the measured one poorly (correlation below 0.3), when the sensitivity is at its limit or weakly determined,
 and when fewer than four steps have data.
 
+**Fixation weight (optional).** With *Also fit the fixation weight* (`fit_fixation=True`) the gaze circle's share of
+the weighted colour, `fixation_weight` ([open issue 47](../OPEN_ISSUES.md)), is fitted too, within 0.05–1: eight values
+first, each with its own sensitivity search, then a bounded refinement around the best. It changes the luminance
+\(L = \bar L \cdot Y_w / Y_\text{frame}\), so it needs the video route and a scene where the gaze area and the
+background differ (a screen in a room): a full-field calibration on a display cannot determine it. The notes say when
+the cost hardly changes across the weights (below 2 %), when the weight is at a limit, and that one recording is not
+enough to rely on it. Apply then also sets `fixation_weight`.
+
 Fit on a segment where light drives the pupil, such as the calibration sequence or a rest period; a fit over a
 whole task recording would absorb the workload signal it is meant to leave in ΔPD. On the 30 September 2026 Pupil Core
 recording (81 s of the sequence, ten steps, laptop screen) it gives a sensitivity of 0.08 with an interval of
-0.02–0.37, ΔPD RMS 0.74 → 0.72 mm and a correlation of 0.51, and says the sensitivity is weakly determined.
+0.02–0.37, ΔPD RMS 0.74 → 0.72 mm and a correlation of 0.51, and says the sensitivity is weakly determined. With the
+fixation weight fitted it goes to 1 (the gaze area alone), with a sensitivity of about 2, RMS 0.67 mm and a
+correlation of 0.59.

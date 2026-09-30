@@ -101,6 +101,8 @@ See [Participant calibration](calibration.md) for the procedure.
   result window showing each step's steady-state pupil against the model.
 - **2. Fit latency, scale and offset**: the participant's timing, pupil scale and offset, optionally with the
   transient constriction after brightening (pupillary escape).
+- **Also fit the fixation weight** (glasses with a lux log): adds the gaze circle's weight to the fit below; it needs a
+  scene where the gaze area and the background differ.
 - **Fit sensitivity and offset** (glasses with a lux log): the participant's light sensitivity and the pupil offset by
   least squares on ΔPD over the sequence, with the luminance the analysis builds from the sensor (and the video). The
   result window gives the RMS before and after, the sensitivity with its interval, the correlation and warnings;
