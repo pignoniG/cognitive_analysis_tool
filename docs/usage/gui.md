@@ -16,8 +16,11 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 **File**
 
 - **Open recording…**: choose a recording folder. The device is detected automatically.
-- **Choose lux folder…**: the folder with lux sensor logs, for glasses recordings whose logs are not in the recording
-  folder or its `lux` subfolder. It applies to the recordings opened afterwards.
+- **Choose lux folder…**: one folder with the lux sensor logs for all glasses recordings, so the logs need not be
+  copied into each. Its subfolders are searched (one per day is fine) and only the logs that overlap the recording are
+  read. It is remembered between sessions, shown in the Recording box, and used instead of any logs inside the
+  recording. If it holds no readings for a recording, a warning says so (check the folder and the loggers' clocks).
+- **Use the recording's own lux logs**: forget the folder and go back to the recording folder or its `lux` subfolder.
 - **Load parameters… / Save parameters / Save parameters as…**: the participant's parameter file (JSON), without
   the display photometry. Files written by version 1.x are converted when loaded.
 - **Load display photometry… / Save display photometry…**: the headset's nominal Lmin, Lmax and gamma. The last

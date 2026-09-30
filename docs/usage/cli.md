@@ -11,7 +11,7 @@ cwtool RECORDING [--device {pupil_core,pupil_neon,tobii_g3,varjo}] [--params FIL
 | `--device` | skip auto-detection |
 | `--params` | participant parameter file (JSON) saved by the app; defaults otherwise |
 | `--display` | display photometry file (JSON) saved by the app (Varjo); participant files do not hold Lmin, Lmax and gamma, so without it the defaults are used |
-| `--lux` | folder with lux sensor logs (glasses); default: the recording folder or its `lux` subfolder |
+| `--lux` | folder with lux sensor logs (glasses), searched with its subfolders; default: the recording folder or its `lux` subfolder |
 | `--out` | export folder; default `RECORDING/cwtool_export` |
 | `--reanalyse` | ignore the cached video analysis |
 | `--workers` | parallel video chunks; default one per CPU core |

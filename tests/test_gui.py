@@ -396,3 +396,25 @@ def test_glasses_calibration_controls_and_run_file(app, tmp_path):
     w._place_from_run(str(far), calibration.load_sequence(far))
     assert not w.sequence_check.isChecked() and "outside" in w.statusBar().currentMessage()
 
+
+def test_lux_folder_is_remembered(app, tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+    from cwtool.gui import main_window as mw
+
+    QSettings.setPath(QSettings.NativeFormat, QSettings.UserScope, str(tmp_path / "settings"))
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / "settings"))
+    folder = tmp_path / "lux"
+    folder.mkdir()
+    w = mw.MainWindow()
+    w._settings.remove("lux_folder")
+    w.set_lux_folder(folder)
+    assert w._lux_folder == folder and w.clear_lux_action.isEnabled()
+    again = mw.MainWindow()                       # the next session
+    assert again._lux_folder == folder
+    again.clear_lux_folder()
+    assert again._lux_folder is None and not again.clear_lux_action.isEnabled()
+    assert mw.MainWindow()._lux_folder is None
+    folder.rmdir()
+    w.set_lux_folder(folder)                      # a folder that later disappears is not used
+    folder.rmdir() if folder.exists() else None
+    assert mw.MainWindow()._lux_folder is None

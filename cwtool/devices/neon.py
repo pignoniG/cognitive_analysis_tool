@@ -313,12 +313,8 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
     )
 
     epoch_start = t_zero / 1e9
-    lux_dir = Path(lux_folder) if lux_folder else lux.find_lux_folder(folder)
-    lux_time = lux_values = None
-    if lux_dir is not None:
-        lux_time, lux_values = lux.read_lux(lux_dir, epoch_start, float(time[-1] - min(time[0], 0.0)))
-        if not len(lux_time):
-            lux_time = lux_values = None
+    lux_time, lux_values, lux_notes = lux.load_log(folder, lux_folder, epoch_start,
+                                                   float(time[-1] - min(time[0], 0.0)))
 
     events: list[Event] = events_from_markers(rel(markers[0]), markers[1], end=float(time[-1]),
                                               ignore=AUTOMATIC_EVENTS)
@@ -338,4 +334,5 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
         lux_time=lux_time,
         lux_values=lux_values,
         events=sorted(events, key=lambda e: e.start),
+        notes=lux_notes,
     )

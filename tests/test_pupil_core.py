@@ -126,3 +126,36 @@ def test_without_lux_the_camera_is_used_with_a_warning(tmp_path):
     r = pipeline.run(rec, _video(rec), Parameters())
     assert r.warnings and "lux" in r.warnings[0].lower()
     assert np.isfinite(r.expected_black)
+
+
+def test_lux_folder_outside_the_recording(tmp_path):
+    """One lux folder for all recordings: logs need not be copied into each, nested folders are searched, and
+    files that do not overlap the recording are skipped."""
+    import shutil
+    folder = write_core_recording(tmp_path / "core", GRAYS, FRAME_TIMES, lux=lambda t: 100.0 + 10 * t)
+    logs = tmp_path / "lux_logs" / "2026-09"
+    logs.mkdir(parents=True)
+    shutil.move(str(folder / "1_1_1.csv"), logs / "1_1_1.csv")               # the log leaves the recording
+    (logs / "9_9_9.csv").write_text("1500000000000,1,1,1,999\n1500003600000,1,1,1,999\n")   # another day
+    rec = devices.load(folder)
+    assert rec.lux_values is None                                             # nothing in the recording
+    rec = devices.load(folder, lux_folder=tmp_path / "lux_logs")               # found in a subfolder
+    assert rec.lux_values is not None and rec.lux_values.max() < 200 and not rec.notes
+    assert lux.read_lux(logs, 1_700_000_000.5, 1.0, recursive=False)[0].size > 0
+    stale = devices.load(folder, lux_folder=tmp_path / "elsewhere")
+    assert stale.lux_values is None and "does not exist" in stale.notes[0]
+    (tmp_path / "other").mkdir()
+    (tmp_path / "other" / "9_9_9.csv").write_text("1500000000000,1,1,1,999\n1500003600000,1,1,1,999\n")
+    none = devices.load(folder, lux_folder=tmp_path / "other")
+    assert none.lux_values is None and "No lux readings" in none.notes[0] and "1 log files" in none.notes[0]
+
+
+def test_lux_files_are_skipped_by_their_time_span(tmp_path):
+    from cwtool import lux
+    old = tmp_path / "1_1_1.csv"
+    old.write_text("1000000000000,1,1,1,5\n1000003600000,1,1,1,6\n")
+    new = tmp_path / "1_1_2.csv"
+    new.write_text("2000000000000,1,1,1,7\n2000000060000,1,1,1,8\n")
+    t, v = lux.read_lux(tmp_path, 2_000_000_000.0, 30.0)
+    assert list(v) == [7.0, 8.0] and lux._span(old) == (1_000_000_000.0, 1_000_003_600.0)
+    assert lux._span(tmp_path / "missing.csv") is None

@@ -133,13 +133,8 @@ def load(folder: Path, lux_folder: Optional[Path] = None, min_confidence: float 
         adapting_field=ADAPTING_FIELD,
     )
 
-    lux_dir = Path(lux_folder) if lux_folder else lux.find_lux_folder(folder)
-    lux_time = lux_values = None
-    if lux_dir is not None:
-        duration = float(time[-1] - min(time[0], 0.0))
-        lux_time, lux_values = lux.read_lux(lux_dir, epoch_start, duration)
-        if not len(lux_time):
-            lux_time = lux_values = None
+    lux_time, lux_values, lux_notes = lux.load_log(folder, lux_folder, epoch_start,
+                                                   float(time[-1] - min(time[0], 0.0)))
 
     return Recording(
         name=folder.name,
@@ -155,4 +150,5 @@ def load(folder: Path, lux_folder: Optional[Path] = None, min_confidence: float 
         lux_time=lux_time,
         lux_values=lux_values,
         events=read_event_log(folder, epoch_start),
+        notes=lux_notes,
     )

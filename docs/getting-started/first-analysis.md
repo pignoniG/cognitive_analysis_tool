@@ -12,7 +12,8 @@ Each device has its own layout; the tool detects it from the files present.
   `gazedata.gz`.
 
 For the glasses (Pupil Core, Neon, Glasses 3), put the lux sensor logs (`<month>_<day>_<hour>.csv`) in the recording folder or a `lux`
-subfolder, or choose their folder when opening. Optionally add an `event_log` CSV from the
+subfolder, or point the app (**File → Choose lux folder…**) or `cwtool --lux` at the one folder where you keep them all:
+it is remembered and needs no copying into each recording. Optionally add an `event_log` CSV from the
 [event logger](../usage/tools.md#event-logger) to label the phases of the experiment.
 
 ## 2. Open it

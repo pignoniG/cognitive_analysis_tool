@@ -37,7 +37,10 @@ class MainWindow(QMainWindow):
         self.result = None
         self._task: Task | None = None
         self._params_path: Path | None = None
-        self._lux_folder: Path | None = None
+        # The folder with the lux logs, remembered between sessions: one folder for all recordings, so the
+        # logs need not be copied into each.
+        saved = str(self._settings.value("lux_folder", ""))
+        self._lux_folder: Path | None = Path(saved) if saved and Path(saved).is_dir() else None
         self._display_path: Path | None = None
         self._base_sequence: calibration.Sequence | None = None
 
@@ -61,6 +64,9 @@ class MainWindow(QMainWindow):
 
         self.open_action = action("Open recording…", self.choose_recording, QKeySequence.Open)
         self.lux_action = action("Choose lux folder…", self.choose_lux_folder)
+        self.lux_action.setToolTip("The folder with the lux sensor logs (its subfolders are searched too), "
+                                   "remembered for the next recordings and sessions")
+        self.clear_lux_action = action("Use the recording's own lux logs", self.clear_lux_folder)
         self.load_params_action = action("Load parameters…", self.choose_params)
         self.save_params_action = action("Save parameters", self.save_params, QKeySequence.Save)
         self.save_params_as_action = action("Save parameters as…", self.save_params_as, QKeySequence.SaveAs)
@@ -70,7 +76,7 @@ class MainWindow(QMainWindow):
         quit_action = action("Quit", self.close, QKeySequence.Quit)
 
         file_menu = self.menuBar().addMenu("&File")
-        for a in (self.open_action, self.lux_action, None, self.load_params_action, self.save_params_action,
+        for a in (self.open_action, self.lux_action, self.clear_lux_action, None, self.load_params_action, self.save_params_action,
                   self.save_params_as_action, None, self.load_display_action, self.save_display_action, None,
                   self.export_action, None, quit_action):
             file_menu.addSeparator() if a is None else file_menu.addAction(a)
@@ -294,6 +300,7 @@ class MainWindow(QMainWindow):
                                        if self.video is not None else "Analyse the scene video")
         self.cancel_button.setVisible(busy)   # only while an analysis or fit runs
         self.open_action.setEnabled(not busy)
+        self.clear_lux_action.setEnabled(self._lux_folder is not None and not busy)
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
         self.light_button.setEnabled(self.fit_button.isEnabled())
@@ -354,9 +361,19 @@ class MainWindow(QMainWindow):
         start = str(self._lux_folder or self._settings.value("last_recording_dir", str(Path.home())))
         folder = QFileDialog.getExistingDirectory(self, "Folder with the lux sensor logs", start)
         if folder:
-            self._lux_folder = Path(folder)
-            if self.recording is not None:
-                self.open_recording(self.recording.folder)
+            self.set_lux_folder(Path(folder))
+
+    def set_lux_folder(self, folder: Path | None) -> None:
+        """Use ``folder`` for the lux logs of this and the next recordings (None: the recording's own),
+        remember it, and reload the open recording with it."""
+        self._lux_folder = folder
+        self._settings.setValue("lux_folder", str(folder) if folder else "")
+        if self.recording is not None:
+            self.open_recording(self.recording.folder)
+        self._update_state()
+
+    def clear_lux_folder(self) -> None:
+        self.set_lux_folder(None)
 
     def open_recording(self, folder: Path) -> None:
         lux_folder = self._lux_folder
@@ -378,7 +395,8 @@ class MainWindow(QMainWindow):
             f"adapting field {prof.field_area:,.0f} deg², pupil {prof.pupil_unit} {scale}"
             f"<br>video: {video}<br>events: {len(rec.events)}"
             + (f"<br>lux sensor: {len(rec.lux_values)} readings" if rec.lux_values is not None
-               else ("<br>lux sensor: none found" if rec.luminance_source == "lux_sensor" else "")))
+               else ("<br>lux sensor: none found" if rec.luminance_source == "lux_sensor" else ""))
+            + (f"<br>lux folder: {self._lux_folder}" if self._lux_folder and rec.luminance_source == "lux_sensor" else ""))
         self.plots.clear_result()
         self.plots.show_events(rec.events)
         self.params_panel.set_video_settings(self.params_panel.video_settings().for_recording(rec))
