@@ -4,7 +4,8 @@
 
 ## 1. Scale to mm
 
-Device units × the profile's `pupil_scale` × the participant's `pupil_correction`. For pixel data (Pupil Core 2D)
+Device units × the profile's `pupil_scale` × the participant's `pupil_correction`. The Varjo reader sets the scale
+per recording, 2 for exports that hold the radius and 1 for those that hold the diameter ([Varjo XR-4](../devices/varjo.md#pupil-scale)). For pixel data (Pupil Core 2D)
 the scale is unknown and set later so the mean measured pupil equals the mean expected pupil (2021 method).
 
 ## 2. Range check

@@ -29,9 +29,12 @@ A sample is valid only when all three statuses are tracked.
 
 ## Pupil scale
 
-Varjo Base writes the pupil **radius** in its diameter columns (confirmed by Varjo by email), so the profile's
-pupil scale is 2. The iris diameter column reads a constant 6.04 mm, half a typical iris, which fits. Because the
-exact scale varies between participants, the calibration fit estimates a correction per participant
+Older Varjo Base versions write the pupil **radius** in its diameter columns (confirmed by Varjo by email), so the
+pupil scale is 2. Their iris diameter column reads a constant 6.04 mm, half a typical iris, which fits. A later
+version (a September 2026 sample) writes real diameters: the iris column reads a constant 12.2–12.5 mm and the
+pupil–iris ratio matches. The reader tells the two apart by the median iris diameter (above 9 mm: diameters, scale 1;
+below, or unreadable: radii, scale 2), so each recording gets its own scale; the Recording box shows it. Because the
+exact scale can still vary between participants, the calibration fit estimates a correction per participant
 ([open issue 1](../OPEN_ISSUES.md)).
 
 ## Gaze
@@ -50,7 +53,7 @@ frame height by default) to exclude them.
 
 | | |
 |---|---|
-| Pupil | mm, scale 2.0 |
+| Pupil | mm, scale 2.0 (radius export) or 1.0 (diameter export, from the iris column) |
 | Luminance | display: the scene capture's colours mapped through the [display photometry](../processing/luminance.md#display-devices), with the participant's light sensitivity |
 | Field of view | 120° × 105° (nominal); the adapting field is the same |
 | Circular scene | yes |

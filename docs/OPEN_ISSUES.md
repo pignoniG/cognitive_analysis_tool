@@ -42,6 +42,13 @@ is revised; they remain in the git history of this file.
 - **Varjo sample:** `left_iris_diameter_in_mm` is exactly 6.04 mm in every sample, half of a typical 11–12 mm iris,
   which supports the radius explanation. Being a constant, it cannot serve as an independent per-session scale check.
   Eye tracking runs at 200 Hz (the device profile now says so).
+- **A later Varjo Base (30 September 2026 sample):** the iris column reads 12.22 mm (left) and 12.46 mm (right), twice
+  the old constant, and the pupil–iris ratio (0.25) is the ratio of the columns in the new units: the file now holds
+  diameters (median pupil 3.1 mm, 5–95 % 2.3–5.8). The light fit had already suggested it: its first pupil scale
+  correction was 0.52, almost exactly ½. The reader now sets the scale per recording from the median iris (above 9 mm:
+  scale 1; below or unreadable: scale 2), so old exports keep working. On that sample the fitted correction is still
+  0.54–0.72 rather than near 1, so the model and the measured pupil still differ in size (see issues 36 and 42); it
+  is one participant and the default display photometry.
 - **Status:** fixed in 2.0.
 
 ### 2. Measured pupil is shifted to match the expected mean

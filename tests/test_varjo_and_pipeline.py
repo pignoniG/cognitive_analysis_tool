@@ -156,3 +156,17 @@ def test_new_participants_have_dynamics_but_old_files_keep_one_stage(tmp_path):
     assert Parameters.load(tmp_path / "old.json").constriction_stages == 1
     Parameters(constriction_stages=2).save(tmp_path / "new.json", participant_only=True)
     assert Parameters.load(tmp_path / "new.json").constriction_stages == 2
+
+
+def test_pupil_scale_follows_the_iris_column(tmp_path):
+    """Older Varjo Base exports hold the pupil radius (iris column about 6 mm); a later one holds diameters
+    (iris about 12 mm), so the reader must not double them."""
+    from conftest import write_varjo_recording
+    radius = devices.load(write_varjo_recording(tmp_path / "old", [128, 128], pupil_mm=1.6, iris_mm=6.04))
+    diameter = devices.load(write_varjo_recording(tmp_path / "new", [128, 128], pupil_mm=3.2, iris_mm=12.3))
+    unknown = devices.load(write_varjo_recording(tmp_path / "none", [128, 128], pupil_mm=1.6))    # iris missing
+    assert radius.profile.pupil_scale == 2.0 and diameter.profile.pupil_scale == 1.0
+    assert unknown.profile.pupil_scale == 2.0
+    scaled = lambda r: np.nanmedian(r.pupil_left) * r.profile.pupil_scale
+    assert scaled(radius) == pytest.approx(3.2) and scaled(diameter) == pytest.approx(3.2)
+    assert varjo.pupil_scale(np.array([np.nan]), np.array([])) == 2.0

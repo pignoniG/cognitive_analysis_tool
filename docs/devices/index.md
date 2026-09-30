@@ -34,7 +34,7 @@ Pass `--device` (or `device=` to `devices.load`) to skip detection.
 | | Varjo XR-4 | Pupil Core | Pupil Neon | Tobii Pro Glasses 3 |
 |---|---|---|---|---|
 | Support | tested | tested | experimental | experimental |
-| Pupil | mm, reported radius (×2) | mm (3D model) or px (2D) | mm per eye | mm per eye |
+| Pupil | mm: radius ×2 in older exports, diameter in newer ones (from the iris column) | mm (3D model) or px (2D) | mm per eye | mm per eye |
 | Sampling | 200 Hz | 120/200 Hz per eye | 200 Hz | 50 or 100 Hz |
 | Invalid samples | tracking status | confidence < 0.6 | not worn, blinks (Cloud) | empty samples, per eye |
 | Gaze | projected to the left-eye view | normalised scene coordinates | scene camera pixels | normalised scene coordinates |
@@ -70,7 +70,7 @@ What the analysis needs to know about a device, as opposed to a participant:
 
 | Field | Use |
 |---|---|
-| `pupil_unit`, `pupil_scale` | device units × scale = mm; `None` for pixels (scaled per recording) |
+| `pupil_unit`, `pupil_scale` | device units × scale = mm; `None` for pixels (scaled per recording). The Varjo reader sets the scale per recording |
 | `luminance_source` | `display` (display photometry) or `lux_sensor` |
 | `field_of_view` | deg (h, v) spanned by the scene video: converts the gaze circle radius to pixels |
 | `circular_scene` | the scene video is a circle with black corners that must be masked out (Varjo) |

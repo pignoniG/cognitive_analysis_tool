@@ -21,9 +21,11 @@ VARJO_HEADER = (
 
 
 def write_varjo_recording(folder: Path, grays, seconds_per_level=1.0, fps=10, size=(64, 48),
-                          gaze=(0.0, 0.0), pupil_mm=2.0, rate=100):
+                          gaze=(0.0, 0.0), pupil_mm=2.0, rate=100, iris_mm=None):
     """Synthetic Varjo recording: a full-frame gray level or RGB colour per step and a constant gaze.
-    ``pupil_mm`` is the value written to the CSV, which Varjo reports as a radius (×2 = diameter)."""
+    ``pupil_mm`` is the value written to the CSV, which older Varjo Base versions report as a radius (×2 =
+    diameter). ``iris_mm`` is written to the iris diameter columns (6 mm in those exports, 12 mm in the later
+    ones that report diameters); by default they hold missing values."""
     folder.mkdir(parents=True, exist_ok=True)
     w, h = size
     writer = cv2.VideoWriter(str(folder / "varjo_capture_test.avi"), cv2.VideoWriter_fourcc(*"MJPG"), fps, (w, h))
@@ -41,6 +43,8 @@ def write_varjo_recording(folder: Path, grays, seconds_per_level=1.0, fps=10, si
         for i in range(n):
             row = ["0"] * len(VARJO_HEADER)
             row[col["left_iris_diameter_in_mm"]] = "-nan(ind)"   # as Varjo Base writes missing values
+            if iris_mm is not None:
+                row[col["left_iris_diameter_in_mm"]] = row[col["right_iris_diameter_in_mm"]] = str(iris_mm)
             t_ns = int(i * 1e9 / rate)
             row[col["relative_to_unix_epoch_timestamp"]] = str(1_700_000_000 * 10**9 + t_ns)
             row[col["relative_to_video_first_frame_timestamp"]] = str(t_ns)
