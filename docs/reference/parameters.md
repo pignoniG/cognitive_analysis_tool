@@ -55,7 +55,7 @@ not in participant files.
 
 | Name | Default | Meaning |
 |---|---|---|
-| `pupil_correction` | 1 | participant multiplier on the device's pupil scale (fitted). A fitted value far from 1, once the scale is right, means the model and the measured pupil differ in size |
+| `pupil_correction` | 1 | participant multiplier on the device's pupil scale (fitted). One sequence does not determine it well (it trades off with the sensitivity and the black point), so a fitted value away from 1 is not by itself a sign that the device scale is wrong |
 | `alignment` | recording | offset mode: `recording`, `baseline`, `fixed`, `none` |
 | `baseline_events` | Riposo, Rest, Baseline | event labels used by `baseline` alignment |
 | `pupil_offset` | 0 mm | offset used by `fixed` alignment (fitted) |

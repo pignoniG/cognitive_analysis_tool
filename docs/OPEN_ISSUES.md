@@ -46,9 +46,11 @@ is revised; they remain in the git history of this file.
   the old constant, and the pupil–iris ratio (0.25) is the ratio of the columns in the new units: the file now holds
   diameters (median pupil 3.1 mm, 5–95 % 2.3–5.8). The light fit had already suggested it: its first pupil scale
   correction was 0.52, almost exactly ½. The reader now sets the scale per recording from the median iris (above 9 mm:
-  scale 1; below or unreadable: scale 2), so old exports keep working. On that sample the fitted correction is still
-  0.54–0.72 rather than near 1, so the model and the measured pupil still differ in size (see issues 36 and 42); it
-  is one participant and the default display photometry.
+  scale 1; below or unreadable: scale 2), so old exports keep working. On that sample the fitted correction was
+  0.54–0.72 rather than near 1, but that is not a size mismatch: on the step levels, fixing the scale at 1 fits as
+  well as leaving it free (RMS 0.656 against 0.648 mm, photopic weights, black point fitted), and the free fit
+  lands near 0.45 in a flat valley. The scale is not determined by one sequence (issues 36 and 42), so a fitted
+  correction away from 1 says little; the diameters themselves (median 3.1 mm) are plausible.
 - **Status:** fixed in 2.0.
 
 ### 2. Measured pupil is shifted to match the expected mean
