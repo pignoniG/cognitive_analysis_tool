@@ -352,3 +352,10 @@ def test_long_warning_does_not_widen_the_window(app):
     w = MainWindow()
     w.summary_label.setText("⚠ " + "a very long warning " * 30)
     assert w.summary_label.wordWrap() and w.minimumSizeHint().width() < 1200
+
+
+def test_side_panel_can_shrink(app):
+    from PySide6.QtWidgets import QScrollArea
+    w = MainWindow()
+    side = w.findChildren(QScrollArea)[0].widget()
+    assert side.minimumSizeHint().width() <= 360      # no checkbox or label may force a horizontal scrollbar

@@ -298,7 +298,7 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
                 notes.append(f"The video ratio that distributes the sensor's luminance varies ×{spread:.1f} "
                              "(10th to 90th percentile). It follows where the gaze looks, but on a uniform "
                              "view (a calibration sequence on a screen, a dark room) it only adds noise: "
-                             "consider turning off 'Distribute sensor luminance with the scene video'.")
+                             "consider turning off 'Distribute with the scene video'.")
         mode = "lux sensor"
     elif rec.luminance_source == "lux_sensor" and params.camera_exposure == "fixed":
         # Fixed exposure: pixel values are proportional to scene luminance up to saturation.

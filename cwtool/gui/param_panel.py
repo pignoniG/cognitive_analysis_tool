@@ -68,7 +68,11 @@ INTS = {
 BOOLS = {
     "dynamics": "Dynamics on (time constants, constriction stages, transient)",
     "background_excludes_fixation": "Background excludes gaze area",
-    "lux_use_video": "Distribute sensor luminance with the scene video (× gaze / frame ratio)",
+    "lux_use_video": "Distribute with the scene video",
+}
+BOOL_TIPS = {
+    "lux_use_video": "Multiply the sensor's average luminance by the ratio of the gaze-weighted to the whole-frame "
+                     "relative luminance of the scene video (Pignoni et al. 2021). Off: the sensor's average alone",
 }
 CHOICES = {
     "eye": ("Pupil", ["both", "left", "right"]),
@@ -198,6 +202,7 @@ class _Form(QWidget):
             return w, label
         if name in BOOLS:
             w = QCheckBox(BOOLS[name])
+            w.setToolTip(BOOL_TIPS.get(name, ""))
             w.toggled.connect(self.changed)
             return w, None
         label, options = CHOICES[name]
