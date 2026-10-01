@@ -393,7 +393,7 @@ function hueRamp(axis, n, dur) {
   }
   return out;
 }
-function cwtool20(dur) {   // the built-in sequence of cwtool.calibration
+function cwtool20(dur) {   // cwtool.calibration.STAIRCASE_20, the default before October 2026
   const out = grays(8, 0, 255, dur);
   ["Red", "Green", "Blue"].forEach((name, axis) => [64, 128, 191, 255].forEach((v) => {
     const c = [0, 0, 0]; c[axis] = v; out.push(mk(`${name} ${v}`, ...c, dur));
@@ -434,7 +434,7 @@ const PRESETS = [
   ["Gray, light to dark, 6 s", "gray-8-light-to-dark-6s", { kind: "gray", n: 8, dur: 6, order: "ltd" }],
   ["Blue, dark to light, 3 s", "blue-8-dark-to-light-3s", { kind: "blue", n: 8, dur: 3, order: "dtl" }],
   ["Red, dark to light, 3 s", "red-8-dark-to-light-3s", { kind: "red", n: 8, dur: 3, order: "dtl" }],
-  ["Gray + RGB primaries, 20 steps, 6 s (cwtool built-in)", "cwtool-builtin-20", { kind: "cwtool20", n: 20, dur: 6, order: "as-is" }],
+  ["Gray + RGB primaries, 20 steps, 6 s (cwtool staircase before October 2026)", "cwtool-builtin-20", { kind: "cwtool20", n: 20, dur: 6, order: "as-is" }],
 ];
 const PRESET_SEED = "calibration";
 function loadPreset(i) {

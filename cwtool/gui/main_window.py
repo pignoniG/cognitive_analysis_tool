@@ -9,7 +9,7 @@ import numpy as np
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QCheckBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
-                               QHBoxLayout, QLabel, QMainWindow, QMessageBox, QProgressBar,
+                               QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QProgressBar,
                                QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget)
 
 from cwtool import __version__, calibration, devices, palette, pipeline
@@ -175,7 +175,14 @@ class MainWindow(QMainWindow):
         load_sequence = QPushButton("Load sequence…")
         load_sequence.clicked.connect(self.choose_sequence)
         default_sequence = QPushButton("Built-in")
-        default_sequence.clicked.connect(lambda: self.set_sequence(calibration.DEFAULT))
+        builtin = QMenu(default_sequence)
+        builtin.addAction("Full calibration (the presenter's default, preset order)",
+                          lambda: self.set_sequence(calibration.DEFAULT))
+        builtin.addAction("20-step staircase (before October 2026)",
+                          lambda: self.set_sequence(calibration.STAIRCASE_20))
+        default_sequence.setMenu(builtin)
+        default_sequence.setToolTip("Built-in sequences. A participant's run is usually scrambled with their ID: "
+                                    "load the run file the presenter saved, which records the order played")
         sequence_buttons.addWidget(load_sequence)
         sequence_buttons.addWidget(default_sequence)
         load_sequence.setToolTip("The sequence CSV, or a run file saved by the calibration presenter: its "

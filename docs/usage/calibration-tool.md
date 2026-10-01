@@ -14,7 +14,7 @@ The sequence is a **timeline**: one block per step, coloured with the step's col
   **Alt**+arrows move, **+**/**−** change the length, **Ctrl/Cmd+Z** undoes.
 - **Preset** loads a sequence. The default is the **full calibration** (below); the others are from Eckert et al.
   (2022): 8 gray levels, 6 s each, pseudo-random (their most robust sequence); dark-to-light and light-to-dark ramps at
-  3, 6 and 10 s; blue and red ramps (shades, then tints) at 3 s; and cwtool's 20-step built-in. The paper describes
+  3, 6 and 10 s; blue and red ramps (shades, then tints) at 3 s; and the 20-step staircase cwtool used before October 2026. The paper describes
   its orders rather than listing them, so the pseudo-random order here is generated (fixed seed), not copied from its
   Fig. 1. The realistic *room* scene of Eckert et al. is not supported.
 - **Generate…** builds gray, blue, red, green or gray + RGB primaries ramps of any length, order and duration.
@@ -22,6 +22,9 @@ The sequence is a **timeline**: one block per step, coloured with the step's col
   same file drives the presenter and the analysis.
 
 ## The default: full calibration
+
+This is also cwtool's default sequence (`calibration.DEFAULT`, in the preset order); `calibration.scrambled` gives
+the order the presenter plays for a seed, with the same seeded shuffle.
 
 One sequence for both of cwtool's fits, about 5 minutes (34 steps, 291 s), built from Eckert et al. (2022) and from what the
 recordings showed (open issues 36, 40, 43):

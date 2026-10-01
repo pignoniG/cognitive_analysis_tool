@@ -72,7 +72,7 @@ def test_params_roundtrip(tmp_path):
 
 
 def test_calibration_sequence():
-    seq = calibration.DEFAULT
+    seq = calibration.STAIRCASE_20
     assert len(seq.steps) == 20
     assert seq.duration == 120
     assert seq.steps[8].rgb == (64, 0, 0)

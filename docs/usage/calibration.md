@@ -14,10 +14,15 @@ file and applied to their other recordings.
 
 ## The sequence
 
-The built-in sequence has 20 full-field steps: grey levels 0, 36, 73, 109, 146, 182, 219, 255, then red, green and
-blue at 64, 128, 191, 255. The built-in timing is 6 s per step (120 s). Other orders and timings, such as the
-pseudo-random order recommended by Eckert et al. (2022), are loaded from a CSV (**Load sequence…**), which the
-[calibration presenter](calibration-tool.md) can build, scramble per participant and play on a screen or in VR:
+The default sequence is the [calibration presenter](calibration-tool.md)'s **full calibration**: the 8 grey levels of
+Eckert et al. (2022), longer the darker; red, green and blue at 64, 128, 191 and 255, each after a black step; two greys
+repeated; 34 steps, 291 s, in a pseudo-random order (`calibration.DEFAULT`). The presenter usually scrambles it again
+for each participant, seeded by their ID: load the run file it saves (**Load sequence…**), which records the order
+played, or regenerate it with `calibration.scrambled(calibration.DEFAULT, "<participant ID>")`.
+
+The 20-step staircase used before October 2026 (greys 0 to 255, then red, green and blue at 64 to 255, 6 s each,
+ascending) is still available (**Built-in** menu, `calibration.STAIRCASE_20`) for recordings made with it; its fixed
+ascending order confounds luminance with time (open issues 36, 41, 43). Other sequences are loaded from a CSV:
 
 ```text
 time,r,g,b,label

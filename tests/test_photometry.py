@@ -16,10 +16,10 @@ RATE = 100
 
 
 def _participant_recording(folder, sensitivity, gains, k=1.0, b=0.3, noise=0.02, seed=0):
-    """Varjo recording of the built-in sequence (10 s steps) watched by a participant with the given
+    """Varjo recording of the 20-step staircase (10 s steps, as in April 2026) watched by a participant with the given
     light sensitivity and channel weights, on a display matching the default photometry."""
     p = Parameters()
-    seq = calibration.scaled(calibration.DEFAULT, STEP / calibration.STEP_SECONDS)
+    seq = calibration.scaled(calibration.STAIRCASE_20, STEP / calibration.STEP_SECONDS)
     colours = [(0, 0, 0)] * int(LEAD / STEP) + [s.rgb for s in seq.steps]
     t = np.arange(len(colours) * STEP * RATE) / RATE
     rgb = np.array([colours[min(int(x // STEP), len(colours) - 1)] for x in t], dtype=float)

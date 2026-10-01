@@ -42,7 +42,7 @@ def test_bad_files_are_rejected(tmp_path):
 
 def test_locate_finds_start_and_step_length():
     import numpy as np
-    seq = calibration.DEFAULT                    # 6 s steps
+    seq = calibration.STAIRCASE_20               # 6 s steps
     start, factor = 12.3, 10 / 6                 # recording used 10 s steps
     t = np.arange(0, 230, 0.01)
     rgb = np.full((len(t), 3), 30.0)             # a dim scene before and after
@@ -59,6 +59,7 @@ def test_locate_gives_up_without_changes():
     import numpy as np
     t = np.arange(0, 10, 0.1)
     assert calibration.locate(t, np.full((len(t), 3), 100.0), calibration.DEFAULT) is None
+    assert calibration.locate(t, np.full((len(t), 3), 100.0), calibration.STAIRCASE_20) is None
 
 
 def test_locate_ignores_tracking_gaps_and_windows_past_the_end():
@@ -66,7 +67,7 @@ def test_locate_ignores_tracking_gaps_and_windows_past_the_end():
     # during most red and blue steps, and the recording ends soon after the sequence. A start near
     # the end used to win, scored on the few seconds of its window inside the recording.
     import numpy as np
-    seq = calibration.DEFAULT
+    seq = calibration.STAIRCASE_20
     start, factor = 1.8, 10 / 6
     t = np.arange(0, 206, 0.005)
     rgb = np.full((len(t), 3), 45.0)
@@ -78,3 +79,58 @@ def test_locate_ignores_tracking_gaps_and_windows_past_the_end():
     assert loc.start == pytest.approx(start, abs=0.1)
     assert loc.sequence.duration == pytest.approx(200, abs=0.5)
     assert 0.5 < loc.coverage < 0.9
+
+
+# The presenter's default sequence in the orders its own JavaScript gives (docs/calibration-tool/index.html, run in
+# Node in October 2026): the preset (seed "calibration") and a run scrambled for participant "P01".
+PRESET_ORDER = ['Gray 255', 'Gray 219', 'Black', 'Blue 255', 'Black', 'Green 191', 'Black', 'Red 191', 'Black',
+                'Blue 191', 'Black', 'Red 64', 'Gray 182', 'Black', 'Green 128', 'Gray 36', 'Gray 146', 'Black',
+                'Red 128', 'Gray 0', 'Black', 'Green 255', 'Black', 'Blue 64', 'Gray 73 (repeat)', 'Black', 'Red 255',
+                'Gray 73', 'Black', 'Blue 128', 'Gray 182 (repeat)', 'Black', 'Green 64', 'Gray 109']
+P01_ORDER = ['Black', 'Green 64', 'Gray 73', 'Black', 'Blue 64', 'Black', 'Red 255', 'Gray 219', 'Gray 146',
+             'Gray 182 (repeat)', 'Gray 73 (repeat)', 'Gray 36', 'Black', 'Green 191', 'Gray 255', 'Black', 'Red 64',
+             'Black', 'Red 128', 'Gray 109', 'Black', 'Blue 191', 'Black', 'Blue 128', 'Black', 'Red 191', 'Black',
+             'Green 128', 'Black', 'Green 255', 'Gray 0', 'Gray 182', 'Black', 'Blue 255']
+
+
+def test_default_is_the_presenters_full_calibration():
+    seq = calibration.DEFAULT
+    assert [s.label for s in seq.steps] == PRESET_ORDER
+    assert len(seq.steps) == 34 and seq.duration == 291
+    lengths = {s.label: s.end - s.start for s in seq.steps}
+    assert lengths["Gray 0"] == 20 and lengths["Gray 255"] == 12 and lengths["Blue 64"] == 8
+    # Every colour follows its own black step, which moves with it.
+    for prev, step in zip(seq.steps, seq.steps[1:]):
+        assert step.linked == (step.label.split()[0] in ("Red", "Green", "Blue"))
+        if step.linked:
+            assert prev.label == "Black"
+    assert all(a.end == b.start for a, b in zip(seq.steps, seq.steps[1:]))
+
+
+def test_participant_order_matches_the_presenter():
+    seq = calibration.scrambled(calibration.DEFAULT, "P01")
+    assert [s.label for s in seq.steps] == P01_ORDER
+    assert seq.duration == calibration.DEFAULT.duration
+    assert calibration.scrambled(calibration.DEFAULT, "P01").steps == seq.steps      # reproducible
+
+
+def test_sequence_file_keeps_the_links(tmp_path):
+    lines = ["time,r,g,b,label,duration,keep"]
+    t = 0.0
+    for s in calibration.DEFAULT.steps:
+        lines.append(f"{t:g},{s.rgb[0]},{s.rgb[1]},{s.rgb[2]},{s.label},{s.end - s.start:g},{int(s.linked)}")
+        t += s.end - s.start
+    seq = calibration.load_sequence(write(tmp_path, "\n".join(lines) + "\n"))
+    assert seq.steps == calibration.DEFAULT.steps
+
+
+def test_locate_finds_the_default_sequence():
+    import numpy as np
+    start = 7.4
+    t = np.arange(0, 320, 0.01)
+    rgb = np.full((len(t), 3), 128.0)                 # the presenter's grey lead-in and a grey scene after
+    for s in calibration.DEFAULT.steps:
+        sel = (t >= start + s.start) & (t < start + s.end)
+        rgb[sel] = np.array(s.rgb) * 0.9
+    loc = calibration.locate(t, rgb, calibration.DEFAULT)
+    assert loc.start == pytest.approx(start, abs=0.05) and loc.error < 0.05

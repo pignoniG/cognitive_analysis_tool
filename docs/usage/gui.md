@@ -91,7 +91,8 @@ of the gaze circle and the background.
 
 See [Participant calibration](calibration.md) for the procedure.
 
-- **Load sequence… / Built-in**: the colour sequence to overlay: the built-in 20 steps, a CSV, or a run file saved by
+- **Load sequence… / Built-in**: the colour sequence to overlay: a built-in one (the presenter's full calibration, or the
+  20-step staircase used before October 2026), a CSV, or a run file saved by
   the [calibration presenter](calibration-tool.md). A run file's onset times are on the presenting computer's clock,
   so they place the sequence in the recording (the start and the overlay are set; a run played for another recording
   is reported as outside it).
