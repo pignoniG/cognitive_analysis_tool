@@ -323,6 +323,15 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
         if params.lux_use_video:
             y_w, y_frame = relative_luminances(video, params)
             ratio = np.where(y_frame[order] > 1e-4, y_w[order] / np.maximum(y_frame[order], 1e-4), 1.0)
+            limit = params.lux_ratio_limit
+            if limit > 0:
+                bounded = np.clip(ratio, 1 / max(limit, 1.0), max(limit, 1.0))
+                share = float(np.mean(bounded != ratio))
+                if share > RATIO_BOUND_NOTE:
+                    notes.append(f"The video ratio reached its bound (×{max(limit, 1.0):g}) in {share:.0%} of the video "
+                                 "samples: the gaze area is much darker or brighter than the frame there (or the frame "
+                                 "is nearly black). Raise 'Max video ratio' if that contrast is real.")
+                ratio = bounded
             video_ratio = np.interp(time, vt, ratio)
             lum = avg * video_ratio
             spread = ratio_spread(ratio[y_frame[order] > RATIO_MIN_FRAME])
@@ -396,6 +405,8 @@ def covered(time: np.ndarray, samples: np.ndarray, max_gap: float) -> np.ndarray
 # The video ratio Y_w / Y_frame is judged on frames that are not nearly black, and flagged when its
 # 10th to 90th percentile spread exceeds this factor.
 RATIO_MIN_FRAME = 0.005
+# Share of video samples at the ratio's bound above which a note says so.
+RATIO_BOUND_NOTE = 0.05
 RATIO_SPREAD_WARNING = 1.5
 
 

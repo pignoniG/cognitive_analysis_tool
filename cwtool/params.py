@@ -65,6 +65,10 @@ class Parameters:
     lux_offset: float = 0.0
     lux_solid_angle: float = 2.2
     lux_use_video: bool = True           # distribute the sensor's average with the scene video (2021 eq. 5-8)
+    # The video ratio Y_w / Y_frame is kept between 1/limit and limit (0 = no bound): in a nearly black frame it
+    # divides by a small, noisy value, and with automatic exposure a black pixel means "below the captured
+    # range", not no light (open issue 29).
+    lux_ratio_limit: float = 10.0
 
     # Scene camera alone, when a Pupil recording has no lux log:
     #   "auto":  automatic exposure; the video gives only relative luminance, mapped onto Lmin-Lmax
@@ -209,7 +213,7 @@ class DisplayPhotometry:
         return cls(**{k: v for k, v in data.items() if k in known})
 
 
-_LUX = ("lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video")
+_LUX = ("lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video", "lux_ratio_limit")
 _CAMERA = ("camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms")
 _PANEL = ("l_min", "l_max")
 

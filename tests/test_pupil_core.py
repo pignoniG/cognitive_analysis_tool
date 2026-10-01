@@ -209,3 +209,17 @@ def test_covered():
     t = np.array([0.0, 0.4, 1.0, 2.0, 3.6, 5.0])
     assert pipeline.covered(t, [0.2, 0.6, 1.0, 3.0, 3.5], 0.5).tolist() == [True, True, True, False, True, False]
     assert not pipeline.covered(t, [], 0.5).any()
+
+
+def test_video_ratio_is_bounded(tmp_path):
+    """A gaze area far brighter than a nearly black frame cannot multiply the sensor's luminance without bound."""
+    frames = np.arange(0, 6, 1 / 30)
+    folder = write_core_recording(tmp_path / "core", [128] * len(frames), frames, lux=lambda t: 200.0)
+    rec = devices.load(folder)
+    video = _video(rec)
+    video.frame_lin[:] = video.frame_lin / 50          # whole frame 50× darker than the gaze area
+    r = pipeline.run(rec, video, Parameters(fixation_weight=1.0))
+    assert np.nanmax(r.luminance_ratio) == pytest.approx(10.0)
+    assert any("reached its bound" in w for w in r.warnings)
+    free = pipeline.run(rec, video, Parameters(fixation_weight=1.0, lux_ratio_limit=0))
+    assert np.nanmax(free.luminance_ratio) == pytest.approx(50.0, rel=0.05)

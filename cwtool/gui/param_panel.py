@@ -48,6 +48,9 @@ NUMBERS = {
                         "Ratio of illuminance to average luminance for the sensor in its housing: the sensor's "
                         "angular response integrated over its field (2.2 for the TSL2591 kit; π for a bare "
                         "cosine sensor). Average luminance = (gain·lux + offset) / Ω"),
+    "lux_ratio_limit": ("Max video ratio", 0, 10000, 1, 1,
+                        "The ratio of the gaze-weighted to the whole-frame relative luminance is kept between 1/limit "
+                        "and limit, so a nearly black frame cannot multiply the luminance without bound; 0 = no bound"),
     "camera_white": ("Camera full scale (cd/m²)", 0.1, 1e7, 50, 1,
                      "Luminance that saturates the scene camera (code 255) at the reference exposure; "
                      "set it with 'Calibrate camera from lux' on a recording made with the same exposure"),
@@ -91,7 +94,8 @@ GROUPS = [
     ("Participant light response", ["sensitivity", "gain_r", "gain_g", "gain_b", "fixation_weight"]),
     ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
                       "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
-    ("Luminance from lux sensor (glasses)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video"]),
+    ("Luminance from lux sensor (glasses)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video",
+                                             "lux_ratio_limit"]),
     ("Scene camera without lux log (glasses)",
      ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),

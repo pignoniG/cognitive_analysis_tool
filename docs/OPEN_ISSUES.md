@@ -414,6 +414,9 @@ is revised; they remain in the git history of this file.
      nothing absorbs it, so it changes absolute luminance by a factor 2.
 - **Proposal:** keep the paper's method, add a bound on the gaze/frame ratio (e.g. 1:10 to 10:1, adjustable), and
   leave out the halving; set the bound on a Pupil recording with a lux log.
+- **2.0 (October 2026):** the bound is in: `lux_ratio_limit` ("Max video ratio", default 10) keeps the ratio between
+  1/10 and 10, with a note when more than 5 % of the video samples reach it. The floor and the halving are not
+  reproduced. The value 10 is a starting point, to be set on a Pupil recording with a lux log.
 - **Status:** open; waiting for a Pupil sample recording (G. Pignoni, expected early October 2026).
 
 ### 30. Master pooled both eyes and used pixel diameters for Pupil Core

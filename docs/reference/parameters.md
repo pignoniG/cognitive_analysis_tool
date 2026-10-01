@@ -41,6 +41,7 @@ not in participant files.
 | `lux_offset` | 0 | recalibration offset, lux (1.x: 0.66935) |
 | `lux_solid_angle` | 2.2 | illuminance / average luminance ("Lux ÷ luminance (Ω)" in the app) for the sensor in its housing (not a solid angle; see [Lux sensor](../hardware/lux-sensor.md)) |
 | `lux_use_video` | on | distribute the sensor's average over the view with the scene video |
+| `lux_ratio_limit` | 10 | the video ratio (gaze-weighted / whole frame) is kept between 1/limit and limit ("Max video ratio"); 0 = no bound. A note says when it is reached in more than 5 % of the video samples |
 
 ## Scene camera without a lux log (glasses)
 

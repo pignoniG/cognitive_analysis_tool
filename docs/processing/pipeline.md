@@ -68,7 +68,7 @@ space (`video.at_gamma`), and the two areas weighted: \(\mathbf{C}_w = w\,\mathb
 | Mode | When | Luminance | Parameters | Code |
 |---|---|---|---|---|
 | display | display devices (Varjo) | \(\sum_c k_c\,(L_\text{max}\,\tfrac{g_c}{\bar g}\,C_{w,c} + L_\text{min}(1-C_{w,c}))\), \(k\) = BT.709 weights | `l_min` 0.01, `l_max` 100 cd/m², `gamma` 2.2 (display photometry file); `gain_r/g/b` 1 (participant) | `scene_luminance`, `luminance.absolute_luminance` |
-| lux sensor | glasses with a lux log | \(\bar L \cdot Y_w / Y_\text{frame}\), \(\bar L = (g\,E + o)/\Omega\) from the smoothed lux \(E\) (Savitzky–Golay 11, order 6) | `lux_gain` 1, `lux_offset` 0, `lux_solid_angle` 2.2, `lux_use_video` on (off: \(\bar L\) alone) | `luminance_from_lux`, `relative_luminances`, `lux.smooth`, `lux.average_luminance` |
+| lux sensor | glasses with a lux log | \(\bar L \cdot Y_w / Y_\text{frame}\), the ratio kept between 1/limit and limit, \(\bar L = (g\,E + o)/\Omega\) from the smoothed lux \(E\) (Savitzky–Golay 11, order 6) | `lux_gain` 1, `lux_offset` 0, `lux_solid_angle` 2.2, `lux_use_video` on (off: \(\bar L\) alone), `lux_ratio_limit` 10 | `luminance_from_lux`, `relative_luminances`, `lux.smooth`, `lux.average_luminance` |
 | camera, fixed exposure | glasses without a lux log, `camera_exposure` = fixed | \(L_\text{white}\,\tfrac{t_\text{ref}}{t}\,Y_w\); warning if the gaze area is saturated in more than 5 % of samples | `camera_white` 1000 cd/m², `camera_reference_ms` 0, `camera_exposure_ms` 0 | `relative_luminances`, `Parameters.camera_full_scale`, `clipped_fraction` |
 | camera, relative | glasses without a lux log, `camera_exposure` = auto | as display, with a warning that it is only relative | `l_min`, `l_max`, `gamma` | `scene_luminance` |
 
