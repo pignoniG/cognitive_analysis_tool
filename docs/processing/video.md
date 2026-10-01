@@ -2,14 +2,17 @@
 
 `cwtool/video.py`. For every valid gaze sample, the frame shown at that moment is measured in two areas:
 
-- the **gaze circle** (fixation area): a disc of `fixation_radius_deg` (default 5.25°) around the gaze point,
+- the **gaze circle** (fixation area): a disc of `fixation_radius_deg` (default 16.35°) around the gaze point,
   limited to the visible scene (near the edge of a circular capture it does not take in the black corners);
 - the **background**: the rest of the visible scene. On circular Varjo captures the visible scene is a centred
   circle of `field_radius` × half the frame height (default 0.8), which excludes the black corners; on other
   devices it is the whole frame. By default the gaze circle is removed from the background
   (`background_excludes_fixation`), as in the Varjo manuscript (in preparation) and Eckert et al.
 
-The luminance used later is a weighted sum of the two (default 65 % gaze circle, 35 % background).
+The luminance used later is a weighted sum of the two (default 26 % gaze circle, 74 % background).
+The default radius and weights are those of Eckert et al. (2022): a radius of 14.8 % of their headset's display
+diagonal (16.35°), and the weights their grid search found best on their VR scenes (MAE 0.31 mm)
+(1.x used 5.25° and 65 %); they are a reference value, not a calibration for each device (open issue 47).
 
 ## Geometry
 
@@ -20,8 +23,9 @@ r = \frac{\text{fixation\_radius\_deg}}{\text{vertical field of view}} \cdot h
 \]
 
 with \(h\) the analysed frame height and the vertical field of view from the device profile. This assumes a linear
-lens mapping ([open issue 33](../OPEN_ISSUES.md) for the wide-angle cameras of glasses trackers). 5.25° equals the
-earlier default of 1/8 of the scene circle on the Varjo XR-4.
+lens mapping ([open issue 33](../OPEN_ISSUES.md) for the wide-angle cameras of glasses trackers). The 1.x default,
+5.25°, was 1/8 of the scene circle on the Varjo XR-4; on a glasses scene camera with about 54° of vertical view
+the 16.35° circle spans about 60 % of the frame height.
 
 ## Linearising before averaging
 

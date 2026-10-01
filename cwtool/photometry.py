@@ -234,7 +234,7 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
                      "cd/m². Steps too short to dark-adapt make the black look brighter than it is.")
         if np.isclose(l_min, BLACK_RANGE, rtol=0.05).any():
             notes.append("The black level reached the limit of its range.")
-    if s_range[1] / s_range[0] > 4:
+    if not s_range[0] > 0 or s_range[1] / s_range[0] > 4:      # an infinite interval gives 0 at its low end
         notes.append(f"The sensitivity is weakly determined ({s_range[0]:.3g}–{s_range[1]:.3g}): the steps "
                      "may not reach the range where the pupil stops shrinking, or the pupil data are noisy.")
     if np.isclose(sens, SENSITIVITY_RANGE, rtol=0.05).any():
@@ -293,7 +293,7 @@ class LuxFit:
     expected_before: np.ndarray     # mm, input parameters
     expected_after: np.ndarray      # mm, fitted
     notes: list
-    fixation_weight: float = 0.65   # the fitted one with ``fit_fixation``, else the input's
+    fixation_weight: float = 0.26   # the fitted one with ``fit_fixation``, else the input's
     weight_fitted: bool = False
 
 
@@ -406,7 +406,7 @@ def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, sta
                      "may not describe what the eye saw, or the sequence start is wrong.")
     if np.isclose(s_fit, SENSITIVITY_RANGE, rtol=0.05).any():
         notes.append("The sensitivity reached the limit of its range: check the luminance and the sequence start.")
-    elif s_range[1] / s_range[0] > 4:
+    elif not s_range[0] > 0 or s_range[1] / s_range[0] > 4:
         notes.append(f"The sensitivity is weakly determined ({s_range[0]:.3g}–{s_range[1]:.3g}).")
     if prep.mode != "lux sensor":
         notes.append("The luminance does not come from the lux sensor.")

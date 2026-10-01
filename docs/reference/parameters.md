@@ -31,7 +31,7 @@ not in participant files.
 |---|---|---|
 | `sensitivity` | 1 | factor on the luminance entering Watson & Yellott; also absorbs common errors of the display photometry (fitted) |
 | `gain_r`, `gain_g`, `gain_b` | 1 | channel weights for the pupil, normalised by their mean (fitted) |
-| `fixation_weight` | 0.65 | weight of the gaze circle; the background gets 1 − weight (also used with lux devices) |
+| `fixation_weight` | 0.26 | weight of the gaze circle (Eckert et al. 2022; 1.x used 0.65); the background gets 1 − weight (also used with lux devices) |
 
 ## Lux sensor (glasses)
 
@@ -89,7 +89,7 @@ not in participant files.
 
 | Name | Default | Meaning |
 |---|---|---|
-| `fixation_radius_deg` | 5.25° | gaze circle radius |
+| `fixation_radius_deg` | 16.35° | gaze circle radius (Eckert et al. 2022; 1.x used 5.25°) |
 | `field_radius` | 0.8 | scene circle radius as a fraction of half the frame height (circular videos) |
 | `background_excludes_fixation` | on | remove the gaze circle from the background |
 | `analysis_width` | 500 px | frames are downscaled to this width |

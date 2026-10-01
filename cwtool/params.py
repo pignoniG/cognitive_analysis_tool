@@ -19,8 +19,10 @@ class VideoSettings:
     vertical_fov: float = 105.0          # deg spanned by the frame height; set from the recording's device
     field_radius: float = 0.8            # scene circle radius, fraction of half the frame height
     # Gaze circle radius in degrees of visual angle (converted with vertical_fov, assuming a linear
-    # lens mapping). 5.25° equals the earlier default of 1/8 of the scene circle on the Varjo XR-4.
-    fixation_radius_deg: float = 5.25
+    # lens mapping). 16.35° and the weight 0.26 below are Eckert et al. (2022, sec. 2.6 and 3.2.1): a radius of
+    # 14.8 % of the display diagonal (110.48° diagonal field of view), weights from a grid search (MAE 0.31 mm).
+    # 1.x used 5.25°, 1/8 of the Varjo scene circle, with weight 0.65.
+    fixation_radius_deg: float = 16.35
     background_excludes_fixation: bool = True   # background = rest of the scene, as in the Varjo manuscript and Eckert et al.
     analysis_width: int = 500            # frames are downscaled to this width
 
@@ -54,7 +56,7 @@ class Parameters:
     gain_r: float = 1.0                  # channel weights for the pupil (relative balance)
     gain_g: float = 1.0
     gain_b: float = 1.0
-    fixation_weight: float = 0.65        # background weight is 1 - fixation_weight
+    fixation_weight: float = 0.26        # background weight is 1 - fixation_weight (Eckert et al. 2022)
 
     # Lux sensor (glasses): average luminance = (gain · lux + offset) / lux_solid_angle.
     # 2.2 is the ratio of illuminance to average luminance for the TSL2591 in its printed housing (its

@@ -50,7 +50,7 @@ Neon and Glasses 3 readers are **experimental**: every result from them carries 
 | Match each valid gaze sample to its frame: nearest recorded timestamp (Core, Neon) or constant frame rate (Varjo, Glasses 3) | – | `FrameClock` |
 | Decode (PyAV, else OpenCV) in parallel chunks of at least 150 frames; only frames with gaze are converted | `--workers` (default one per core) | `_frames_pyav`, `_frames_opencv` |
 | Downscale with nearest-neighbour sampling, convert to RGB | `analysis_width` 500 px | `prepare_frame` |
-| Gaze circle: disc of the given radius at the gaze point | `fixation_radius_deg` 5.25° (radius = degrees / vertical field of view × height) | `radii`, `analyse_frame` |
+| Gaze circle: disc of the given radius at the gaze point | `fixation_radius_deg` 16.35° (radius = degrees / vertical field of view × height) | `radii`, `analyse_frame` |
 | Background: whole frame, or a centred circle on circular (Varjo) videos; minus the gaze circle | `field_radius` 0.8, `background_excludes_fixation` on | `field_mask` |
 | Per area and channel: 256-bin histogram → mean code value and mean of \((C/255)^\gamma\) for γ = 1.4, 1.6 … 3.0 (gaze circle, background, whole visible scene) | – | `_histograms`, `_means` |
 | Cache, reused only if format, γ grid, settings, video name, frame clock and gaze all match | – | `VideoResult.save`, `load_cached` |
@@ -61,7 +61,7 @@ Neon and Glasses 3 readers are **experimental**: every result from them carries 
 
 **3a. Linear colour at the current gamma.** The stored linear means are interpolated to `gamma` (default 2.2) in log
 space (`video.at_gamma`), and the two areas weighted: \(\mathbf{C}_w = w\,\mathbf{C}_\text{gaze} + (1-w)\,\mathbf{C}_\text{background}\),
-`fixation_weight` \(w\) = 0.65 (`VideoResult.weighted`).
+`fixation_weight` \(w\) = 0.26 (`VideoResult.weighted`).
 
 **3b. One of four methods**, chosen from the device and the data (reported as `Result.luminance_mode`):
 

@@ -247,10 +247,12 @@ is revised; they remain in the git history of this file.
 - **Problem:** the fixation area is a fraction of the frame, so it covers a different visual angle on each
   device (Varjo, Pupil Core, Neon scene cameras have different FOVs), and the paper does not give its size.
 - **Proposal:** define it in degrees per device and report the value in the paper.
-- **Reference:** Eckert et al. (2022) used a fixation radius of about 16° (display width / 5) with weights 26:74.
+- **Reference:** Eckert et al. (2022, sec. 2.6) used a fixation radius of display width / 5 (385 px, 14.8 % of the
+  diagonal), 16.35° of their 110.48° diagonal field of view, with weights 26:74 (sec. 3.2.1).
   The 2.0 default is about 5° radius, roughly a tenth of their area, so the 65:35 and 26:74 weights are not directly
   comparable; the paper should report the radius next to the weights.
-- **2.0:** the gaze circle is set as a radius in degrees (`fixation_radius_deg`, default 5.25°, equal to the previous
+- **2.0:** the gaze circle is set as a radius in degrees (`fixation_radius_deg`, default 5.25° until October 2026, now
+  16.35° as in Eckert et al.; 5.25° equalled the previous
   Varjo default), converted to pixels with each device's vertical field of view, assuming a linear lens mapping.
 - **Status:** fixed in 2.0 (the lens mapping is approximate).
 
@@ -931,7 +933,7 @@ is revised; they remain in the git history of this file.
 - **Problem:** the value has no published basis for 2.0's gaze circle. 0.65 comes from the 1.x Varjo build
   (`vid_analysis.subFrameAsinc`, issue 14). The 2021 paper used the gaze area alone (a Grab Cut region), i.e. a weight
   of 1 on the glasses. Eckert et al. (2022) found 26 % fixation and 74 % background best (grid search, MAE 0.31 mm), for
-  a fixation circle of about 16° radius; 2.0's circle is 5.25°, about a tenth of that area, so the weights do not
+  a fixation circle of 16.35° radius; 2.0's circle was 5.25°, about a tenth of that area, so the weights do not
   transfer directly (issue 17). They also found the fixation area alone "prone to errors" and suggest weighting
   towards the screen centre when users turn their head rather than their eyes.
 - **Note:** the full-field calibration sequence cannot determine the weight, since fixation and background are the same
@@ -958,6 +960,10 @@ is revised; they remain in the git history of this file.
 - **2.0:** the calibration box has *Also fit the fixation weight* for glasses with a lux log (`fit_lux_response(...,
   fit_fixation=True)`). It flags a scene where the cost hardly depends on the weight, and a weight at the limit of its
   range. The default stays 0.65 until more recordings are compared.
+- **October 2026:** the defaults follow Eckert et al. (2022): gaze circle radius 16.35° and weight 0.26, a published
+  reference rather than a value of the 1.x build. Parameter files keep the weight they were saved with (0.65 in
+  files from before), and changing the radius needs a new video analysis. The Pupil Core recording above
+  preferred the gaze area alone with a 5.25° circle; the comparison should be repeated with the 16.35° circle.
 - **Proposal:** choose the weight together with the circle radius from a reference (G. Pignoni has one suggesting a
   different weighting), possibly per device type, and report both.
 - **Status:** open.

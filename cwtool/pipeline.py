@@ -44,7 +44,7 @@ class Result:
     # that distributes it, both on ``time``; the ratio is None with ``lux_use_video`` off.
     luminance_sensor: Optional[np.ndarray] = None       # cd/m²
     luminance_ratio: Optional[np.ndarray] = None
-    fixation_weight: float = 0.65     # weight of the gaze circle in the weighted colour
+    fixation_weight: float = 0.26     # weight of the gaze circle in the weighted colour
     # How much light is left in ΔPD (see :func:`light_leakage`); NaN when the luminance barely varies.
     leak_slope: float = float("nan")  # mm of ΔPD per tenfold luminance
     leak_r2: float = float("nan")     # share of ΔPD's variance explained by log luminance and its recent change

@@ -15,7 +15,7 @@ per pixel, before averaging (see [Scene video analysis](video.md#linearising-bef
 this is the usual approximation of the sRGB curve; unlike the piecewise sRGB formula it stays continuous for any
 \(\gamma\), which is adjustable because headset tone mapping is undocumented.
 
-The gaze circle and background means are then weighted, with \(w\) = `fixation_weight` (default 0.65):
+The gaze circle and background means are then weighted, with \(w\) = `fixation_weight` (default 0.26, Eckert et al. 2022):
 
 \[
 \mathbf{C}_w = w\,\mathbf{C}_\text{lin,gaze} + (1 - w)\,\mathbf{C}_\text{lin,background}
