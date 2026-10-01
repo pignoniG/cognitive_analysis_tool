@@ -51,6 +51,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.pupil.setLabel("left", "Pupil diameter (mm)")
         self.cw.setLabel("left", "ΔPD (mm)")
         self.lum.setLabel("left", "Luminance (cd/m²)")
+        self.lum.setLogMode(x=False, y=True)      # luminance spans decades (the display's black to its white)
         self.ratio.setLabel("left", "Video ratio")
         self.cw.setLabel("bottom", "Time (s)")
         for p in (self.pupil, self.lum, self.ratio):
@@ -180,10 +181,14 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             if lo is not None:
                 plot.setYRange(lo, hi, padding=0.08)
         lum, ratio = self._lum_data
-        for plot, values in ((self.lum, lum), (self.ratio, ratio)):
-            lo, hi = data_range(values)
+        if lum is not None:
+            positive = np.asarray(lum, dtype=float)
+            lo, hi = data_range(np.log10(positive[positive > 0]))    # the luminance plot is logarithmic
             if lo is not None:
-                plot.setYRange(lo, hi, padding=0.1)
+                self.lum.setYRange(lo, hi, padding=0.1)
+        lo, hi = data_range(ratio)
+        if lo is not None:
+            self.ratio.setYRange(lo, hi, padding=0.1)
 
     def show_result(self, r: Result) -> None:
         self.raw_curve.setData(r.time, r.measured_raw)
