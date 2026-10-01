@@ -104,7 +104,7 @@ The expected pupil is still computed through such stretches, so its filters run 
 |---|---|---|---|
 | 5.1 | Light sensitivity: \(s \cdot L\) | `sensitivity` 1 | `steady_pupil` |
 | 5.2 | Watson & Yellott: flux = \(sL\) × adapting field area (profile, deg²) × 1 (two eyes) or 0.1 (one); Stanley & Davies diameter; age correction against 28.58 years | `age` 25, `eyes` 2 | `model.watson_yellott` |
-| 5.3 | Latency: shift right | `delay` 0.5 s | `model.delay` |
+| 5.3 | Latency: shift right, padding with the first value; a delay between samples is interpolated linearly | `delay` 0.5 s | `model.delay` |
 | 5.4 | Dynamics switch: 5.5–5.6 only when on | `dynamics` on | `dynamic_pupil` |
 | 5.5 | Attack/release filter: one pole, τ = `attack` while the expected diameter rises, `release` while it falls; with 2 stages a second `release` stage acts during constriction only (S-shaped onset) | `attack` 6 s, `release` 0.5 s, `constriction_stages` 2 | `model.attack_release` |
 | 5.6 | Transient (pupillary escape): minus `transient` × \(h/(h+0.2)\), \(h\) = rise of log₁₀ L over its low-pass with τ = `escape`; delayed and passed through one low-pass (τ = `release`) per constriction stage | `transient` 0 mm (off), `escape` 2 s | `model.escape_transient`, `model.lowpass` |

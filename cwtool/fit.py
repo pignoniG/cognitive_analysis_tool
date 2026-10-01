@@ -55,10 +55,14 @@ class FitResult:
     escape: float
     pupil_correction: float
     pupil_offset: float
-    rms_before: float           # mm, residual RMS of ΔPD in the window with the input parameters
-    rms_after: float            # mm, same with the fitted parameters
+    rms_before: float           # mm, residual RMS of ΔPD in the window with the input parameters (as run gives it,
+    rms_after: float            # mm, same with the fitted parameters                           with its alignment)
     window: tuple[float, float]
     notes: list
+    # mm, what the fit minimises: RMS of measured (+ offset with fit_offset) − expected in the window, on the
+    # lightly smoothed pupil, without the alignment of ``run``.
+    fit_rms_before: float = float("nan")
+    fit_rms_after: float = float("nan")
 
 
 class _Problem:
@@ -303,8 +307,12 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         sel = (r.cw_time >= start) & (r.cw_time <= end)
         return residual_rms(r.cw[sel])
 
+    dyn_in = params.dynamics
+    fit_before = problem.solve(params.delay, params.attack if dyn_in else None, params.release if dyn_in else None,
+                               params.transient if dyn_in else 0.0, params.escape)[0]
+    fit_after = problem.solve(delay, attack, release, transient, escape)[0]
     return FitResult(params=fitted, delay=delay, attack=fitted.attack, release=fitted.release,
                      transient=fitted.transient, escape=fitted.escape,
                      pupil_correction=fitted.pupil_correction, pupil_offset=fitted.pupil_offset,
                      rms_before=window_rms(params), rms_after=window_rms(fitted), window=(start, end),
-                     notes=notes)
+                     notes=notes, fit_rms_before=fit_before, fit_rms_after=fit_after)

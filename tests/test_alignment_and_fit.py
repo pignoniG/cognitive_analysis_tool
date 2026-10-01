@@ -177,6 +177,8 @@ def test_fit_recovers_the_transient(tmp_path):
     assert fit.params.transient == fit.transient and fit.params.escape == fit.escape
     assert fit.rms_after < without.rms_after / 2
     assert without.transient == 0.0 and without.params.transient == 0.0
+    # The fit's own error (no alignment) falls too, and is what the fit minimised.
+    assert fit.fit_rms_after < fit.fit_rms_before and fit.fit_rms_after <= without.fit_rms_after
 
 
 def test_fit_turns_the_transient_off_when_there_is_none(tmp_path):

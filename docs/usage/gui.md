@@ -101,7 +101,9 @@ See [Participant calibration](calibration.md) for the procedure.
 - **ΔPD RMS in sequence**: how well the model fits within the sequence, the value to minimise when calibrating
   by hand.
 - **1. Fit light sensitivity**: the participant's light sensitivity and channel weights (optionally gamma and the display's black level, *Also fit the black level*), with a
-  result window showing each step's steady-state pupil against the model.
+  result window showing each step's steady-state pupil against the model. Step 2's result shows two errors: the **fit error**, what the
+  fit minimises (measured − expected in the sequence, without an offset), and the ΔPD RMS in the sequence with the
+  current alignment (with alignment 'recording', after the whole recording's median offset).
 - **2. Fit latency and offset**: the participant's timing and dynamics (neither the pupil scale nor the offset is fitted: set
   *Pupil scale correction* and *Pupil offset* by hand), optionally with the
   transient constriction after brightening (pupillary escape).

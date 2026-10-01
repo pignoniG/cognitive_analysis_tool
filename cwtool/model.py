@@ -38,12 +38,21 @@ def watson_yellott(luminance, age: float, field: float, eyes: int = 2,
 
 
 def delay(signal, fs: float, seconds: float) -> np.ndarray:
-    """Shift right by ``seconds``, padding with the first value."""
+    """Shift right by ``seconds``, padding with the first value. A delay between samples is interpolated
+    linearly, so the result changes smoothly with ``seconds`` (as the calibration fit needs)."""
     x = np.asarray(signal, dtype=float)
-    n = min(int(seconds * fs), len(x))
-    if n <= 0:
+    d = max(float(seconds) * fs, 0.0)
+    if len(x) == 0 or d == 0:
         return x.copy()
-    return np.concatenate([np.full(n, x[0]), x[:-n]])
+    k = int(np.floor(d + 1e-9))          # whole samples, robust to 0.29 · 100 = 28.999…
+    f = d - k if d - k > 1e-9 else 0.0
+
+    def shifted(n: int) -> np.ndarray:
+        n = min(n, len(x))
+        return np.concatenate([np.full(n, x[0]), x[:len(x) - n]])
+
+    out = shifted(k)
+    return out if f == 0.0 else (1 - f) * out + f * shifted(k + 1)
 
 
 def attack_release(signal, fs: float, attack: float, release: float, stages: int = 1) -> np.ndarray:

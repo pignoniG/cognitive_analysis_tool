@@ -570,7 +570,10 @@ class MainWindow(QMainWindow):
             dyn += f"<br>transient {fit.transient:.2f} mm, escape τ {fit.escape:.2f} s"
         notes = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {n}</span>" for n in fit.notes)
         box = QMessageBox(QMessageBox.Question, "Calibration fit",
-                          f"<b>ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b><br><br>"
+                          f"<b>Fit error: {fit.fit_rms_before:.3f} → {fit.fit_rms_after:.3f} mm</b> (what the fit "
+                          f"minimises: measured − expected in the sequence, without an offset)<br>"
+                          f"ΔPD RMS in sequence with alignment '{fit.params.alignment}': {fit.rms_before:.3f} → "
+                          f"{fit.rms_after:.3f} mm<br><br>"
                           f"latency {fit.delay:.2f} s{dyn}<br>"
                           f"(the pupil scale stays ×{fit.pupil_correction:.3g}, as set by hand; the pupil "
                           f"offset is not fitted)"

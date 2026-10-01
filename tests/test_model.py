@@ -27,6 +27,14 @@ def test_delay_pads_with_first_value():
     assert out.tolist() == [1, 1, 1, 2]
 
 
+def test_delay_is_exact_on_samples_and_interpolates_between():
+    x = np.arange(10, dtype=float)
+    assert model.delay(x, fs=100, seconds=0.03).tolist() == [0, 0, 0, 0, 1, 2, 3, 4, 5, 6]
+    assert model.delay(np.arange(100.0), fs=100, seconds=0.29)[50] == 21     # not 22: 0.29 · 100 = 28.999…
+    assert model.delay(x, fs=100, seconds=0.025)[5] == pytest.approx(2.5)
+    assert model.delay(x, fs=10, seconds=5).tolist() == [0.0] * 10
+
+
 def test_attack_release_asymmetry():
     fs = 100
     up = np.r_[np.zeros(10), np.ones(300)]
