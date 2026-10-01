@@ -50,20 +50,20 @@ video (after the first 0.5 s), so the fit sees the same, below-nominal levels as
 the measured steady states,
 
 \[
-A_s \approx c \cdot WY(s \cdot L_s(g_R, g_G, g_B, \gamma)) + d
+A_s \approx WY(s \cdot L_s(g_R, g_G, g_B, \gamma, L_\text{min})) \; (+\, d)
 \]
 
 by weighted least squares (weights from each step's uncertainty, with a 0.1 mm floor for pupil fluctuations and model
-error) over \(\log s\), the log channel weights, \(\log c\) and \(d\), and optionally \(\gamma\). The pupil scale
-correction is \(k = 1/c\) and the offset \(b = -d/c\). Residuals are in measured millimetres on purpose: written the
-other way round (\(k A_s + b \approx WY\)), a fit can shrink its residuals by compressing both the model's range (an
-extreme sensitivity putting every step at the smallest pupil) and the scale, which is what happened on the first real
-recording. Weak priors keep poorly determined values near sensible ones: log weights around 0 (SD 1.5; wide, because
-the pupil's colour weighting departs strongly from photopic luminance, blue in particular), \(\log c\) around 0
-(SD 0.25), \(\gamma\) around 2.2 (SD 0.2). The sensitivity has no prior, only its range (0.001–1000): a prior centred
+error) over \(\log s\) and the log channel weights, and optionally \(\gamma\), \(\log L_\text{min}\) (white held at its nominal value) and an offset \(d\) (`fit_offset`, off by default; then \(b = -d\)). Residuals are in measured millimetres, at the pupil scale set by hand (`pupil_correction`): the scale is not fitted, because the sequence does not determine it (it trades off with the sensitivity and the black point, [open issues 1 and 36](../OPEN_ISSUES.md)). Weak priors keep poorly determined values near sensible ones: log weights around 0 (SD 1.5; wide, because
+the pupil's colour weighting departs strongly from photopic luminance, blue in particular), \(\gamma\) around
+2.2 (SD 0.2). The sensitivity has no prior, only its range (0.001–1000): a prior centred
 on \(s = 1\) would mean "the display photometry is right", so it would pull the fit differently for different
 datasheet values and break the exact trade-off between the two ([open issue 42](../OPEN_ISSUES.md)). Because the pupil
 curve is S-shaped in log luminance, the fit starts from five sensitivities (0.03 to 30) and keeps the best. The weights are reported normalised to a mean of 1.
+
+**Black level.** With *Also fit the black level* \(L_\text{min}\) is fitted within 0.0001–10 cd/m² while \(L_\text{max}\) stays at its nominal value; only \(s L_\text{min}\) and \(s L_\text{max}\) are determined, so holding the white fixes the scale of the pair. The notes report the contrast it implies against the nominal one. On the Varjo sample (8 s steps, black steps at 4.4 mm) it gives 0.21 cd/m² (481:1 against the datasheet's 10000:1), because the steps are too short to dark-adapt; with the nominal 0.01 the RMS is 0.76 mm instead of 0.66 (photopic weights).
+
+**Sanity checks** (`luminance.display_notes`, also shown with every analysis): Lmax more than 10 % above the device's claimed peak luminance (Varjo: 200 cd/m²; it may be lower, since brightness is adjustable), Lmin not below Lmax, and a contrast below 100:1 are flagged ([open issue 48](../OPEN_ISSUES.md)).
 
 **Uncertainty and warnings.** An approximate 95 % interval of \(s\) comes from the curvature at the solution. Notes
 flag a wide interval (factor above 4), values at their limits, steps still dilating at their end, and skipped
@@ -78,7 +78,7 @@ and leaves the predictions unchanged.
 **Real recording** (Varjo XR-4, April 2026, default display photometry): see
 [open issue 36](../OPEN_ISSUES.md) for the results and what they say about sensitivity and pupil scale.
 
-## Latency, scale and offset
+## Latency and offset
 
 `fit.fit_calibration`, run after the light sensitivity.
 
@@ -113,8 +113,7 @@ onsets, the latency is fitted as below.
 | constriction τ (`release`) | 0.05–5 s | Nelder–Mead on log τ |
 | transient (`transient`), optional | 0.01–3 mm | Nelder–Mead on log, with the time constants |
 | escape τ (`escape`), optional | 0.3–30 s | Nelder–Mead on log τ, with the time constants |
-| scale (`pupil_correction`) | ×0.5–2 | least squares, for each candidate dynamics |
-| offset (`pupil_offset`) | – | least squares, for each candidate dynamics |
+| offset (`pupil_offset`), optional (`fit_offset`) | – | least squares, for each candidate dynamics |
 
 For candidate dynamics, the expected pupil is computed over the window (with 30 s of signal before it so the filter
 has settled), and mapped onto the measured pupil by least squares, \(PD_\text{measured} \approx c\,PD_\text{expected} + d\),
@@ -129,8 +128,6 @@ an early slow one), so they are fitted **jointly** rather than one after the oth
 
 ### Guards and warnings
 
-- A pupil that barely moves in the window (SD below 0.05 mm) cannot constrain the scale: only the offset is fitted.
-- A fitted scale outside ×0.5–2 is implausible: the device scale is kept and only the offset is fitted.
 - A latency or time constant ending on its search limit means the model does not match the pupil yet; the notes say
   to revisit the light sensitivity fit.
 - A transient at its lower limit means there is none: it is set to 0. A transient or escape τ at another limit
@@ -140,14 +137,14 @@ an early slow one), so they are fitted **jointly** rather than one after the oth
 
 ### Result
 
-The fitted parameters are the input parameters with `delay`, `pupil_correction` (multiplied by the fitted scale),
-`pupil_offset` and `alignment` = `fixed`, and with the dynamics `dynamics` = on, `attack`, `release`, `transient` and
+The fitted parameters are the input parameters with `delay` (with `fit_offset`, also `pupil_offset` and `alignment` = `fixed`;
+`pupil_correction` and by default the offset are left as they are), and with the dynamics `dynamics` = on, `attack`, `release`, `transient` and
 `escape`. The app fits the transient whenever it fits the dynamics; `fit_calibration(..., fit_transient=False)` leaves
 it out. The ΔPD RMS in the
 window before and after is reported. Saved with the participant's parameters, they apply unchanged to the
 participant's other recordings.
 
-On synthetic recordings the fit recovers latency, time constants, transient, scale and offset closely (see
+On synthetic recordings the fit recovers latency, time constants, transient and offset closely (see
 `tests/test_alignment_and_fit.py`). On the seven Varjo calibration recordings the transient lowers the ΔPD RMS in the
 sequence by 5–19 % and in the 4 s after brightening steps by 15–25 %; see [open issue 43](../OPEN_ISSUES.md).
 

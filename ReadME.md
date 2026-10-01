@@ -63,7 +63,7 @@ analysed areas on the scene frame at the cursor. Results are exported as CSV fil
 ## Participant calibration (Varjo)
 
 A short full-field colour sequence, shown in the headset, gives each participant's light sensitivity and channel
-weights, then their response latency, pupil dynamics, pupil scale and offset. These are saved with the participant's
+weights, then their response latency and pupil dynamics (the pupil scale and offset stay values you set). These are saved with the participant's
 parameters and applied to their other recordings. The display's own photometry (black and white luminance, gamma) is
 kept in a separate file. See [Participant calibration](https://pignonig.github.io/cognitive_analysis_tool/usage/calibration/).
 

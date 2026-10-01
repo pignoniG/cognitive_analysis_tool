@@ -48,7 +48,7 @@ and scaling all gains by a constant changes nothing ([open issue 9](../OPEN_ISSU
 With unit gains this is a linear mapping of relative luminance onto \([L_\text{min}, L_\text{max}]\). These are
 real luminances: the adapting field area comes from the device profile. \(L_\text{min}\), \(L_\text{max}\) and
 \(\gamma\) are the user's nominal values for the headset (e.g. its datasheet), saved in their own file; the defaults
-(0.02 and 70 cd/m²) are the mean of the Varjo pilot calibrations. The channel gains are the participant's channel
+(0.01 and 100 cd/m²) are a nominal white and the black from the datasheet's 10000:1 contrast; the app warns when Lmax is more than 10 % above the device's claimed peak luminance (200 cd/m² for the Varjo), when Lmin is not below Lmax, or when the contrast is below 100:1 ([open issue 48](../OPEN_ISSUES.md)). The channel gains are the participant's channel
 weights, fitted with their light sensitivity on the [calibration sequence](../usage/calibration.md).
 
 ## Lux sensor devices

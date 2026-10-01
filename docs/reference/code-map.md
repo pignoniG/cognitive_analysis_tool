@@ -20,7 +20,7 @@ cwtool/
 ├── pipeline.py         prepare(), run(), export(): from recording + video pass + parameters to ΔPD
 ├── calibration.py      calibration sequences: built-in, CSV, locate in a recording
 ├── photometry.py       step 1 of the participant fit: light sensitivity and channel weights from step levels
-├── fit.py              step 2: latency (from onsets), dynamics, transient, pupil scale and offset
+├── fit.py              step 2: latency (from onsets), dynamics and transient (pupil offset optional)
 ├── cli.py              the cwtool command
 ├── plot.py             matplotlib figure for exports
 ├── palette.py          project colours, shared by the app, its plots and the PDF plot

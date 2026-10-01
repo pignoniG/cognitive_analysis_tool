@@ -42,3 +42,23 @@ def absolute_luminance(linear_rgb, l_min: float, l_max: float, gains=(1.0, 1.0, 
     balance = gains / gains.mean()
     per_channel = (l_max * balance * lin + l_min * (1 - lin)) * SRGB_WEIGHTS
     return per_channel.sum(axis=-1)
+
+
+LUMINANCE_MARGIN = 1.1       # the white point may exceed the manufacturer's peak luminance by this factor
+MIN_CONTRAST = 100.0         # below this, white over black is implausible for an OLED or LCD display
+
+
+def display_notes(l_min: float, l_max: float, profile) -> list:
+    """Warnings for display photometry that cannot be right for the device."""
+    notes = []
+    peak = getattr(profile, "max_luminance", None)
+    if peak and l_max > LUMINANCE_MARGIN * peak:
+        notes.append(f"Lmax {l_max:.3g} cd/m² is above the {profile.name} peak luminance of {peak:.3g} cd/m² "
+                     f"(allowing {100 * (LUMINANCE_MARGIN - 1):.0f} %). It may be lower, as brightness is "
+                     "adjustable, but not higher: check the display photometry.")
+    if l_min >= l_max:
+        notes.append(f"Lmin {l_min:.3g} cd/m² is not below Lmax {l_max:.3g} cd/m².")
+    elif l_max / l_min < MIN_CONTRAST:
+        notes.append(f"Contrast Lmax/Lmin is only {l_max / l_min:.3g}:1, implausibly low for this kind of "
+                     "display: check Lmin.")
+    return notes

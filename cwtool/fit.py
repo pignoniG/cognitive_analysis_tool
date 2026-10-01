@@ -7,10 +7,14 @@ and the participant's light sensitivity and channel weights, this fits:
 - the dilation and constriction time constants (``attack``, ``release``),
 - optionally the transient constriction after brightening and its escape time constant
   (``transient``, ``escape``),
-- the pupil scale correction and offset, by least squares of measured on expected.
+- optionally the pupil offset (``fit_offset``): the mean of expected minus measured. It is off by default:
+  the model's absolute level is set by the sensitivity and the display's black and white, and an offset
+  hides an error of those. The pupil scale (``pupil_correction``) is not fitted either: one sequence does
+  not determine it (it trades off with the light sensitivity and the black point, open issues 1 and 36),
+  so it stays the value set by hand.
 
-The result is meant to be saved with the participant's parameters and applied
-unchanged to their other recordings (alignment "fixed").
+The result is meant to be saved with the participant's parameters and applied unchanged to their other
+recordings (with the offset, alignment "fixed").
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ from scipy.optimize import minimize
 
 from cwtool import calibration, model
 from cwtool.params import Parameters
-from cwtool.pipeline import SCALE_RANGE, Prepared, dynamic_pupil, prepare, residual_rms, run, steady_pupil
+from cwtool.pipeline import Prepared, dynamic_pupil, prepare, residual_rms, run, steady_pupil
 from cwtool.recording import Recording
 from cwtool.video import VideoResult
 
@@ -34,7 +38,6 @@ RELEASE_RANGE = (0.05, 5.0)    # s, constriction
 TRANSIENT_RANGE = (0.01, 3.0)  # mm, largest transient constriction
 ESCAPE_RANGE = (0.3, 30.0)     # s, re-dilation of the transient
 PRE_ROLL = 30.0                # s of signal before the window, so the filter state has settled
-MIN_PUPIL_SD = 0.05            # mm; a flatter pupil cannot constrain the scale
 
 
 @dataclass
@@ -56,7 +59,9 @@ class FitResult:
 class _Problem:
     """Measured vs expected pupil inside the window, for candidate dynamics."""
 
-    def __init__(self, prep: Prepared, params: Parameters, field_area: float, start: float, end: float):
+    def __init__(self, prep: Prepared, params: Parameters, field_area: float, start: float, end: float,
+                 fit_offset: bool = False):
+        self.fit_offset = fit_offset
         t = prep.time
         lo = np.searchsorted(t, start - PRE_ROLL)
         hi = np.searchsorted(t, end, side="right")
@@ -73,7 +78,6 @@ class _Problem:
         if self.use.sum() < 10:
             raise ValueError("Not enough valid pupil samples inside the calibration window")
         self.measured = measured[self.use]
-        self.fit_scale = float(np.std(self.measured)) >= MIN_PUPIL_SD
 
     def expected(self, delay: float, attack: Optional[float], release: Optional[float],
                  transient: float = 0.0, escape: float = 2.0) -> np.ndarray:
@@ -81,22 +85,12 @@ class _Problem:
                            self.stages)
         return pd[self.offset_in:][self.use]
 
-    def solve(self, delay, attack, release, transient=0.0, escape=2.0) -> tuple[float, float, float]:
-        """Best k, b with k·measured + b ≈ expected; returns (rms, k, b).
-
-        The noisy side is the measurement, so the model is mapped onto it (measured ≈ c·expected + d,
-        k = 1/c, b = −d/c) and the RMS is in measured millimetres. Regressing the model on the
-        measurement instead would bias k towards zero whenever the pupil varies in ways the model
-        does not (re-dilation, fluctuations)."""
+    def solve(self, delay, attack, release, transient=0.0, escape=2.0) -> tuple[float, float]:
+        """Returns (rms, b), the RMS in millimetres. With ``fit_offset``, b is the best offset with
+        measured + b ≈ expected, in the measured pupil's own scale; otherwise it is 0."""
         e = self.expected(delay, attack, release, transient, escape)
-        k, b = 1.0, float(np.mean(e - self.measured))
-        if self.fit_scale and np.std(e) > 1e-6:
-            A = np.column_stack([e, np.ones_like(e)])
-            (c, d), *_ = np.linalg.lstsq(A, self.measured, rcond=None)
-            if c > 0 and SCALE_RANGE[0] <= 1 / c <= SCALE_RANGE[1]:
-                k, b = float(1 / c), float(-d / c)
-        rms = float(np.sqrt(np.mean((self.measured - (e - b) / k) ** 2)))
-        return rms, float(k), float(b)
+        b = float(np.mean(e - self.measured)) if self.fit_offset else 0.0
+        return float(np.sqrt(np.mean((self.measured + b - e) ** 2))), b
 
 
 def _best_delay(problem: _Problem, attack, release, transient, escape, step: float) -> float:
@@ -184,16 +178,18 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
                     end: Optional[float] = None, fit_dynamics: bool = True,
                     cancelled: Optional[Callable[[], bool]] = None,
                     sequence: Optional[calibration.Sequence] = None,
-                    fit_transient: bool = False) -> FitResult:
+                    fit_transient: bool = False, fit_offset: bool = False) -> FitResult:
     """Fit on the window [start, end] (default: the sequence's duration). With the ``sequence``, the
     latency is measured from the constriction onsets at its brightening steps and held fixed;
     otherwise (or with too few onsets) it is fitted with the time constants. ``fit_transient`` also
-    fits the transient constriction after brightening and its escape time constant."""
+    fits the transient constriction after brightening and its escape time constant. The pupil offset
+    is left as it is unless ``fit_offset``: the model's absolute level is set by the sensitivity and the
+    display's black and white, and an offset would hide an error of those."""
     end = start + (sequence or calibration.DEFAULT).duration if end is None else end
     prep = prepare(rec, video, params)
     if prep.scale is None:
         raise ValueError("The calibration fit needs a device with a known pupil scale (not pixel data)")
-    problem = _Problem(prep, params, rec.profile.field_area, start, end)
+    problem = _Problem(prep, params, rec.profile.field_area, start, end, fit_offset)
     step = max(1 / prep.fs, 0.02)
 
     attack = params.attack if (params.dynamics or fit_dynamics) else None
@@ -257,7 +253,7 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     if no_transient:
         transient = 0.0
         notes.append("No transient constriction after brightening was found; the transient is off.")
-    _, k, b = problem.solve(delay, attack, release, transient, escape)
+    _, b = problem.solve(delay, attack, release, transient, escape)
     at_limit = []
     if fixed_delay:
         notes.append(f"Latency {delay:.2f} s from {len(onsets)} constriction onsets (median onset {onset:.2f} s, "
@@ -284,13 +280,9 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         notes.append(f"{', '.join(at_limit)} reached the limit of the search range: the model probably does "
                      "not match the measured pupil yet. Fit the light sensitivity on the sequence first (and "
                      "check the sequence start and display photometry), then fit again.")
-    if not problem.fit_scale:
-        notes.append("The pupil barely varies in the window, so only the offset was fitted.")
-    elif k == 1.0:
-        notes.append(f"The fitted scale was outside {SCALE_RANGE[0]:g}–{SCALE_RANGE[1]:g}, "
-                     "so only the offset was fitted. Check the light sensitivity fit and the window.")
-    fitted = replace(params, delay=delay, pupil_correction=params.pupil_correction * k,
-                     pupil_offset=b, alignment="fixed")
+    fitted = replace(params, delay=delay)
+    if fit_offset:
+        fitted = replace(fitted, pupil_offset=b, alignment="fixed")
     if attack is not None:
         fitted = replace(fitted, dynamics=True, attack=attack, release=release)
     if fit_transient:
@@ -303,6 +295,6 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
 
     return FitResult(params=fitted, delay=delay, attack=fitted.attack, release=fitted.release,
                      transient=fitted.transient, escape=fitted.escape,
-                     pupil_correction=fitted.pupil_correction, pupil_offset=b,
+                     pupil_correction=fitted.pupil_correction, pupil_offset=fitted.pupil_offset,
                      rms_before=window_rms(params), rms_after=window_rms(fitted), window=(start, end),
                      notes=notes)

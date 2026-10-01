@@ -9,12 +9,16 @@ step match the model:
   dimmer headset from a less sensitive participant);
 - the channel weights (red, green, blue gains), from the colour steps;
 - optionally gamma, from the spacing of the grey steps;
-- a pupil scale correction and offset, which the latency fit (:mod:`cwtool.fit`) refines next.
+- optionally the display's black level Lmin (``fit_black``), with the white Lmax held at its nominal value;
+- optionally a pupil offset (``fit_offset``). It is off by default: with the sensitivity and the display's
+  black and white fitted, an offset would hide an error of them.
+  The pupil scale is not fitted: one sequence does not determine it (it trades off with the sensitivity and
+  the black point), so ``pupil_correction`` stays the value set by hand.
 
 Each step contributes its level, the mean pupil over its last 30 %, and its colour as measured in the
 video, so the calibration sees exactly what the analysis sees. Steps are not extrapolated: on real
 recordings the apparent trend at the end of a step is mostly the pupil's own fluctuation (open issue
-40). Weak priors keep poorly constrained values near sensible ones: gains around 1, scale correction around 1, gamma around 2.2. The sensitivity has none:
+40). Weak priors keep poorly constrained values near sensible ones: gains around 1, gamma around 2.2. The sensitivity has none:
 a prior centred on 1 would mean "the datasheet is right", making the fit depend on the datasheet
 luminance beyond the exact trade-off between the two (open issue 42).
 """
@@ -27,7 +31,7 @@ from scipy.optimize import least_squares, minimize_scalar
 
 from cwtool import calibration, luminance
 from cwtool.params import Parameters
-from cwtool.pipeline import SCALE_RANGE, expected_pupil, prepare, steady_pupil
+from cwtool.pipeline import expected_pupil, prepare, steady_pupil
 from cwtool.recording import Recording
 from cwtool.video import GAMMA_RANGE, VideoResult, at_gamma
 
@@ -38,10 +42,10 @@ SETTLED_MM = 0.1            # mm, change over the last 30 % of a step below whic
 TAIL = 0.3                  # share of the step (after the latency) whose mean is the step's level
 # Prior standard deviations (natural log units for factors). None on the sensitivity (see the module text).
 PRIOR_LOG_GAIN = 1.5         # wide: the pupil's colour weighting departs strongly from photopic (blue)
-PRIOR_SCALE = 0.25
 PRIOR_GAMMA = 0.2
 SENSITIVITY_RANGE = (1e-3, 1e3)
 GAIN_RANGE = (0.05, 20.0)
+BLACK_RANGE = (1e-4, 10.0)     # cd/m², Lmin when it is fitted
 
 
 @dataclass
@@ -50,7 +54,7 @@ class StepLevel:
     rgb: tuple               # nominal colour
     start: float             # s, recording time
     end: float
-    measured: float          # mm, mean pupil over the step's end, with the input scale correction
+    measured: float          # mm, mean pupil over the step's end, with the input scale correction (set by hand)
     uncertainty: float       # mm
     settled: bool            # False: still dilating at its end after a darker step, so short of steady state
     colour: np.ndarray       # (G, 3) mean weighted linear colour per gamma of the video's grid
@@ -63,16 +67,18 @@ class PhotometryFit:
     sensitivity_range: tuple             # approximate 95 % interval
     gains: tuple                         # normalised to a mean of 1
     gamma: float
-    pupil_correction: float
+    pupil_correction: float              # the input's, not fitted
     pupil_offset: float
     steps: list                          # StepLevel
     expected_before: np.ndarray          # mm per step, input parameters (best offset)
     expected_after: np.ndarray           # mm per step, fitted parameters
-    measured_after: np.ndarray           # mm per step, with the fitted scale and offset
+    measured_after: np.ndarray           # mm per step, with the fitted offset
     uncertainty_after: np.ndarray        # mm per step, on the same scale
     rms_before: float                    # mm, steady-state levels
     rms_after: float
     notes: list
+    l_min: float = 0.0                   # cd/m², the input's or, with fit_black, the fitted
+    l_max: float = 0.0
 
 
 def step_level(t: np.ndarray, y: np.ndarray, after_darker: bool) -> tuple[float, float, bool]:
@@ -127,17 +133,21 @@ def step_levels(rec: Recording, video: VideoResult, params: Parameters, start: f
     return levels
 
 
-def _expected(levels, params: Parameters, field_area: float, sensitivity, gains, gamma) -> np.ndarray:
+def _expected(levels, params: Parameters, field_area: float, sensitivity, gains, gamma,
+              l_min=None) -> np.ndarray:
     colours = at_gamma(np.array([lv.colour for lv in levels]), gamma)
-    lum = luminance.absolute_luminance(colours, params.l_min, params.l_max, gains)
+    l_min = params.l_min if l_min is None else l_min
+    lum = luminance.absolute_luminance(colours, l_min, params.l_max, gains)
     return steady_pupil(lum, replace(params, sensitivity=sensitivity), field_area)
 
 
 def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, start: float,
                        sequence: calibration.Sequence = calibration.DEFAULT, fit_gains: bool = True,
-                       fit_gamma: bool = False) -> PhotometryFit:
-    """Fit the participant's light sensitivity (and channel weights, optionally gamma) on the
-    calibration sequence starting at ``start``, given the display photometry in ``params``."""
+                       fit_gamma: bool = False, fit_black: bool = False,
+                       fit_offset: bool = False) -> PhotometryFit:
+    """Fit the participant's light sensitivity (and channel weights, optionally gamma, the display's black
+    level and the pupil offset) on the calibration sequence starting at ``start``, given the display
+    photometry in ``params``."""
     levels = step_levels(rec, video, params, start, sequence)
     if len(levels) < 4:
         raise ValueError("Fewer than four calibration steps have enough pupil data")
@@ -147,45 +157,61 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     gains0 = np.asarray(params.gains, dtype=float)
 
     def unpack(x):
-        """Free values x = [log s, (log gains ×3), log c, d, (gamma)] -> (s, gains, c, d, gamma)."""
+        """Free values x = [log s, (log gains ×3), (log Lmin), (d), (gamma)] -> (s, gains, l_min, d, gamma)."""
         sens = np.exp(x[0])
-        i = 4 if fit_gains else 1
-        gains = np.exp(x[1:4]) if fit_gains else gains0
-        c, d = np.exp(x[i]), x[i + 1]
-        gamma = x[i + 2] if fit_gamma else params.gamma
-        return sens, gains, c, d, gamma
+        i = 1
+        gains = gains0
+        if fit_gains:
+            gains, i = np.exp(x[1:4]), 4
+        l_min = params.l_min
+        if fit_black:
+            l_min, i = np.exp(x[i]), i + 1
+        d = 0.0
+        if fit_offset:
+            d, i = x[i], i + 1
+        gamma = x[i] if fit_gamma else params.gamma
+        return sens, gains, l_min, d, gamma
 
-    # The model is mapped onto the measurement (measured ≈ c·expected + d), so residuals are in
-    # measured millimetres: compressing the model's range (e.g. an extreme sensitivity that puts
-    # every step at the smallest pupil) cannot shrink them. The pupil scale correction is 1/c.
+    # The model is mapped onto the measurement (measured ≈ expected + d), so residuals are in measured
+    # millimetres, at the scale set by hand.
     def residuals(x):
-        sens, gains, c, d, gamma = unpack(x)
-        r = [(m - (c * _expected(levels, params, area, sens, gains, gamma) + d)) / sigma,
-             [np.log(c) / PRIOR_SCALE]]
+        sens, gains, l_min, d, gamma = unpack(x)
+        r = [(m - (_expected(levels, params, area, sens, gains, gamma, l_min) + d)) / sigma]
         if fit_gains:
             r.append(np.log(gains) / PRIOR_LOG_GAIN)
         if fit_gamma:
             r.append([(gamma - 2.2) / PRIOR_GAMMA])
         return np.concatenate([np.ravel(v) for v in r])
 
-    # c = 1 / scale correction, so its range is the inverse of SCALE_RANGE.
-    lo = [np.log(SENSITIVITY_RANGE[0])] + ([np.log(GAIN_RANGE[0])] * 3 if fit_gains else []) + [-np.log(SCALE_RANGE[1]), -10]
-    hi = [np.log(SENSITIVITY_RANGE[1])] + ([np.log(GAIN_RANGE[1])] * 3 if fit_gains else []) + [-np.log(SCALE_RANGE[0]), 10]
+    lo = [np.log(SENSITIVITY_RANGE[0])] + ([np.log(GAIN_RANGE[0])] * 3 if fit_gains else [])
+    hi = [np.log(SENSITIVITY_RANGE[1])] + ([np.log(GAIN_RANGE[1])] * 3 if fit_gains else [])
+    if fit_black:
+        lo.append(np.log(BLACK_RANGE[0]))
+        hi.append(np.log(BLACK_RANGE[1]))
+    if fit_offset:
+        lo.append(-10)
+        hi.append(10)
     if fit_gamma:
         lo.append(GAMMA_RANGE[0])
         hi.append(GAMMA_RANGE[1])
     best = None
-    # The pupil curve is S-shaped in log luminance: start from several sensitivities.
+    # The pupil curve is S-shaped in log luminance: start from several sensitivities (and black levels).
+    blacks = np.log([params.l_min, params.l_min * 20]) if fit_black else [None]
     for log_s in np.log([0.03, 0.3, 1.0, 3.0, 30.0]):
-        x0 = [log_s] + (list(np.log(np.clip(gains0, *GAIN_RANGE))) if fit_gains else []) + [0.0, 0.0]
-        if fit_gamma:
-            x0.append(float(np.clip(params.gamma, *GAMMA_RANGE)))
-        res = least_squares(residuals, x0, bounds=(lo, hi))
-        if best is None or res.cost < best.cost:
-            best = res
-    sens, gains, c, d, gamma = unpack(best.x)
+        for log_b in blacks:
+            x0 = [log_s] + (list(np.log(np.clip(gains0, *GAIN_RANGE))) if fit_gains else [])
+            if fit_black:
+                x0.append(float(np.clip(log_b, np.log(BLACK_RANGE[0]), np.log(BLACK_RANGE[1]))))
+            if fit_offset:
+                x0.append(0.0)
+            if fit_gamma:
+                x0.append(float(np.clip(params.gamma, *GAMMA_RANGE)))
+            res = least_squares(residuals, x0, bounds=(lo, hi))
+            if best is None or res.cost < best.cost:
+                best = res
+    sens, gains, l_min, d, gamma = unpack(best.x)
     gains = gains / gains.mean()
-    k, b = 1 / c, -d / c          # measured · k + b ≈ expected, as the pipeline applies it
+    b = -d                        # measured ≈ expected + d, so measured + b ≈ expected, as the pipeline applies it
 
     # Approximate 95 % interval of the sensitivity from the curvature at the solution.
     try:
@@ -196,18 +222,24 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     s_range = (float(sens * np.exp(-half)), float(sens * np.exp(half)))
 
     before = _expected(levels, params, area, params.sensitivity, gains0, params.gamma)
-    before_offset = float(np.mean(before - m))
-    after = _expected(levels, params, area, sens, gains, gamma)
-    measured_after = k * m + b
-    notes = []
+    before_offset = float(np.mean(before - m)) if fit_offset else 0.0
+    after = _expected(levels, params, area, sens, gains, gamma, l_min)
+    measured_after = m + b
+    notes = luminance.display_notes(l_min, params.l_max, rec.profile)
+    if fit_black:
+        ratio = params.l_max / l_min
+        nominal = params.l_max / params.l_min
+        notes.append(f"Fitted black level {l_min:.3g} cd/m² (contrast {ratio:.0f}:1 against {nominal:.0f}:1 "
+                     f"nominal); effective black s·Lmin {sens * l_min:.3g}, white s·Lmax {sens * params.l_max:.3g} "
+                     "cd/m². Steps too short to dark-adapt make the black look brighter than it is.")
+        if np.isclose(l_min, BLACK_RANGE, rtol=0.05).any():
+            notes.append("The black level reached the limit of its range.")
     if s_range[1] / s_range[0] > 4:
         notes.append(f"The sensitivity is weakly determined ({s_range[0]:.3g}–{s_range[1]:.3g}): the steps "
                      "may not reach the range where the pupil stops shrinking, or the pupil data are noisy.")
     if np.isclose(sens, SENSITIVITY_RANGE, rtol=0.05).any():
         notes.append("The sensitivity reached the limit of its range: check the display photometry and the "
                      "sequence start.")
-    if np.isclose(k, SCALE_RANGE, rtol=0.02).any():
-        notes.append("The pupil scale correction reached the limit of its range.")
     unsettled = sum(not lv.settled for lv in levels)
     if unsettled:
         notes.append(f"{unsettled} of {len(levels)} steps were still dilating at their end after a darker step, "
@@ -216,15 +248,17 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     if len(levels) < len(sequence.steps):
         notes.append(f"{len(sequence.steps) - len(levels)} steps had too little pupil data and were skipped.")
 
-    fitted = replace(params, sensitivity=float(sens), gamma=float(gamma),
-                     pupil_correction=params.pupil_correction * float(k), pupil_offset=float(b))
+    fitted = replace(params, sensitivity=float(sens), gamma=float(gamma), l_min=float(l_min))
+    if fit_offset:
+        fitted = replace(fitted, pupil_offset=float(b), alignment="fixed")
     if fit_gains:
         fitted = replace(fitted, gain_r=float(gains[0]), gain_g=float(gains[1]), gain_b=float(gains[2]))
     return PhotometryFit(
         params=fitted, sensitivity=float(sens), sensitivity_range=s_range, gains=tuple(float(g) for g in gains),
-        gamma=float(gamma), pupil_correction=fitted.pupil_correction, pupil_offset=float(b), steps=levels,
+        gamma=float(gamma), pupil_correction=fitted.pupil_correction, pupil_offset=fitted.pupil_offset,
+        l_min=float(l_min), l_max=float(params.l_max), steps=levels,
         expected_before=before, expected_after=after, measured_after=measured_after,
-        uncertainty_after=float(k) * np.array([lv.uncertainty for lv in levels]),
+        uncertainty_after=np.array([lv.uncertainty for lv in levels]),
         rms_before=float(np.sqrt(np.mean((m + before_offset - before) ** 2))),
         rms_after=float(np.sqrt(np.mean((measured_after - after) ** 2))), notes=notes)
 

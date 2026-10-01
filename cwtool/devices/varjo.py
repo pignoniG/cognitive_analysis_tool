@@ -35,6 +35,7 @@ PROFILE = DeviceProfile(
     field_of_view=(120.0, 105.0),  # XR-4 nominal
     circular_scene=True,
     native_rate=200.0,
+    max_luminance=200.0,            # datasheet: 200 nits
 )
 
 # Columns by header name, with the positions of the Varjo Base export used for the pilot

@@ -91,7 +91,8 @@ def test_video_preview_follows_cursor(app, varjo_folder):
 
 def test_fit_button_applies_fitted_parameters(app, varjo_folder, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
-    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.Apply)
+    shown = []
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: shown.append(self.text()) or QMessageBox.Apply)
     w = MainWindow()
     w.open_recording(varjo_folder)
     assert wait_for(app, lambda: w.result is not None)
@@ -101,7 +102,8 @@ def test_fit_button_applies_fitted_parameters(app, varjo_folder, monkeypatch):
     assert w.fit_button.isEnabled()
     w.fit_dynamics_check.setChecked(False)
     w.fit_button.click()
-    assert wait_for(app, lambda: w.params_panel.params().alignment == "fixed")
+    assert wait_for(app, lambda: bool(shown))
+    assert "offset is not fitted" in shown[0]
     w.close()
 
 

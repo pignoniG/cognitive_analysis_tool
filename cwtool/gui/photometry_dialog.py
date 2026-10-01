@@ -30,7 +30,8 @@ class PhotometryDialog(QDialog):
             f"<b>Steady-state RMS: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b><br>"
             f"light sensitivity ×{fit.sensitivity:.3g} (95 % {lo:.3g}–{hi:.3g}) &nbsp; "
             f"channel weights R {g[0]:.2f}, G {g[1]:.2f}, B {g[2]:.2f} &nbsp; gamma {fit.gamma:.2f}<br>"
-            f"pupil scale correction {fit.pupil_correction:.3f}, offset {fit.pupil_offset:+.3f} mm{notes}")
+            f"Lmin {fit.l_min:.3g}, Lmax {fit.l_max:.3g} cd/m² &nbsp; the pupil scale stays "
+            f"×{fit.pupil_correction:.3g}, as set by hand; the pupil offset is not fitted{notes}")
         summary.setWordWrap(True)
         layout.addWidget(summary)
 
@@ -62,7 +63,7 @@ class PhotometryDialog(QDialog):
 
         hint = QLabel("Markers show the pupil's level at the end of each step in its colour (dotted outline: "
                       "still dilating at its end, so short of the steady state). Apply sets the sensitivity, channel "
-                      "weights, scale and offset; then fit latency, scale and offset.")
+                      "weights and offset; then fit latency and offset.")
         hint.setWordWrap(True)
         layout.addWidget(hint)
         buttons = QDialogButtonBox(QDialogButtonBox.Apply | QDialogButtonBox.Cancel)

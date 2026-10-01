@@ -51,6 +51,10 @@ is revised; they remain in the git history of this file.
   well as leaving it free (RMS 0.656 against 0.648 mm, photopic weights, black point fitted), and the free fit
   lands near 0.45 in a flat valley. The scale is not determined by one sequence (issues 36 and 42), so a fitted
   correction away from 1 says little; the diameters themselves (median 3.1 mm) are plausible.
+- **Decision (September 2026):** the scale is removed from both automatic fits; `pupil_correction` stays a value set by
+  hand (default 1). Physiology bounds it on that sample: the longest dark step reaches 6.4 mm and is still rising
+  (asymptote 6.4–6.7 mm, recording maximum 7.7 mm), which caps the scale near 1.2, and the 2.2 mm of the white steps
+  puts a floor near 0.9.
 - **Status:** fixed in 2.0.
 
 ### 2. Measured pupil is shifted to match the expected mean
@@ -577,6 +581,8 @@ is revised; they remain in the git history of this file.
   in ways the model does not (regression dilution): 0.40 instead of 0.62 on the April 2026 recording. In the light
   fit it also let an extreme sensitivity compress both sides.
 - **2.0:** both fits map the model onto the measurement (`measured ≈ c · expected + d`, k = 1/c).
+- **Later (September 2026):** the scale is no longer fitted at all, in either fit: one sequence does not determine it
+  (issue 1), so `pupil_correction` is a value set by hand and the fits fit the offset only.
 - **Status:** fixed in 2.0.
 
 ### 38. Latency fitted to 0 s
@@ -949,4 +955,21 @@ is revised; they remain in the git history of this file.
   range. The default stays 0.65 until more recordings are compared.
 - **Proposal:** choose the weight together with the circle radius from a reference (G. Pignoni has one suggesting a
   different weighting), possibly per device type, and report both.
+- **Status:** open.
+
+### 48. Display black and white: defaults and sanity checks
+
+- **Background:** the Varjo's black and white are not measured (no equipment), and the earlier defaults (0.02 and
+  70 cd/m²) came from pilot calibrations. The manufacturer claims 200 cd/m² peak luminance and a 10000:1 contrast;
+  brightness is adjustable, so the white can be lower. Zaman et al. (2023) measured about 80 cd/m² (tone mapping
+  countered) or 60–65 cd/m² (disabled) on a VR headset, with channel shares near BT.709, and no black level.
+- **Data (Varjo sample, 30 September 2026, 8 s steps):** at Lmax 100, fitting the sensitivity alone with Lmin 0.01
+  gives a sensitivity of 20 and RMS 0.76 mm; also fitting Lmin gives 0.21 cd/m² (481:1) and 0.66 mm. The black steps
+  reach only 4.4 mm: the steps are too short to dark-adapt, so the black is overestimated.
+- **2.0:** defaults Lmax 100 and Lmin 0.01 cd/m². The fits no longer fit the pupil offset (`fit_offset` brings it
+  back), since an offset hides an error of the sensitivity or the black and white. *Also fit the black level* fits Lmin
+  with the white held. Sanity checks (Lmax above 110 % of the claimed peak, Lmin not below Lmax, contrast under
+  100:1) are shown as warnings.
+- **Proposal:** measure the headset's black and white with a photometer; run the sequence with a long black
+  lead-in so the black level can be fitted.
 - **Status:** open.

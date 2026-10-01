@@ -41,10 +41,10 @@ class Parameters:
     # Display photometry (display devices): the headset's nominal values, e.g. from its datasheet.
     # Kept in their own file (DisplayPhotometry), not in participant files, since they belong to
     # the device and its settings. Real luminances: the adapting field area comes from the device.
-    # Default l_max is the mean of the Varjo pilot calibrations (4250 cd/m² at field 160),
-    # converted to the XR-4 field area.
-    l_min: float = 0.02                  # cd/m², panel black point
-    l_max: float = 70.0                  # cd/m², panel white point
+    # Defaults: white 100 cd/m² (the headset's nominal; the measured Varjo values are 60–80, Zaman et al.
+    # 2023) and black from the datasheet's 10000:1 contrast.
+    l_min: float = 0.01                  # cd/m², panel black point
+    l_max: float = 100.0                 # cd/m², panel white point
     gamma: float = 2.2
 
     # Participant light response, fitted on the calibration sequence. The sensitivity multiplies
@@ -183,8 +183,8 @@ class DisplayPhotometry:
     Errors common to all participants are absorbed by each participant's fitted sensitivity."""
 
     device: str = ""
-    l_min: float = 0.02      # cd/m², black
-    l_max: float = 70.0      # cd/m², white
+    l_min: float = 0.01      # cd/m², black
+    l_max: float = 100.0     # cd/m², white
     gamma: float = 2.2
     source: str = ""         # where the values come from, e.g. "Varjo XR-4 datasheet"
 

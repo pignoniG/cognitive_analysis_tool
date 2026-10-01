@@ -100,9 +100,10 @@ See [Participant calibration](calibration.md) for the procedure.
 - **Start**: the sequence start in seconds.
 - **ΔPD RMS in sequence**: how well the model fits within the sequence, the value to minimise when calibrating
   by hand.
-- **1. Fit light sensitivity**: the participant's light sensitivity and channel weights (optionally gamma), with a
+- **1. Fit light sensitivity**: the participant's light sensitivity and channel weights (optionally gamma and the display's black level, *Also fit the black level*), with a
   result window showing each step's steady-state pupil against the model.
-- **2. Fit latency, scale and offset**: the participant's timing, pupil scale and offset, optionally with the
+- **2. Fit latency and offset**: the participant's timing and dynamics (neither the pupil scale nor the offset is fitted: set
+  *Pupil scale correction* and *Pupil offset* by hand), optionally with the
   transient constriction after brightening (pupillary escape).
 - **Also fit the fixation weight** (glasses with a lux log): adds the gaze circle's weight to the fit below; it needs a
   scene where the gaze area and the background differ.

@@ -161,8 +161,6 @@ def scene_luminance(video: VideoResult, params: Parameters) -> np.ndarray:
 PUPIL_RANGE_MM = (1.0, 9.0)
 # A median diameter outside this range (mm) suggests a wrong pupil scale.
 PLAUSIBLE_MM = (2.0, 8.0)
-# Plausible pupil scale corrections for the calibration fits; outside, only the offset is fitted.
-SCALE_RANGE = (0.5, 2.0)
 
 
 def steady_pupil(lum, params: Parameters, field_area: float) -> np.ndarray:
@@ -432,6 +430,8 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         notes.insert(0, f"Experimental support for {profile.name}: the reader has not been checked on a real "
                         "recording yet; check the pupil, gaze and timing before relying on the results.")
     notes += rec.notes
+    if profile.luminance_source == "display":
+        notes += luminance.display_notes(params.l_min, params.l_max, profile)
     expected = expected_pupil(prep.luminance, fs, params, profile.field_area)
 
     scale = prep.scale

@@ -21,8 +21,8 @@ not in participant files.
 
 | Name | Default | Meaning |
 |---|---|---|
-| `l_min` | 0.02 cd/m² | panel black point |
-| `l_max` | 70 cd/m² | panel white point |
+| `l_min` | 0.01 cd/m² | panel black point (white over the datasheet's 10000:1 contrast) |
+| `l_max` | 100 cd/m² | panel white point; warned about above 110 % of the device's claimed peak (Varjo: 200 cd/m²), [open issue 48](../OPEN_ISSUES.md) |
 | `gamma` | 2.2 | decoding exponent, 1.4–3.0 |
 
 ## Participant light response
@@ -55,10 +55,10 @@ not in participant files.
 
 | Name | Default | Meaning |
 |---|---|---|
-| `pupil_correction` | 1 | participant multiplier on the device's pupil scale (fitted). One sequence does not determine it well (it trades off with the sensitivity and the black point), so a fitted value away from 1 is not by itself a sign that the device scale is wrong |
+| `pupil_correction` | 1 | participant multiplier on the device's pupil scale, set by hand and never fitted: one sequence does not determine it (it trades off with the sensitivity and the black point) |
 | `alignment` | recording | offset mode: `recording`, `baseline`, `fixed`, `none` |
 | `baseline_events` | Riposo, Rest, Baseline | event labels used by `baseline` alignment |
-| `pupil_offset` | 0 mm | offset used by `fixed` alignment (fitted) |
+| `pupil_offset` | 0 mm | offset used by `fixed` alignment (set by hand; the fits leave it alone unless asked) |
 | `timelag` | 0 s | subtracted from luminance timestamps (video and lux) |
 | `analysis_rate` | 100 Hz | uniform grid rate; 0 = the device's native rate |
 | `max_gap` | 0.5 s | longer gaps are left out of ΔPD |

@@ -30,6 +30,9 @@ class DeviceProfile:
     # Reader written from the manufacturer's documentation and not yet checked on a real recording:
     # every result carries a warning saying so.
     experimental: bool = False
+    # Peak luminance the manufacturer claims for the display (cd/m²); the display's white point cannot be
+    # much above it, but can be below, since brightness is adjustable.
+    max_luminance: Optional[float] = None
 
     @property
     def field_area(self) -> float:

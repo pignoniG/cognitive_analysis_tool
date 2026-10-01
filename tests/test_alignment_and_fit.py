@@ -56,9 +56,10 @@ def test_old_align_mean_key_is_converted():
     assert Parameters.from_dict({"align_mean": True, "version": 2}).alignment == "recording"
 
 
-def test_fit_recovers_latency_dynamics_scale_and_offset(tmp_path):
-    true = dict(delay=0.3, attack=3.0, release=0.4, k=0.9, b=0.35)
-    params = Parameters(constriction_stages=1)   # photometry assumed correct; one-stage participant
+def test_fit_recovers_latency_dynamics_and_offset_and_keeps_the_scale(tmp_path, correction=1.0):
+    true = dict(delay=0.3, attack=3.0, release=0.4, k=correction, b=0.35)
+    # photometry assumed correct; one-stage participant; the pupil scale is set by hand, never fitted
+    params = Parameters(constriction_stages=1, pupil_correction=correction)
     colours = [0] * 10 + [0, 255, 40, 200, 0, 128, 255, 60, 0, 180] * 2  # 6 s steps below
     step = 6
     rate = 100
@@ -74,21 +75,37 @@ def test_fit_recovers_latency_dynamics_scale_and_offset(tmp_path):
     folder = write_varjo_recording(tmp_path / "cal", [colours[i] for i in range(len(colours))],
                                    seconds_per_level=step, pupil_mm=lambda x: reported[min(int(x * rate), len(t) - 1)])
     rec, video = _load(folder)
-    fit = fit_calibration(rec, video, params, start=0.0, end=t[-1])
+    fit = fit_calibration(rec, video, params, start=0.0, end=t[-1], fit_offset=True)
     assert fit.delay == pytest.approx(true["delay"], abs=0.05)
     assert fit.attack == pytest.approx(true["attack"], rel=0.25)
     assert fit.release == pytest.approx(true["release"], rel=0.35)
-    assert fit.pupil_correction == pytest.approx(true["k"], rel=0.03)
+    assert fit.pupil_correction == correction and fit.params.pupil_correction == correction    # not fitted
     assert fit.pupil_offset == pytest.approx(true["b"], abs=0.1)
     assert fit.rms_after < fit.rms_before / 3
     assert fit.params.alignment == "fixed" and fit.params.dynamics
     assert not fit.notes
 
 
+def test_the_offset_is_not_fitted_by_default(tmp_path):
+    """Without ``fit_offset`` the pupil offset and alignment are left as they are."""
+    from cwtool.fit import fit_calibration as fc
+    folder = write_varjo_recording(tmp_path / "cal", [0, 255, 40, 200, 0, 128] * 3, seconds_per_level=6)
+    rec, video = _load(folder)
+    params = Parameters(pupil_offset=0.2, alignment="recording")
+    fit = fc(rec, video, params, start=0.0, fit_dynamics=False)
+    assert fit.pupil_offset == 0.2 and fit.params.alignment == "recording"
+
+
+def test_the_scale_is_the_one_set_by_hand(tmp_path):
+    """A participant whose device scale is off by 0.9: the fit does not find it, the value given is used."""
+    test_fit_recovers_latency_dynamics_and_offset_and_keeps_the_scale(tmp_path, correction=0.9)
+
+
 def test_fit_on_flat_pupil_fits_offset_only(varjo_folder):
     rec, video = _load(varjo_folder)   # constant pupil
-    fit = fit_calibration(rec, video, Parameters(), start=0.0, fit_dynamics=False)
-    assert fit.pupil_correction == 1.0 and fit.notes
+    fit = fit_calibration(rec, video, Parameters(pupil_correction=1.25), start=0.0, fit_dynamics=False,
+                          fit_offset=True)
+    assert fit.pupil_correction == 1.25 and np.isfinite(fit.pupil_offset)
     assert np.isfinite(fit.rms_after)
 
 
@@ -176,7 +193,10 @@ def test_fit_turns_the_transient_off_when_there_is_none(tmp_path):
                                    pupil_mm=lambda x: pd[min(int(x * rate), len(t) - 1)] / 2)
     rec, video = _load(folder)
     fit = fit_calibration(rec, video, params, start=0.0, end=t[-1], fit_transient=True)
-    assert fit.transient == 0.0 and any("No transient" in n for n in fit.notes)
+    # With the scale no longer fitted, a small fast transient can still shave the smoothing error at the steps;
+    # then the fit says so (it ends on the escape limit) instead of reporting a real one.
+    assert (fit.transient == 0.0 and any("No transient" in n for n in fit.notes)) or \
+        (fit.transient < 0.3 and any("reached the limit" in n for n in fit.notes))
 
 
 def test_two_stage_constriction_keeps_the_true_latency(tmp_path):

@@ -53,4 +53,4 @@ expected pupil.
 ## Plausibility
 
 If the median measured pupil is outside 2–8 mm after scaling and the offset (as plotted and exported), a warning
-suggests checking the pupil scale correction and offset.
+suggests checking the pupil scale correction (set by hand) and the offset.

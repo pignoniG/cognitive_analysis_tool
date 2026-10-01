@@ -33,9 +33,10 @@ Older Varjo Base versions write the pupil **radius** in its diameter columns (co
 pupil scale is 2. Their iris diameter column reads a constant 6.04 mm, half a typical iris, which fits. A later
 version (a September 2026 sample) writes real diameters: the iris column reads a constant 12.2–12.5 mm and the
 pupil–iris ratio matches. The reader tells the two apart by the median iris diameter (above 9 mm: diameters, scale 1;
-below, or unreadable: radii, scale 2), so each recording gets its own scale; the Recording box shows it. Because the
-exact scale can still vary between participants, the calibration fit estimates a correction per participant
-([open issue 1](../OPEN_ISSUES.md)).
+below, or unreadable: radii, scale 2), so each recording gets its own scale; the Recording box shows it. The calibration fits do not
+estimate the pupil scale: one sequence does not determine it, and the dark-adapted pupil of a recording (6.4–7.7 mm in
+the September 2026 sample) bounds it to about 0.9–1.2, so the device's scale is used. A participant correction
+(`pupil_correction`) can be set by hand ([open issue 1](../OPEN_ISSUES.md)).
 
 ## Gaze
 

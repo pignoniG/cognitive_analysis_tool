@@ -193,20 +193,26 @@ class MainWindow(QMainWindow):
         self.fit_gamma_check = QCheckBox("Also fit gamma")
         self.fit_gamma_check.setToolTip("Fit the display gamma from the spacing of the grey steps (usually "
                                         "weakly determined; keep the datasheet value unless it clearly fails)")
+        self.fit_black_check = QCheckBox("Also fit the black level (Lmin)")
+        self.fit_black_check.setToolTip("Fit the display's black level with the white held at its nominal value. "
+                                        "Needs steps long enough to dark-adapt; otherwise the black looks "
+                                        "brighter than it is. Compare the contrast with the datasheet's")
         self.light_button = QPushButton("1. Fit light sensitivity")
         self.light_button.setToolTip("Fits the participant's light sensitivity and channel weights from the "
                                      "steady-state pupil on each step, given the display photometry")
         self.light_button.clicked.connect(self.fit_light)
         cal_layout.addRow(self.fit_gamma_check)
+        cal_layout.addRow(self.fit_black_check)
         cal_layout.addRow(self.light_button)
         self.fit_dynamics_check = QCheckBox("Include dynamics (time constants and transient)")
         self.fit_dynamics_check.setChecked(True)
         self.fit_dynamics_check.setToolTip("Also fit the dilation and constriction time constants and the "
                                            "transient constriction after brightening (pupillary escape), and "
                                            "turn the dynamics on")
-        self.fit_button = QPushButton("2. Fit latency, scale and offset")
-        self.fit_button.setToolTip("Fits the participant's latency, dilation/constriction time constants, pupil "
-                                   "scale and offset on the sequence. Fit the light sensitivity first.")
+        self.fit_button = QPushButton("2. Fit latency and offset")
+        self.fit_button.setToolTip("Fits the participant's latency, dilation/constriction time constants and pupil "
+                                   "offset on the sequence. The pupil scale is not fitted (set it by hand). Fit the "
+                                   "light sensitivity first.")
         self.fit_button.clicked.connect(self.fit_sequence)
         cal_layout.addRow(self.fit_dynamics_check)
         cal_layout.addRow(self.fit_button)
@@ -275,7 +281,7 @@ class MainWindow(QMainWindow):
         sensitivity and offset fit) or neither (only the dynamics)."""
         layout = self._cal_layout
         layout.setRowVisible(self._sequence_buttons, True)
-        for widget in (self.find_sequence_button, self.fit_gamma_check, self.light_button, self.fit_dynamics_check,
+        for widget in (self.find_sequence_button, self.fit_gamma_check, self.fit_black_check, self.light_button, self.fit_dynamics_check,
                        self.fit_button):
             layout.setRowVisible(widget, mode == "display")
         layout.setRowVisible(self.lux_fit_button, mode == "lux")
@@ -506,9 +512,10 @@ class MainWindow(QMainWindow):
     def fit_light(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, sequence, gamma = self.sequence_start.value(), self.sequence, self.fit_gamma_check.isChecked()
+        black = self.fit_black_check.isChecked()
 
         def work(progress, cancelled):
-            return fit_light_response(rec, video, params, start, sequence, fit_gamma=gamma)
+            return fit_light_response(rec, video, params, start, sequence, fit_gamma=gamma, fit_black=black)
 
         self._start_task(work, self._light_done, "Fitting the light response on the calibration sequence…")
 
@@ -563,9 +570,10 @@ class MainWindow(QMainWindow):
         box = QMessageBox(QMessageBox.Question, "Calibration fit",
                           f"<b>ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b><br><br>"
                           f"latency {fit.delay:.2f} s{dyn}<br>"
-                          f"pupil scale correction {fit.pupil_correction:.3f}, offset {fit.pupil_offset:+.3f} mm"
-                          f"{notes}<br><br>Apply? Alignment will be set to 'fixed' so these values carry over "
-                          f"to this participant's other recordings.",
+                          f"(the pupil scale stays ×{fit.pupil_correction:.3g}, as set by hand; the pupil "
+                          f"offset is not fitted)"
+                          f"{notes}<br><br>Apply? These values carry over to this participant's other "
+                          f"recordings.",
                           QMessageBox.Apply | QMessageBox.Cancel, self)
         if box.exec() == QMessageBox.Apply:
             self.params_panel.set_params(fit.params)
