@@ -77,6 +77,12 @@ space (`video.at_gamma`), and the two areas weighted: \(\mathbf{C}_w = w\,\mathb
 **3c. Time.** Video and lux luminance are interpolated onto the analysis grid (step 4), with their timestamps shifted
 by `timelag` (0 s).
 
+**3d. Coverage.** Where the luminance is only interpolated or held, it is unknown, and those samples are marked
+invalid like long pupil gaps (left out of ΔPD, the offset and the statistics): outside the lux log or between lux
+readings more than 1 s apart (`LUX_MAX_GAP`), and, whenever the video enters the luminance, between analysed video
+samples more than `max_gap` apart (gaze lost or outside the scene video). A note gives the share when it exceeds 1 %.
+The expected pupil is still computed through such stretches, so its filters run on.
+
 ## 4. Pupil signal
 
 `pipeline.prepare` ([Pupil signal](pupil-signal.md))
@@ -127,7 +133,7 @@ by `timelag` (0 s).
 |---|---|---|
 | ΔPD RMS | root mean square of ΔPD about zero | `residual_rms` |
 | ΔPD SD | standard deviation of ΔPD; ΔPD / SD is exported as the normalised ΔPD | `run` |
-| Gap fraction | share of the grid in gaps longer than `max_gap` | `run` |
+| Gap fraction | share of the grid left out: pupil gaps longer than `max_gap` and unknown luminance (3d) | `run` |
 | Black and white point | expected pupil at `l_min` and `l_max` (display and relative camera modes only) | `run` |
 | Warnings | experimental reader, missing lux data, saturation, baseline events not found, implausible pupil | `prepare`, `run` |
 | Event means | mean ΔPD (mm and SD units) inside each event | `event_means` |

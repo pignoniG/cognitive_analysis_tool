@@ -159,3 +159,53 @@ def test_lux_files_are_skipped_by_their_time_span(tmp_path):
     t, v = lux.read_lux(tmp_path, 2_000_000_000.0, 30.0)
     assert list(v) == [7.0, 8.0] and lux._span(old) == (1_000_000_000.0, 1_000_003_600.0)
     assert lux._span(tmp_path / "missing.csv") is None
+
+
+def _trim_lux_log(folder, keep):
+    import csv
+    path = folder / "1_1_1.csv"
+    rows = list(csv.reader(open(path, newline="")))
+    with open(path, "w", newline="") as f:
+        csv.writer(f).writerows(rows[:keep])
+
+
+def test_delta_pd_is_left_out_where_the_lux_log_ends(tmp_path):
+    """A lux log that stops before the recording does not hold its last value: ΔPD is left out after it,
+    with a note."""
+    frames = np.arange(0, 20, 1 / 30)
+    folder = write_core_recording(tmp_path / "core", [128] * len(frames), frames, lux=lambda t: 200.0)
+    _trim_lux_log(folder, 60)                       # readings from -1 to 4.9 s
+    rec = devices.load(folder)
+    r = pipeline.run(rec, _video(rec), Parameters())
+    assert np.isfinite(r.cw[r.cw_time < 4]).all()
+    assert np.isnan(r.cw[r.cw_time > 6]).all()
+    assert r.gap_fraction > 0.6
+    assert any("luminance is unknown" in w for w in r.warnings)
+
+
+def test_delta_pd_is_left_out_without_analysed_video(tmp_path):
+    """With the gaze lost for 3 s (no analysed video) but the pupil tracked, the luminance there is unknown."""
+    import csv
+    frames = np.arange(0, 10, 1 / 30)
+    folder = write_core_recording(tmp_path / "core", [128] * len(frames), frames, lux=lambda t: 200.0)
+    path = next(folder.glob("exports/*/gaze_positions.csv"))
+    rows = list(csv.reader(open(path, newline="")))
+    for r in rows[1:]:
+        if 4.0 <= float(r[0]) - 1000.5 < 7.0:
+            r[2] = "0.2"                               # low confidence: no gaze
+    with open(path, "w", newline="") as f:
+        csv.writer(f).writerows(rows)
+    rec = devices.load(folder)
+    assert np.isfinite(rec.pupil_left[(rec.time > 4.5) & (rec.time < 6.5)]).all()
+    r = pipeline.run(rec, _video(rec), Parameters())
+    assert np.isnan(r.cw[(r.cw_time > 4.5) & (r.cw_time < 6.5)]).all()
+    assert np.isfinite(r.cw[(r.cw_time > 1) & (r.cw_time < 3.5)]).all()
+    # Without the video the sensor alone gives the luminance, which is known throughout.
+    r = pipeline.run(rec, _video(rec), Parameters(lux_use_video=False))
+    assert np.isfinite(r.cw[(r.cw_time > 1) & (r.cw_time < 9)]).all()
+
+
+def test_covered():
+    t = np.array([0.0, 0.4, 1.0, 2.0, 3.6, 5.0])
+    assert pipeline.covered(t, [0.2, 0.6, 1.0, 3.0, 3.5], 0.5).tolist() == [True, True, True, False, True, False]
+    assert not pipeline.covered(t, [], 0.5).any()

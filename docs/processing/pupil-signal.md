@@ -36,7 +36,8 @@ plain fallback would step the average by half of it whenever one eye drops out
 The signal is put on a uniform grid at `analysis_rate` (default 100 Hz; 0 = the device's native rate), by linear
 interpolation between valid samples. Gaps longer than `max_gap` (0.5 s) are marked invalid: they are left out of
 ΔPD, the offset and the statistics, and appear as breaks in the plots. Shorter gaps (blinks) are bridged. The
-summary line reports the share of the recording in long gaps.
+summary line reports the share of the recording in long gaps, together with the stretches where the luminance is
+unknown ([Processing at a glance](pipeline.md), step 3d).
 
 ## 6. Smooth
 

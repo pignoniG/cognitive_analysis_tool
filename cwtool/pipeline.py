@@ -37,7 +37,7 @@ class Result:
     pupil_scale: float          # device units to mm actually applied (device scale × correction)
     rate: float                 # Hz, analysis rate
     measured_rate: float        # Hz, rate estimated from the recording's timestamps
-    gap_fraction: float         # share of the grid inside gaps longer than max_gap
+    gap_fraction: float         # share of the grid left out of ΔPD: pupil gaps longer than max_gap, unknown luminance
     warnings: list = field(default_factory=list)
     luminance_mode: str = "display"   # see Prepared.mode
     # Lux sensor route (None otherwise): the sensor's average luminance and the video ratio Y_w / Y_frame
@@ -226,7 +226,7 @@ class Prepared:
     fs: float
     pupil: np.ndarray           # device units, smoothed, NaN in long gaps
     pupil_fast: np.ndarray      # device units, lightly smoothed, NaN in long gaps
-    valid: np.ndarray           # False inside gaps longer than max_gap
+    valid: np.ndarray           # False inside pupil gaps longer than max_gap and where the luminance is unknown
     luminance: np.ndarray       # cd/m²
     scale: Optional[float]      # device units to mm, None for pixel data (fitted per recording)
     notes: list = field(default_factory=list)
@@ -316,7 +316,47 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
                          "exposure was fixed, set camera exposure to 'fixed'.")
             mode = "camera, relative"
         lum = np.interp(time, vt, scene_luminance(video, params)[order])
+
+    # Where the luminance is not known it is only interpolated (or held at the ends), so ΔPD is left out there:
+    # outside the lux log or in its gaps, and far from any analysed video sample (tracking lost, gaze outside
+    # the scene video) whenever the video enters the luminance.
+    known = np.ones(len(time), bool)
+    if lux_average is not None:
+        known &= covered(time, rec.lux_time - params.timelag, LUX_MAX_GAP)
+    if lux_average is None or params.lux_use_video:
+        known &= covered(time, vt, params.max_gap)
+    unknown = valid & ~known
+    if unknown.mean() > UNKNOWN_LUMINANCE_NOTE:
+        source = "lux reading" if lux_average is not None and not params.lux_use_video else (
+            "lux reading or analysed video" if lux_average is not None else "analysed video")
+        notes.append(f"The luminance is unknown for {unknown.mean():.0%} of the recording (no {source} nearby); "
+                     "ΔPD is left out there.")
+    valid = valid & known
+    smooth[~valid] = np.nan
+    fast[~valid] = np.nan
     return Prepared(time, fs, smooth, fast, valid, lum, scale, notes, mode, lux_average, video_ratio)
+
+
+# Lux readings (about 10 Hz) further apart than this (s) leave the luminance unknown between them.
+LUX_MAX_GAP = 1.0
+# Share of the recording with unknown luminance above which a note says so.
+UNKNOWN_LUMINANCE_NOTE = 0.01
+
+
+def covered(time: np.ndarray, samples: np.ndarray, max_gap: float) -> np.ndarray:
+    """True where ``time`` lies between two ``samples`` at most ``max_gap`` s apart, or within ``max_gap`` / 2 of
+    a sample (so the ends of a record count up to half a gap beyond it)."""
+    time = np.asarray(time, dtype=float)
+    s = np.sort(np.asarray(samples, dtype=float))
+    s = s[np.isfinite(s)]
+    if len(s) == 0:
+        return np.zeros(len(time), bool)
+    if len(s) == 1:
+        return np.abs(time - s[0]) <= max_gap / 2
+    i = np.clip(np.searchsorted(s, time), 1, len(s) - 1)
+    lo, hi = s[i - 1], s[i]
+    inside = (time >= s[0]) & (time <= s[-1]) & (hi - lo <= max_gap)
+    return inside | (np.minimum(np.abs(time - lo), np.abs(time - hi)) <= max_gap / 2)
 
 
 # The video ratio Y_w / Y_frame is judged on frames that are not nearly black, and flagged when its
