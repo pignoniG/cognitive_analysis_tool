@@ -320,11 +320,13 @@ class MainWindow(QMainWindow):
         else:
             r = self.result
             gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
+            leak = (f" &nbsp;&nbsp; <b>light left</b> R² {r.leak_r2:.2f} ({r.leak_slope:+.2f} mm/decade)"
+                    if np.isfinite(r.leak_r2) else "")
             warn = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {w}</span>" for w in r.warnings)
             ends = (f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
                     if np.isfinite(r.expected_black) else self._route_text(r) + " &nbsp;&nbsp; ")
             self.summary_label.setText(
-                f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm &nbsp;&nbsp; {ends}"
+                f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm{leak} &nbsp;&nbsp; {ends}"
                 f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
                 f"{r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}{warn}")
         name = self._params_path.name if self._params_path else "unsaved parameters"

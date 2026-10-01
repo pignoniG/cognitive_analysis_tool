@@ -45,6 +45,9 @@ class Result:
     luminance_sensor: Optional[np.ndarray] = None       # cd/m²
     luminance_ratio: Optional[np.ndarray] = None
     fixation_weight: float = 0.65     # weight of the gaze circle in the weighted colour
+    # How much light is left in ΔPD (see :func:`light_leakage`); NaN when the luminance barely varies.
+    leak_slope: float = float("nan")  # mm of ΔPD per tenfold luminance
+    leak_r2: float = float("nan")     # share of ΔPD's variance explained by log luminance and its recent change
 
 
 def _odd(n: int, minimum: int = 3) -> int:
@@ -209,6 +212,37 @@ def windowed_difference(time, a, b, window_n: int):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         return t.mean(axis=1), np.nanmean(d, axis=1)
+
+
+# Light leakage: the recent change of log luminance is its excess over a low-pass with this time constant (s);
+# ΔPD needs this many windows and this spread of log10 luminance (SD) for the figures, and a note is added above
+# LEAK_NOTE_R2.
+LEAK_CHANGE_TAU = 2.0
+LEAK_MIN_WINDOWS = 20
+LEAK_MIN_SPREAD = 0.05
+LEAK_NOTE_R2 = 0.1
+
+
+def light_leakage(cw: np.ndarray, log_lum: np.ndarray, change: np.ndarray) -> tuple[float, float]:
+    """How much of ΔPD the light still explains, per ΔPD window: the slope of ΔPD on log10 luminance (mm per
+    tenfold luminance) and the R² of ΔPD on log10 luminance and its recent change (both with an intercept).
+    A model that removes the light leaves both near 0. NaN when there are too few windows or the luminance
+    barely varies. If the task itself changes with the light, this also measures that."""
+    ok = np.isfinite(cw) & np.isfinite(log_lum) & np.isfinite(change)
+    y, x1, x2 = cw[ok], log_lum[ok], change[ok]
+    if ok.sum() < LEAK_MIN_WINDOWS or np.std(x1) < LEAK_MIN_SPREAD or np.std(y) == 0:
+        return float("nan"), float("nan")
+    slope = float(np.polyfit(x1, y, 1)[0])
+    design = np.column_stack([np.ones(len(y)), x1, x2])
+    fit = design @ np.linalg.lstsq(design, y, rcond=None)[0]
+    r2 = 1 - float(np.sum((y - fit) ** 2) / np.sum((y - y.mean()) ** 2))
+    return slope, max(r2, 0.0)
+
+
+def window_means(x: np.ndarray, window_n: int) -> np.ndarray:
+    """Mean of ``x`` over the consecutive windows of :func:`windowed_difference`."""
+    n = len(x) // window_n
+    return np.asarray(x, dtype=float)[: n * window_n].reshape(n, window_n).mean(axis=1)
 
 
 def residual_rms(x: np.ndarray) -> float:
@@ -495,6 +529,14 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         smooth = savgol_filter(interp_nan(cw), min(_odd(params.cw_smoothing * 2), _odd(len(cw) - 2)), 1)
         cw = np.where(good, smooth, np.nan)
 
+    log_lum = np.log10(np.maximum(prep.luminance, 1e-4))
+    change = log_lum - model.lowpass(log_lum, fs, LEAK_CHANGE_TAU)
+    leak_slope, leak_r2 = light_leakage(cw, window_means(log_lum, window_n), window_means(change, window_n))
+    if leak_r2 > LEAK_NOTE_R2:
+        notes.append(f"The light still explains {leak_r2:.0%} of the variance of ΔPD ({leak_slope:+.2f} mm per tenfold "
+                     "luminance): the model does not remove it fully, so ΔPD changes where the light changes may "
+                     "not be workload. Check the parameters (or whether the task itself follows the light).")
+
     if prep.photometric:
         ends = steady_pupil(np.array([params.l_min, params.l_max]), params, profile.field_area)
     else:
@@ -507,7 +549,7 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
                   pupil_scale=scale, rate=fs, measured_rate=rec.measured_rate,
                   gap_fraction=float(1 - valid.mean()), warnings=notes, luminance_mode=prep.mode,
                   luminance_sensor=prep.lux_average, luminance_ratio=prep.video_ratio,
-                  fixation_weight=params.fixation_weight)
+                  fixation_weight=params.fixation_weight, leak_slope=leak_slope, leak_r2=leak_r2)
 
 
 def luminance_route(r: Result) -> Optional[dict]:

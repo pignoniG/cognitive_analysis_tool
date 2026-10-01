@@ -194,3 +194,37 @@ def test_varjo_keeps_the_eye_still_tracked(tmp_path):
     assert np.isnan(rec.pupil_left[20]) and np.isnan(rec.pupil_right[20]) and np.isnan(rec.gaze[20]).all()
     left = devices.varjo.load(folder, gaze_eye="left")
     assert np.isnan(left.gaze[10]).all() and np.isfinite(left.gaze[11]).all()
+
+
+def test_light_leakage():
+    rng = np.random.default_rng(0)
+    log_l = np.repeat(rng.uniform(-1, 2, 20), 10)
+    change = log_l - pipeline.model.lowpass(log_l, 5.0, 2.0)
+    slope, r2 = pipeline.light_leakage(0.3 * log_l + rng.normal(0, 0.01, len(log_l)), log_l, change)
+    assert slope == pytest.approx(0.3, abs=0.01) and r2 > 0.95
+    slope, r2 = pipeline.light_leakage(rng.normal(0, 0.1, len(log_l)), log_l, change)
+    assert abs(slope) < 0.05 and r2 < 0.1
+    assert np.isnan(pipeline.light_leakage(rng.normal(0, 0.1, 200), np.zeros(200), np.zeros(200))[1])
+
+
+def test_result_reports_the_light_left_in_delta_pd(tmp_path):
+    """A pupil that follows the model leaves little light in ΔPD; one that ignores the light leaves most of it,
+    and a note says so."""
+    params = Parameters(delay=0.0, dynamics=False)
+    grays = [0, 200, 60, 255, 30, 150, 90, 240]
+    area = varjo.PROFILE.field_area
+    from cwtool import luminance, model
+
+    def follows(t):
+        g = grays[min(int(t), len(grays) - 1)]
+        lum = luminance.absolute_luminance(luminance.to_linear([g, g, g], params.gamma), params.l_min, params.l_max)
+        return float(model.watson_yellott(lum, params.age, area)) / 2
+
+    good = devices.load(write_varjo_recording(tmp_path / "good", grays, pupil_mm=follows))
+    flat = devices.load(write_varjo_recording(tmp_path / "flat", grays, pupil_mm=2.0))
+    settings = VideoSettings().for_recording(good)
+    r_good = pipeline.run(good, analyse_video(good.scene_video, good.time, good.gaze, settings), params)
+    r_flat = pipeline.run(flat, analyse_video(flat.scene_video, flat.time, flat.gaze, settings), params)
+    assert r_good.leak_r2 < 0.1 and not any("still explains" in w for w in r_good.warnings)
+    assert r_flat.leak_r2 > 0.8 and r_flat.leak_slope > 0.5
+    assert any("still explains" in w for w in r_flat.warnings)

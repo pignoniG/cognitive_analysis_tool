@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -50,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     result = pipeline.run(rec, video, params)
     print(f"ΔPD RMS: {result.cw_rms:.3f} mm, SD: {result.cw_sd:.3f} mm "
           f"({result.measured_rate:.0f} Hz resampled to {result.rate:.0f} Hz, {result.gap_fraction:.1%} in gaps)")
+    if math.isfinite(result.leak_r2):
+        print(f"Light left in ΔPD: R² {result.leak_r2:.2f}, {result.leak_slope:+.3f} mm per tenfold luminance")
     for w in result.warnings:
         print(f"warning: {w}", file=sys.stderr)
     out = args.out or rec.folder / "cwtool_export"
