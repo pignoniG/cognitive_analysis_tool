@@ -43,7 +43,11 @@ def test_pipeline_zero_cw_when_pupil_follows_model(tmp_path):
     result = pipeline.run(rec, video, params)
     # Savitzky-Golay smoothing blurs the steps, so compare away from transitions.
     steady = np.array([(t % 1) > 0.4 and (t % 1) < 0.6 for t in result.cw_time])
-    assert np.abs(result.cw[steady]).max() < 0.05
+    black = result.cw_time < 1
+    assert np.abs(result.cw[steady & ~black]).max() < 0.05
+    # The test video's codec writes black as code 2 in green, and near Lmin the model is steep: at Lmin 0.01
+    # that one code value moves the expected pupil by about 0.03 mm.
+    assert np.abs(result.cw[steady & black]).max() < 0.1
     assert result.expected_black > result.expected_white
 
 

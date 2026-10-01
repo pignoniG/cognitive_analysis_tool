@@ -130,7 +130,10 @@ an early slow one), so they are fitted **jointly** rather than one after the oth
 
 - A latency or time constant ending on its search limit means the model does not match the pupil yet; the notes say
   to revisit the light sensitivity fit.
-- A transient at its lower limit means there is none: it is set to 0. A transient or escape τ at another limit
+- A transient below 0.1 mm (`fit.MIN_TRANSIENT`) means there is none: it is under the pupil's own fluctuation within
+  a step, and the transients fitted on the Varjo calibration recordings were 0.35–1.7 mm. It is set to 0 and the other
+  values are fitted again without it, since a spurious small transient also pulls the latency and time constants. A
+  transient or escape τ at another limit
   usually means the participant shows little escape and the transient is only reshaping the constriction onset; the
   note suggests leaving it off.
 - Pixel data (Pupil Core 2D) is refused: its scale is not defined.

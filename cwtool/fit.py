@@ -36,6 +36,11 @@ DELAY_RANGE = (0.0, 1.5)       # s
 ATTACK_RANGE = (0.3, 30.0)     # s, dilation
 RELEASE_RANGE = (0.05, 5.0)    # s, constriction
 TRANSIENT_RANGE = (0.01, 3.0)  # mm, largest transient constriction
+# mm; a fitted transient below this is taken as none. It is under the pupil's own fluctuation within a step
+# (0.08–0.24 mm RMS on the Varjo calibration recordings, open issue 43), and the transients fitted there were
+# 0.35–1.7 mm; a smaller one only reshapes the steps (on synthetic data without a transient the fit found
+# 0.06 mm and moved the latency by 0.08 s with it).
+MIN_TRANSIENT = 0.1
 ESCAPE_RANGE = (0.3, 30.0)     # s, re-dilation of the transient
 PRE_ROLL = 30.0                # s of signal before the window, so the filter state has settled
 
@@ -248,11 +253,16 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     delay, attack, release = current["delay"], current["attack"], current["release"]
     transient, escape = current["transient"], current["escape"]
 
+    if fit_transient and transient < MIN_TRANSIENT:
+        # Too small to be a transient: it only reshapes the steps and pulls the other values with it, so
+        # they are fitted again without it.
+        refit = fit_calibration(rec, video, replace(params, transient=0.0), start, end, fit_dynamics, cancelled,
+                                sequence, fit_transient=False, fit_offset=fit_offset)
+        refit.notes.insert(0, f"No transient constriction after brightening was found (the fit gave "
+                              f"{transient:.2f} mm, below {MIN_TRANSIENT:g} mm); the transient is off and the "
+                              "other values are fitted without it.")
+        return refit
     notes = []
-    no_transient = fit_transient and transient <= TRANSIENT_RANGE[0] * 1.02 + 1e-3
-    if no_transient:
-        transient = 0.0
-        notes.append("No transient constriction after brightening was found; the transient is off.")
     _, b = problem.solve(delay, attack, release, transient, escape)
     at_limit = []
     if fixed_delay:
@@ -268,7 +278,7 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
                                   ("constriction τ", release if release is not None else None, RELEASE_RANGE)):
         if value is not None and (value <= lo * 1.02 + 1e-3 or value >= hi * 0.98):
             at_limit.append(name)
-    if fit_transient and not no_transient:
+    if fit_transient:
         limits = [name for name, value, (lo, hi) in (("transient", transient, TRANSIENT_RANGE),
                                                      ("escape τ", escape, ESCAPE_RANGE))
                   if value <= lo * 1.02 + 1e-3 or value >= hi * 0.98]

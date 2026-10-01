@@ -193,10 +193,12 @@ def test_fit_turns_the_transient_off_when_there_is_none(tmp_path):
                                    pupil_mm=lambda x: pd[min(int(x * rate), len(t) - 1)] / 2)
     rec, video = _load(folder)
     fit = fit_calibration(rec, video, params, start=0.0, end=t[-1], fit_transient=True)
-    # With the scale no longer fitted, a small fast transient can still shave the smoothing error at the steps;
-    # then the fit says so (it ends on the escape limit) instead of reporting a real one.
-    assert (fit.transient == 0.0 and any("No transient" in n for n in fit.notes)) or \
-        (fit.transient < 0.3 and any("reached the limit" in n for n in fit.notes))
+    without = fit_calibration(rec, video, params, start=0.0, end=t[-1])
+    # A small transient can still shave the smoothing error at the steps; below MIN_TRANSIENT it is taken as
+    # none, and the other values are those of the fit without it.
+    assert fit.transient == 0.0 and fit.params.transient == 0.0
+    assert any("No transient" in n for n in fit.notes)
+    assert (fit.delay, fit.attack, fit.release) == pytest.approx((without.delay, without.attack, without.release))
 
 
 def test_two_stage_constriction_keeps_the_true_latency(tmp_path):
