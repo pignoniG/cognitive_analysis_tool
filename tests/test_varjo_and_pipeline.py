@@ -174,3 +174,23 @@ def test_pupil_scale_follows_the_iris_column(tmp_path):
     scaled = lambda r: np.nanmedian(r.pupil_left) * r.profile.pupil_scale
     assert scaled(radius) == pytest.approx(3.2) and scaled(diameter) == pytest.approx(3.2)
     assert varjo.pupil_scale(np.array([np.nan]), np.array([])) == 2.0
+
+
+def test_varjo_keeps_the_eye_still_tracked(tmp_path):
+    """A sample with one eye lost keeps the other eye's pupil and the combined gaze; with the gaze status
+    invalid, nothing is kept."""
+    from conftest import VARJO_HEADER
+    import csv as _csv
+    folder = write_varjo_recording(tmp_path / "rec", [128] * 2)
+    path = folder / "varjo_gaze_output_test.csv"
+    rows = list(_csv.reader(open(path, newline="")))
+    col = {h: i for i, h in enumerate(VARJO_HEADER)}
+    rows[11][col["left_status"]] = "0"           # sample 10: left eye lost
+    rows[21][col["status"]] = "0"                # sample 20: gaze invalid
+    with open(path, "w", newline="") as f:
+        _csv.writer(f).writerows(rows)
+    rec = devices.load(folder)
+    assert np.isnan(rec.pupil_left[10]) and np.isfinite(rec.pupil_right[10]) and np.isfinite(rec.gaze[10]).all()
+    assert np.isnan(rec.pupil_left[20]) and np.isnan(rec.pupil_right[20]) and np.isnan(rec.gaze[20]).all()
+    left = devices.varjo.load(folder, gaze_eye="left")
+    assert np.isnan(left.gaze[10]).all() and np.isfinite(left.gaze[11]).all()

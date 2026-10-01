@@ -112,21 +112,25 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
 
     epoch_ns = col("epoch_ns")
     relative_ns = col("relative_ns")
-    tracked = (col("status") > MIN_STATUS) & (col("left_status") > MIN_STATUS) & (col("right_status") > MIN_STATUS)
+    # Each eye counts where it is tracked itself (a sample with one eye lost keeps the other; the pipeline
+    # bridges the missing eye), and only while the gaze as a whole is valid.
+    valid = col("status") > MIN_STATUS
+    tracked = {eye: valid & (col(f"{eye}_status") > MIN_STATUS) for eye in ("left", "right")}
 
-    def pupil(key: str) -> np.ndarray:
-        d = col(key)
+    def pupil(eye: str) -> np.ndarray:
+        d = col(f"{eye}_pupil")
         with np.errstate(invalid="ignore"):
-            ok = tracked & (d > 0)  # the plausible range is checked in mm by the pipeline
+            ok = tracked[eye] & (d > 0)  # the plausible range is checked in mm by the pipeline
         return np.where(ok, d, np.nan)
 
-    scale = pupil_scale(col("left_iris")[tracked], col("right_iris")[tracked])
+    scale = pupil_scale(col("left_iris")[tracked["left"]], col("right_iris")[tracked["right"]])
 
     prefix = {"right": "right", "combined": "combined"}.get(gaze_eye, "left")
     px, py = col(f"{prefix}_x"), col(f"{prefix}_y")
     # Projected gaze is in [-1, 1] with y up; convert to [0, 1] with y down.
     gaze = np.column_stack([(px + 1) / 2, 1 - (py + 1) / 2])
-    gaze[~tracked] = np.nan
+    gaze_ok = tracked[prefix] if prefix in tracked else tracked["left"] | tracked["right"]
+    gaze[~gaze_ok] = np.nan
 
     time = relative_ns / 1e9
     epoch_start = epoch_ns[0] / 1e9 - time[0]
@@ -142,8 +146,8 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
         folder=folder,
         time=time,
         epoch_start=epoch_start,
-        pupil_left=pupil("left_pupil"),
-        pupil_right=pupil("right_pupil"),
+        pupil_left=pupil("left"),
+        pupil_right=pupil("right"),
         gaze=gaze,
         scene_video=_find(folder, "varjo_capture_"),
         events=read_event_log(folder, epoch_start, utc_offset),

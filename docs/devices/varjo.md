@@ -25,7 +25,9 @@ header. Values written as `-nan(ind)` (Varjo Base on Windows) are read as missin
 | pupil | `left_pupil_diameter_in_mm`, `right_pupil_diameter_in_mm` |
 | gaze | `gaze_projected_to_left_view_x/y` (default), or `left_projected_x/y`, `right_projected_x/y` |
 
-A sample is valid only when all three statuses are tracked.
+Each eye's pupil is valid where that eye's status is tracked and the gaze `status` too, so a sample with one eye
+lost keeps the other (the pipeline bridges the missing eye). The gaze is valid where its eye is tracked (for the
+combined gaze, either eye).
 
 ## Pupil scale
 

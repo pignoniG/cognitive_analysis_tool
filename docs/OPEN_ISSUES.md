@@ -902,6 +902,8 @@ is revised; they remain in the git history of this file.
   are not read, a note says why, and exported Unix times are empty); `timezone` gives event logs without a zone the
   recording unit's offset; `combine_eyes` bridges a missing eye with the other plus the median difference between the
   eyes (from at least 20 samples with both), for every device. Varjo results are unchanged (no one-eye samples).
+  Varjo had no one-eye samples only because its reader required both eyes tracked; since October 2026 it checks
+  each eye's status, so one-eye samples are kept and bridged there too.
 - **Status:** needs data (the real-recording checks above).
 
 
