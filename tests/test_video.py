@@ -186,3 +186,18 @@ def test_channels_are_in_rgb_order(tmp_path, backend):
     for i, rgb in enumerate(colours):
         got = res.fixation_rgb[np.argmin(np.abs(res.time - (i + 0.5)))]
         assert got == pytest.approx(rgb, abs=6)
+
+
+def test_gaze_circle_is_limited_to_the_visible_scene():
+    """Near the edge of a circular scene the gaze circle does not average in the black corners."""
+    from cwtool.video import field_mask
+    s = VideoSettings(circular_mask=True, field_radius=0.9, vertical_fov=100, fixation_radius_deg=10)
+    mask = field_mask((100, 100), s)
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    frame[mask > 0] = 180                                   # the scene circle; black corners outside
+    fix, _, fix_lin, _, _ = analyse_frame(frame, np.array([[50, 50], [85, 85]]), s)
+    assert fix[0] == pytest.approx([180] * 3)
+    assert fix[1] == pytest.approx([180] * 3)               # at the edge: only the visible part
+    # Without a circular scene the whole circle counts, as before.
+    fix, *_ = analyse_frame(frame, np.array([[85, 85]]), VideoSettings(vertical_fov=100, fixation_radius_deg=10))
+    assert fix[0][0] < 180

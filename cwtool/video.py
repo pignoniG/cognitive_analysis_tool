@@ -32,7 +32,7 @@ from cwtool.params import VideoSettings
 
 CACHE_CSV = "cwtool_video.csv"
 CACHE_JSON = "cwtool_video.json"
-CACHE_FORMAT = 4
+CACHE_FORMAT = 5          # 5: gaze circle limited to the visible scene
 MIN_CHUNK_FRAMES = 150   # frames per parallel chunk, at least
 
 GAMMA_GRID = np.round(np.arange(1.4, 3.0001, 0.2), 2)   # γ values the linear means are stored for
@@ -245,10 +245,12 @@ def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSet
         y0, y1 = max(gy - fix_r, 0), min(gy + fix_r + 1, h)
         disc = (xx[:, x0:x1] - gx) ** 2 + (yy[y0:y1, :] - gy) ** 2 <= fix_r ** 2
         crop = frame_rgb[y0:y1, x0:x1]
-        fix_rgb[i], fix_lin[i] = _means(_histograms(crop[disc]))
+        # The gaze circle is limited to the visible scene: near the edge of a circular scene it would
+        # otherwise average in the black corners. A circle entirely outside it keeps all its pixels.
+        overlap = disc & (mask[y0:y1, x0:x1] > 0)
+        fix_rgb[i], fix_lin[i] = _means(_histograms(crop[overlap if overlap.any() else disc]))
 
         if settings.background_excludes_fixation:
-            overlap = disc & (mask[y0:y1, x0:x1] > 0)
             bg_rgb[i], bg_lin[i] = _means(field_hist - _histograms(crop[overlap]))
         else:
             bg_rgb[i], bg_lin[i] = bg_rgb_all, bg_lin_all

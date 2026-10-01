@@ -2,7 +2,8 @@
 
 `cwtool/video.py`. For every valid gaze sample, the frame shown at that moment is measured in two areas:
 
-- the **gaze circle** (fixation area): a disc of `fixation_radius_deg` (default 5.25°) around the gaze point;
+- the **gaze circle** (fixation area): a disc of `fixation_radius_deg` (default 5.25°) around the gaze point,
+  limited to the visible scene (near the edge of a circular capture it does not take in the black corners);
 - the **background**: the rest of the visible scene. On circular Varjo captures the visible scene is a centred
   circle of `field_radius` × half the frame height (default 0.8), which excludes the black corners; on other
   devices it is the whole frame. By default the gaze circle is removed from the background
