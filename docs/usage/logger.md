@@ -152,7 +152,28 @@ both share a clock; for the Neon, whose timestamps come from the phone, see
   sample was about 0.35 s old when the logger received it; that is delivery delay, and whether the timestamps
   themselves are exact has not been measured.
 
-These assumptions have not been checked against an external reference ([open issue 49](../OPEN_ISSUES.md)).
+These assumptions have not been checked against an external reference ([open issue 49](../OPEN_ISSUES.md)); the
+check below measures them.
+
+### Checking the clocks
+
+A recorded session can be checked for the quality of its timestamps:
+
+```bash
+python -m cwtool.logger.clockcheck SESSION_FOLDER [--save]
+```
+
+It reports, for each file, the sampling rate and how much the time between samples varies (for the lux sensor, whose
+lines are stamped when they arrive, this is its timestamp jitter); for the Shimmer, how fast its own clock runs against
+the computer's (ppm) and how far the mapping wanders around a straight line; and the **offset between the Shimmer and
+the EmotiBit**, from the movement both accelerometers feel.
+
+To measure that offset, fix the Shimmer and the EmotiBit together (tape them to each other, or to a board), record
+about a minute with both connected, and **knock the table sharply five or six times**, a few seconds apart, without
+moving them otherwise. The check finds the lag that best matches the two accelerometers' movement; a positive value
+means the EmotiBit's timestamps are late with respect to the Shimmer's. It says when the match is weak. Do it once per
+setup (a long recording, a different Wi-Fi network) and keep the result with the study. `--save` writes
+`clock_check.json` into the session folder.
 
 ## When something does not work
 

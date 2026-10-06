@@ -28,6 +28,7 @@ cwtool/
 │   ├── session.py      Logger (sources, live buffers, session folder, writer thread), EventLog
 │   ├── sinks.py        CsvSink
 │   ├── protocol.py     protocol files (name,duration)
+│   ├── clockcheck.py   timestamp checks of a recorded session (regularity, Shimmer drift, Shimmer vs EmotiBit offset)
 │   ├── gui.py          the window (cwtool-logger), plot scaling, stall watchdog
 │   └── sources/        lux (serial), shimmer (pyshimmer), lsl (EmotiBit via the Oscilloscope), simulated;
 │                       rfcomm_mac.py + rfcomm_helper.py: direct Bluetooth channel on macOS

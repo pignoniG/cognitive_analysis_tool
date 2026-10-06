@@ -1023,7 +1023,13 @@ is revised; they remain in the git history of this file.
 - **Proposal:** measure the offsets with a common event (a light switched on in front of the lux sensor and the scene
   camera; a tap seen by the Shimmer's and the EmotiBit's accelerometers) and record them in the documentation.
   Consider a visible marker the logger can give to all devices at once.
-- **Status:** open, needs recordings with real devices.
+- **2.0 (October 2026):** `python -m cwtool.logger.clockcheck SESSION` measures from a recorded session the regularity
+  of every file (the lux sensor's timestamp jitter), the Shimmer's clock speed and the wander of its mapping onto the
+  computer's, and the offset between the Shimmer and the EmotiBit from knocks on a table that both accelerometers feel
+  (procedure in [Sensor logger](usage/logger.md#checking-the-clocks)). Checked on synthetic sessions with a known
+  offset (recovered to within 10 ms), not yet on a real recording. It does not measure the lux sensor's offset to the
+  other devices, or the EmotiBit's against the Pupil clock.
+- **Status:** open; the check exists and needs one recording with the real devices.
 
 ### 50. A pipeline test fails on `master_v2.0`
 
