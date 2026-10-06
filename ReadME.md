@@ -15,6 +15,10 @@ The luminance is estimated from the eye tracker's scene video and gaze: a circle
 against the rest of the view. On a headset it comes from the display's photometry; with glasses trackers, the
 absolute level comes from a lux sensor worn on the tracker.
 
+![The analysis app on a synthetic recording: measured and expected pupil, luminance, ΔPD with two task phases, and the ECG and EDA from the sensor logger](docs/images/analysis-app.png)
+
+*The analysis app on synthetic data: a task that dilates the pupil twice, the light that changes every few seconds, and the ΔPD that is left once the light is accounted for, with the Shimmer's ECG and the EmotiBit's EDA on the same time axis.*
+
 **Documentation:** https://pignonig.github.io/cognitive_analysis_tool/ covers installation, usage, the device
 formats and every processing step ([Processing at a glance](https://pignonig.github.io/cognitive_analysis_tool/processing/pipeline/)).
 Its source is in `docs/`.
@@ -33,6 +37,29 @@ Its source is in `docs/`.
 Experimental readers were written from the manufacturer's documentation and have not yet been checked on a real
 recording; every result from them carries a warning.
 
+## The tools
+
+**Analysis app** (`cwtool-gui`). Open a recording folder: the scene video is analysed in the background (or loaded
+from its cache), and every parameter change updates the measured and expected pupil and ΔPD plots at once. A video
+preview shows the analysed areas on the scene frame at the cursor. Sensor files from the logger can be shown under
+ΔPD. **Export** writes one package for the participant: pupil, ΔPD, per-event means, lux and sensor files, the
+parameters used and a manifest, all cut to an *export range* that leaves out a calibration, a break or a test run.
+
+**Sensor logger** (`cwtool-logger`). Records the lux sensor, a Shimmer (ECG and more) and an EmotiBit side by side
+on the computer's clock, with the phases of the experiment, one folder per recording. Live plots let you check
+the signals before recording.
+
+![The sensor logger recording a lux sensor, a Shimmer and an EmotiBit, with a protocol running](docs/images/sensor-logger.png)
+
+**Calibration presenter** (a web page, no install). Plays the participant calibration sequence full-screen on a
+display or inside a VR headset, and logs every run.
+[Open it](https://pignonig.github.io/cognitive_analysis_tool/calibration-tool/index.html) or open
+`docs/calibration-tool/index.html` from a local web server.
+
+![The calibration presenter: the sequence editor and the run settings](docs/images/calibration-presenter.png)
+
+*All screenshots use synthetic data.*
+
 ## Install and run
 
 Python 3.10 or newer, on Windows, macOS or Linux.
@@ -40,15 +67,15 @@ Python 3.10 or newer, on Windows, macOS or Linux.
 ```bash
 git clone -b master_v2.0 https://github.com/pignoniG/cognitive_analysis_tool.git
 cd cognitive_analysis_tool
-pip install -e ".[gui]"
+pip install -e ".[gui,logger]"       # "gui" alone if you do not need the sensor logger
 
-cwtool-gui [path/to/recording]                                   # desktop app
+cwtool-gui [path/to/recording]                                   # analysis app
 cwtool path/to/recording --params participant.json --plot        # command line, batch processing
+cwtool-logger                                                    # sensor logger
 ```
 
-In the app, open a recording folder: the scene video is analysed in the background (or loaded from its cache), and
-every parameter change updates the measured and expected pupil and ΔPD plots at once. A video preview shows the
-analysed areas on the scene frame at the cursor. Results are exported as CSV files with per-event means.
+On macOS, start the sensor logger from Terminal when using a Shimmer (macOS ends programs that use Bluetooth unless the
+app that started them may); see the [sensor logger page](https://pignonig.github.io/cognitive_analysis_tool/usage/logger/).
 
 ## What is in the repository
 
@@ -56,16 +83,18 @@ analysed areas on the scene frame at the cursor. Results are exported as CSV fil
 |---|---|
 | `cwtool/` | the analysis as a Python package that runs without a GUI; `cwtool/gui/` is the Qt app, `cwtool/logger/` the multi-sensor logger (lux, Shimmer, EmotiBit) |
 | `tools/` | the command-line lux sensor logger and an experiment event logger |
-| `docs/` | the documentation site, including the calibration presenter (a web page that plays the calibration sequence on a screen or in VR) |
+| `docs/` | the documentation site, including the calibration presenter (a web page that plays the calibration sequence on a screen or in VR) and the screenshots in `docs/images/` |
 | `Lux Sensor/` | firmware for the lux logger and the 3D-printable mount for the Pupil Core |
 | `tests/` | pytest suite with synthetic recordings for every device |
 
 ## Participant calibration (Varjo)
 
-A short full-field colour sequence, shown in the headset, gives each participant's light sensitivity and channel
-weights, then their response latency and pupil dynamics (the pupil scale and offset stay values you set). These are saved with the participant's
-parameters and applied to their other recordings. The display's own photometry (black and white luminance, gamma) is
-kept in a separate file. See [Participant calibration](https://pignonig.github.io/cognitive_analysis_tool/usage/calibration/).
+A short full-field colour sequence, shown in the headset with the calibration presenter, gives each participant's
+light sensitivity and channel weights, then their response latency and pupil dynamics (the pupil scale and offset stay
+values you set). These are saved with the participant's parameters and applied to their other recordings. The display's
+own photometry (black and white luminance, gamma) is kept in a separate file. For glasses with a lux sensor the same
+sequence, shown on a screen, fits the light sensitivity and the pupil offset. See
+[Participant calibration](https://pignonig.github.io/cognitive_analysis_tool/usage/calibration/).
 
 ## Development
 
