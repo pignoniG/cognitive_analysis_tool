@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+import faulthandler
+import os
 import sys
+import threading
 import time
 from pathlib import Path
 
-import pyqtgraph as pg
+# pyqtgraph takes whichever Qt binding it finds first; with PyQt6 also installed, two Qt copies in one process
+# crash. Make it use the PySide6 the rest of the app uses.
+os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
+
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
                                QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
+import pyqtgraph as pg  # noqa: E402
+
 from cwtool import palette
+from cwtool.gui.plots import data_range
 from cwtool.gui.workers import Task
 from cwtool.logger.protocol import read_protocol
 from cwtool.logger.session import Logger
@@ -20,11 +29,72 @@ from cwtool.logger.session import Logger
 REFRESH_MS = 100
 PLOT_SECONDS = 30.0
 
+# The recording button: green to start, red to stop (project colours; the light green gets dark text).
+RECORD_STYLES = {
+    False: f"QPushButton {{ background: {palette.GREEN}; color: #1b2b0e; }}"
+           f"QPushButton:hover {{ background: #86c350; }}"
+           f"QPushButton:pressed {{ background: #76b340; }}",
+    True: f"QPushButton {{ background: {palette.RED}; color: white; }}"
+          f"QPushButton:hover {{ background: #c92000; }}"
+          f"QPushButton:pressed {{ background: #b01c00; }}",
+}
+RECORD_BASE = "QPushButton { font-size: 20px; font-weight: bold; border: none; border-radius: 8px; padding: 14px; }"
+
+
+class StallWatchdog(threading.Thread):
+    """Writes the stack of every thread to a file when the window stops answering for ``limit`` seconds, so a
+    freeze can be traced to the call it is stuck in. The window calls :meth:`beat` from its refresh timer."""
+
+    def __init__(self, path: Path, limit: float = 2.0):
+        super().__init__(daemon=True, name="stall-watchdog")
+        self.path, self.limit = Path(path), limit
+        self._beat = time.monotonic()
+        self._reported = False
+        self._stop = threading.Event()
+
+    def beat(self) -> None:
+        self._beat = time.monotonic()
+        self._reported = False
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def run(self) -> None:
+        while not self._stop.wait(0.5):
+            if not self._reported and time.monotonic() - self._beat > self.limit:
+                self._reported = True
+                try:
+                    self.path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(self.path, "a") as f:
+                        f.write(f"\n=== window not responding for over {self.limit:.0f} s, "
+                                f"{time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+                        f.flush()
+                        faulthandler.dump_traceback(file=f, all_threads=True)
+                except OSError:
+                    pass
+
+
+def find_devices(kind: str):
+    """What the add dialog lists: paired Shimmers (macOS) or the devices streaming over LSL. Slow (a subprocess,
+    a network scan), so it runs in a background task, never in the window's thread."""
+    try:
+        if kind == "shimmer":
+            from cwtool.logger.sources.rfcomm_mac import paired_devices
+
+            return paired_devices("Shimmer")
+        if kind == "emotibit":
+            from cwtool.logger.sources import discover_devices
+
+            return discover_devices(2.0)
+    except ImportError:
+        pass
+    return None
+
 
 class AddSourceDialog(QDialog):
     """Settings of a new source: ``kind`` is lux, shimmer, emotibit or simulated."""
 
-    def __init__(self, kind: str, taken: set[str], parent=None):
+    def __init__(self, kind: str, taken: set[str], found=None, parent=None):
         super().__init__(parent)
         self.kind = kind
         self.setWindowTitle({"lux": "Lux sensor", "shimmer": "Shimmer", "emotibit": "EmotiBit (LSL)",
@@ -34,14 +104,12 @@ class AddSourceDialog(QDialog):
         self.name = QLineEdit(default)
         form.addRow("File name", self.name)
         self.port = QComboBox(editable=True)
-        self.match = QLineEdit("emotibit")
+        self.match = QComboBox(editable=True)
         if kind in ("lux", "shimmer"):
             if kind == "lux":
                 self.port.addItem("Automatic", None)
             if kind == "shimmer":  # paired over Bluetooth (macOS): connected directly, not through a serial port
-                from cwtool.logger.sources.rfcomm_mac import paired_devices
-
-                for name, address in paired_devices("Shimmer"):
+                for name, address in found or []:
                     self.port.addItem(f"{name}  (Bluetooth {address})", address)
             try:
                 from cwtool.logger.sources import list_ports
@@ -52,7 +120,9 @@ class AddSourceDialog(QDialog):
                 pass
             form.addRow("Serial port" if kind == "lux" else "Serial port (Bluetooth or USB dock)", self.port)
         if kind == "emotibit":
-            form.addRow("LSL streams whose name contains", self.match)
+            for device, streams in (found or {}).items():  # the devices streaming over LSL right now
+                self.match.addItem(f"{device}  ({len(streams)} streams)", device)
+            form.addRow("Device ID (LSL source)", self.match)
             form.addRow(QLabel("Start the EmotiBit Oscilloscope and enable its LSL output first."))
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -70,8 +140,24 @@ class AddSourceDialog(QDialog):
         if self.kind == "shimmer":
             return sources.ShimmerSource(port, name=name)
         if self.kind == "emotibit":
-            return sources.LslSource(self.match.text().strip(), name=name)
+            device = self.match.currentData() or self.match.currentText().split()[0:1] and self.match.currentText().split()[0]
+            return sources.LslSource(device or "", name=name)
         return sources.SimulatedSource(name)
+
+
+def plot_range(values, pad: float = 0.08, trim: float = 0.5):
+    """(low, high) for the value axis of a live plot: the span of the data, without the outer ``trim`` percent
+    so a single spike does not flatten the signal, plus ``pad`` of the span on both sides. A flat signal gets a
+    range of 1 % of its level (at least 0.1), so noise of one count is not magnified to the full plot height."""
+    lo, hi = data_range(values, trim)
+    if lo is None:
+        return None, None
+    min_span = max(0.01 * max(abs(lo), abs(hi)), 0.1)
+    if hi - lo < min_span:
+        mid = (lo + hi) / 2
+        lo, hi = mid - min_span / 2, mid + min_span / 2
+    margin = pad * (hi - lo)
+    return lo - margin, hi + margin
 
 
 class SourcePlot(pg.PlotWidget):
@@ -84,6 +170,9 @@ class SourcePlot(pg.PlotWidget):
         self.setBackground(None)
         self.showGrid(x=True, y=True, alpha=0.2)
         self.setLabel("bottom", "s")
+        self.setMouseEnabled(x=False, y=False)  # the view follows the data
+        self.enableAutoRange(x=False, y=False)
+        self.setXRange(-PLOT_SECONDS, 0, padding=0)
         self.signal = QComboBox()
         self.curve = self.plot(pen=pg.mkPen(palette.ACCENT, width=1.5))
         self.setTitle(name)
@@ -103,6 +192,9 @@ class SourcePlot(pg.PlotWidget):
         t, v = self.logger.live(self.name, self.signal.currentText(), PLOT_SECONDS)
         if t:
             self.curve.setData([x - t[-1] for x in t], v)
+            lo, hi = plot_range(v)
+            if lo is not None:
+                self.setYRange(lo, hi, padding=0)
 
 
 class LoggerWindow(QMainWindow):
@@ -135,6 +227,9 @@ class LoggerWindow(QMainWindow):
         self.setCentralWidget(split)
         self.statusBar().showMessage("Add the sensors, check the signals, then press Record.")
 
+        self._watchdog = StallWatchdog(Path(str(self._settings.value("folder", str(Path.home() / "cwtool_logs"))))
+                                       / "stall.log")
+        self._watchdog.start()
         self._timer = QTimer(self, interval=REFRESH_MS)
         self._timer.timeout.connect(self._refresh)
         self._timer.start()
@@ -172,14 +267,16 @@ class LoggerWindow(QMainWindow):
         row.addWidget(self.folder)
         row.addWidget(browse)
         f.addRow("Folder", row)
-        self.label = QLineEdit()
-        self.label.setPlaceholderText("participant or session (optional)")
-        f.addRow("Label", self.label)
-        self.record = QPushButton("Record")
+        self.record = QPushButton()
+        self.record.setMinimumHeight(64)
+        self.record.setCursor(Qt.PointingHandCursor)
         self.record.clicked.connect(self.toggle_recording)
+        self._style_record(False)
         self.elapsed = QLabel("")
+        self.elapsed.setStyleSheet("font-size: 18px;")
+        self.elapsed.setMinimumWidth(64)  # reserved, so the button does not resize when the timer appears
         row = QHBoxLayout()
-        row.addWidget(self.record)
+        row.addWidget(self.record, 1)
         row.addWidget(self.elapsed)
         f.addRow(row)
         return box
@@ -215,7 +312,19 @@ class LoggerWindow(QMainWindow):
     # sources
 
     def add_source(self, kind: str) -> None:
-        dlg = AddSourceDialog(kind, set(self.logger.sources), self)
+        if kind in ("shimmer", "emotibit"):  # looking for devices takes seconds: not in the window's thread
+            self.statusBar().showMessage("Looking for devices…")
+            task = Task(lambda progress, cancelled: find_devices(kind), self)
+            task.succeeded.connect(lambda found: self._ask_source(kind, found))
+            task.failed.connect(lambda _msg: self._ask_source(kind, None))
+            self._tasks.append(task)
+            task.start()
+        else:
+            self._ask_source(kind, None)
+
+    def _ask_source(self, kind: str, found) -> None:
+        self.statusBar().clearMessage()
+        dlg = AddSourceDialog(kind, set(self.logger.sources), found, self)
         if dlg.exec() != QDialog.Accepted:
             return
         source = dlg.source()
@@ -270,12 +379,16 @@ class LoggerWindow(QMainWindow):
             return
         self._settings.setValue("folder", self.folder.text())
         try:
-            session = self.logger.start_recording(Path(self.folder.text()), self.label.text())
+            session = self.logger.start_recording(Path(self.folder.text()))
         except OSError as e:
             QMessageBox.warning(self, "Cannot record", str(e))
             return
         self._rec_start = time.time()
         self.statusBar().showMessage(f"Recording to {session}")
+
+    def _style_record(self, recording: bool) -> None:
+        self.record.setText("Stop recording" if recording else "Start recording")
+        self.record.setStyleSheet(RECORD_BASE + RECORD_STYLES[recording])
 
     # events
 
@@ -322,6 +435,7 @@ class LoggerWindow(QMainWindow):
     # refresh
 
     def _refresh(self) -> None:
+        self._watchdog.beat()
         now = time.time()
         sources = self.logger.sources
         self.table.setRowCount(len(sources))
@@ -333,14 +447,18 @@ class LoggerWindow(QMainWindow):
             for c, text in enumerate([name, status, str(self.logger.counts.get(name, 0)),
                                       "" if age is None else f"{age:.1f} s"]):
                 self.table.setItem(r, c, QTableWidgetItem(text))
+        if "disk" in self.logger.errors:  # a write failed (full disk, ...): the recording goes on without those rows
+            self.statusBar().showMessage(f"Could not write to disk: {self.logger.errors['disk']}")
         for plot in self._plots.values():
             if plot.name in sources:
                 plot.refresh()
         if self.logger.recording:
-            self.record.setText("Stop")
+            if self.record.text() != "Stop recording":
+                self._style_record(True)
             self.elapsed.setText(f"{int(now - self._rec_start) // 60:02d}:{int(now - self._rec_start) % 60:02d}")
         else:
-            self.record.setText("Record")
+            if self.record.text() != "Start recording":
+                self._style_record(False)
             self.elapsed.setText("")
         if self._phase_end is not None and now >= self._phase_end:
             self.advance_protocol()
@@ -355,6 +473,7 @@ class LoggerWindow(QMainWindow):
             event.ignore()
             return
         self._timer.stop()
+        self._watchdog.stop()
         self.logger.shutdown()
         event.accept()
 

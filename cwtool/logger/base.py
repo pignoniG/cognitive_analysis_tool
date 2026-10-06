@@ -44,10 +44,14 @@ class Source:
         for name, v in zip(self.columns[1:], row[1:]):
             yield name, v
 
+    @property
+    def filename(self) -> str:
+        return f"{self.name}.csv"
+
     def sink(self, folder: Path):
         from cwtool.logger.sinks import CsvSink
 
-        return CsvSink(Path(folder) / f"{self.name}.csv", self.columns)
+        return CsvSink(Path(folder) / self.filename, self.columns)
 
 
 class ClockMapper:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import platform
+import queue
 import threading
 import time
 from collections import defaultdict, deque
@@ -57,12 +58,12 @@ class Logger:
     is recording they are also written to its folder:
 
         <folder>/<date>_<time>[_<label>]/
-            lux/<month>_<day>_<hour>.csv     hourly files, as read by cwtool.lux
-            <source>.csv                     one file per other source
-            event_log.csv                    phases, if any were marked
-            session.json                     sources, columns, start/end, clock
+            lux.csv           one file per source, named after it (shimmer.csv, emotibit.csv, ...)
+            event_log.csv     phases, if any were marked
+            session.json      sources and their files, columns, start/end, clock
 
-    The analysis takes the time span it needs from each file.
+    Every data file starts with the Unix time in seconds on the computer's clock, so the analysis takes the time
+    span it needs from each; ``lux.csv`` is read by cwtool.lux as it is.
     """
 
     def __init__(self):
@@ -78,6 +79,26 @@ class Logger:
         self.session_folder: Path | None = None
         self.events: EventLog | None = None
         self._started = 0.0
+        # Rows are written by their own thread: a slow disk must not hold up the sources or the window.
+        self._write_queue: queue.Queue = queue.Queue()
+        threading.Thread(target=self._write_loop, daemon=True, name="logger-writer").start()
+
+    def _write_loop(self) -> None:
+        while True:
+            item = self._write_queue.get()
+            try:
+                if item is None:
+                    return
+                sink, rows = item
+                sink.write(rows)
+            except Exception as e:  # shown by the window; the recording goes on
+                self.errors["disk"] = f"{type(e).__name__}: {e}"
+            finally:
+                self._write_queue.task_done()
+
+    def _drain(self) -> None:
+        """Wait until everything handed to the writer is on disk."""
+        self._write_queue.join()
 
     # sources
 
@@ -92,7 +113,7 @@ class Logger:
                 self._live[(source.name, sig)] = deque(maxlen=LIVE_POINTS)
             self.counts[source.name] = 0
             if self.recording:  # connected while recording: its file starts now
-                self._sinks[source.name] = self._make_sink(source)
+                self._sinks[source.name] = source.sink(self.session_folder)
         stop = threading.Event()
         self._stops[source.name] = stop
         t = threading.Thread(target=self._run, args=(source, stop), daemon=True, name=f"source-{source.name}")
@@ -111,10 +132,11 @@ class Logger:
             src.close()
         with self._lock:
             sink = self._sinks.pop(name, None)
-            if sink:
-                sink.close()
             for key in [k for k in self._live if k[0] == name]:
                 del self._live[key]
+        if sink:
+            self._drain()
+            sink.close()
 
     def _run(self, source: Source, stop: threading.Event) -> None:
         try:
@@ -135,7 +157,7 @@ class Logger:
                         buf.append((row[0], v))
             sink = self._sinks.get(source.name)
             if sink is not None:
-                sink.write(rows)
+                self._write_queue.put((sink, rows))
 
     def live(self, name: str, signal: str, seconds: float = 30.0):
         """(times, values) of the last ``seconds`` of a signal, for plotting."""
@@ -166,26 +188,26 @@ class Logger:
             self.session_folder = session
             self.events = EventLog(session / "event_log.csv")
             for name, src in self.sources.items():
-                self._sinks[name] = self._make_sink(src)
+                self._sinks[name] = src.sink(self.session_folder)
                 self.counts[name] = 0
         self._write_manifest(ended=None)
         return session
 
-    def _make_sink(self, source: Source):
-        return source.sink(self.session_folder / "lux" if source.kind == "lux" else self.session_folder)
-
     def stop_recording(self) -> Path | None:
         if not self.recording:
             return None
-        with self._lock:
+        with self._lock:  # no row is queued for these sinks after this
             session = self.session_folder
-            for sink in self._sinks.values():
-                sink.close()
+            sinks = list(self._sinks.values())
             self._sinks.clear()
-            if self.events:
-                self.events.close()
+            events = self.events
             self.session_folder = None
             self.events = None
+        self._drain()
+        for sink in sinks:
+            sink.close()
+        if events:
+            events.close()
         self._write_manifest(ended=time.time(), folder=session)
         return session
 
@@ -209,7 +231,7 @@ class Logger:
             "host": platform.node(),
             "time source": "unix time of the computer running this logger; device clocks are mapped onto it",
             "sources": {
-                name: {"kind": s.kind, "columns": s.columns, "settings": s.settings,
+                name: {"file": s.filename, "kind": s.kind, "columns": s.columns, "settings": s.settings,
                        "rows": self.counts.get(name, 0)}
                 for name, s in self.sources.items()
             },
@@ -220,3 +242,4 @@ class Logger:
         self.stop_recording()
         for name in list(self.sources):
             self.remove(name)
+        self._write_queue.put(None)

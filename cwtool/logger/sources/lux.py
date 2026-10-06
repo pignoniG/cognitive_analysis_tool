@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 
 from cwtool.logger.base import Source
-from cwtool.logger.sinks import HourlyLuxSink
 
 # Substrings of the USB description of the supported boards.
 KNOWN_BOARDS = ("USB2.0-Serial", "Adafruit", "Arduino", "IOUSBHostDevice")
@@ -25,7 +24,7 @@ class LuxSerialSource(Source):
     def __init__(self, port: str | None = None, baud: int = 250000, name: str = "lux"):
         super().__init__(name)
         self.port, self.baud = port, baud
-        self.columns = ["unix time (s)", "lux"]
+        self.columns = ["unix time (s)", "lux"]  # the file cwtool.lux reads: lux.csv
         self._ser = None
 
     def open(self) -> None:
@@ -54,6 +53,3 @@ class LuxSerialSource(Source):
     def close(self) -> None:
         if self._ser is not None:
             self._ser.close()
-
-    def sink(self, folder):
-        return HourlyLuxSink(folder)

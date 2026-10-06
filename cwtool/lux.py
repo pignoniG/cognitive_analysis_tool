@@ -1,13 +1,16 @@
-"""TSL2591 lux sensor logs, as written by tools/lux_logger.py (computer) or the
-Arduino SD-card logger.
+"""TSL2591 lux sensor logs, in two formats.
 
-Both write one CSV per hour, named ``<month>_<day>_<hour>.csv``, with rows
+The 1.x application, tools/lux_logger.py and the Arduino SD-card logger write one CSV per hour, named
+``<month>_<day>_<hour>.csv``, with rows
 
     unix time (ms), ..., ..., ..., lux
 
-(the middle columns are day/hour/minute or hour/minute/second). The SD-card
-logger uses the board's real-time clock, which does not know about time zones
-and drifts; compensate with the time lag parameter, as in 1.x.
+(the middle columns are day/hour/minute or hour/minute/second). The SD-card logger uses the board's real-time
+clock, which does not know about time zones and drifts; compensate with the time lag parameter, as in 1.x.
+
+The sensor logger (cwtool.logger) writes a single ``lux.csv`` per recording with a header and rows
+
+    unix time (s), lux
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from typing import Optional
 import numpy as np
 from scipy.signal import savgol_filter
 
-FILE_PATTERN = re.compile(r"^\d{1,2}_\d{1,2}_\d{1,2}\.csv$")
+FILE_PATTERN = re.compile(r"^(\d{1,2}_\d{1,2}_\d{1,2}|lux)\.csv$")
 
 
 def lux_files(folder: Path, recursive: bool = False) -> list[Path]:
@@ -32,18 +35,32 @@ def lux_files(folder: Path, recursive: bool = False) -> list[Path]:
     return sorted(p for p in found if p.is_file() and FILE_PATTERN.match(p.name))
 
 
+def _columns(path: Path) -> tuple[float, int, int]:
+    """(seconds per time unit, time column, lux column) of a lux log: ``lux.csv`` has a header, Unix seconds
+    and lux in the second column; the hourly files have Unix milliseconds and lux in the fifth."""
+    try:
+        with open(path, "rb") as f:
+            header = f.readline().decode("utf-8", "ignore")
+    except OSError:
+        header = ""
+    return (1.0, 0, 1) if header.startswith("unix time (s)") else (0.001, 0, 4)
+
+
 def _span(path: Path):
     """(first, last) time in seconds of a lux log from its first and last rows without reading the file, or
     None if they cannot be read (the caller then reads the whole file)."""
+    unit, tcol, _ = _columns(path)
     try:
         with open(path, "rb") as f:
             first = f.readline().decode("utf-8", "ignore").split(",")
+            if unit == 1.0:  # skip the header
+                first = f.readline().decode("utf-8", "ignore").split(",")
             f.seek(0, 2)
             size = f.tell()
             f.seek(max(size - 512, 0))
             tail = [ln for ln in f.read().decode("utf-8", "ignore").splitlines() if ln.strip()]
         last = tail[-1].split(",")
-        a, b = float(first[0]) / 1000.0, float(last[0]) / 1000.0
+        a, b = float(first[tcol]) * unit, float(last[tcol]) * unit
     except (OSError, ValueError, IndexError):
         return None
     return (a, b) if a <= b else None
@@ -67,13 +84,14 @@ def read_lux(folder: Path, epoch_start: float, duration: float, margin: float = 
         span = _span(path)
         if span is not None and (span[1] < t0 or span[0] > t1):
             continue
+        unit, tcol, lcol = _columns(path)
         with open(path, newline="") as f:
             for row in csv.reader(f):
-                if len(row) < 5:
+                if len(row) <= lcol:
                     continue
                 try:
-                    unix = float(row[0]) / 1000.0
-                    lux = float(row[4])
+                    unix = float(row[tcol]) * unit
+                    lux = float(row[lcol])
                 except ValueError:
                     continue
                 if t0 <= unix <= t1:
