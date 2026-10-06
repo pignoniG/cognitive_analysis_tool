@@ -32,7 +32,9 @@ One recording is analysed at a time. A new device needs only a reader module; th
 - `cwtool-gui`: a Qt desktop app for Windows, macOS and Linux, with live plots, the video preview, the calibration
   sequence overlay and the participant calibration fit.
 - `cwtool`: a command-line tool for batch processing.
-- `tools/`: the lux sensor logger and an experiment event logger.
+- `cwtool-logger`: a Qt app that records the lux sensor, a Shimmer and an EmotiBit, with experiment events
+  ([Sensor logger](usage/logger.md)).
+- `tools/`: the original command-line lux sensor logger and experiment event logger.
 
 ## Where to start
 

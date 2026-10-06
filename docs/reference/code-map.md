@@ -21,6 +21,14 @@ cwtool/
 ├── calibration.py      calibration sequences: built-in, CSV, locate in a recording
 ├── photometry.py       step 1 of the participant fit: light sensitivity and channel weights from step levels
 ├── fit.py              step 2: latency (from onsets), dynamics and transient (pupil offset optional)
+├── logger/             the multi-sensor logger (no Qt except gui.py); see usage/logger.md
+│   ├── base.py         Source (one sensor stream), ClockMapper (device clock → Unix time)
+│   ├── session.py      Logger (sources, live buffers, session folder, writer thread), EventLog
+│   ├── sinks.py        CsvSink
+│   ├── protocol.py     protocol files (name,duration)
+│   ├── gui.py          the window (cwtool-logger), plot scaling, stall watchdog
+│   └── sources/        lux (serial), shimmer (pyshimmer), lsl (EmotiBit via the Oscilloscope), simulated;
+│                       rfcomm_mac.py + rfcomm_helper.py: direct Bluetooth channel on macOS
 ├── cli.py              the cwtool command
 ├── plot.py             matplotlib figure for exports
 ├── palette.py          project colours, shared by the app, its plots and the PDF plot
@@ -33,7 +41,7 @@ cwtool/
     └── workers.py      QThread wrapper for the video pass and the fit
 
 tools/
-├── lux_logger.py       lux sensor over USB serial → hourly CSVs
+├── lux_logger.py       lux sensor over USB serial → hourly CSVs (1.x format; the sensor logger writes lux.csv)
 ├── event_logger.py     experiment phases → event_log CSV
 └── example_protocol.csv
 
@@ -55,6 +63,7 @@ Lux Sensor/             lux logger firmware and 3D-printable mount
 | `photometry.fit_light_response(rec, video, params, start, sequence)` | participant fit, step 1: light response |
 | `fit.fit_calibration(rec, video, params, start, end, sequence=...)` | participant fit, step 2: latency and dynamics |
 | `pipeline.calibrate_camera(rec, video, params)` | full-scale luminance of a fixed-exposure scene camera |
+| `logger.Logger().add(source)` / `.start_recording(folder)` / `.stop_recording()` | record sensors into a session folder |
 
 The processing steps and the functions that carry them out are listed in order in
 [Processing at a glance](../processing/pipeline.md).

@@ -1,6 +1,8 @@
-# Lux and event loggers
+# Lux and event logger scripts
 
-Two standalone scripts in `tools/` record data alongside the eye tracker.
+Two standalone scripts in `tools/` record data alongside the eye tracker. The
+[sensor logger](logger.md) does the same and more in one window (lux sensor, Shimmer, EmotiBit and events, one
+folder per recording); these scripts remain for command-line use and for the 1.x file format.
 
 ## Lux logger
 

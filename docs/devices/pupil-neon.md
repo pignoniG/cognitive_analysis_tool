@@ -24,7 +24,7 @@ Download the recording from Pupil Cloud as **Timeseries Data + Scene Video** and
 ├── world_timestamps.csv      # frame timestamps [ns]
 ├── scene_camera.json         # camera matrix, distortion
 ├── <section id>_<start>-<end>.mp4
-└── 4_14_10.csv               # lux logs, here or in lux/
+└── 4_14_10.csv               # lux logs (or lux.csv), here or in lux/
 ```
 
 | Used for | File and column |

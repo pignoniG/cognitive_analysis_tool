@@ -59,7 +59,8 @@ nav:
       - Command line: usage/cli.md
       - Participant calibration: usage/calibration.md
       - Calibration presenter: usage/calibration-tool.md
-      - Lux and event loggers: usage/tools.md
+      - Sensor logger: usage/logger.md
+      - Lux and event logger scripts: usage/tools.md
   - Devices:
       - Overview: devices/index.md
       - Varjo XR-4: devices/varjo.md

@@ -12,7 +12,8 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[gui]"
 ```
 
-This installs two commands: `cwtool-gui` (desktop app) and `cwtool` (command line).
+This installs two commands: `cwtool-gui` (desktop app) and `cwtool` (command line). The `logger` extra adds
+`cwtool-logger`, the [sensor logger](../usage/logger.md).
 
 ## Optional extras
 
@@ -20,7 +21,7 @@ This installs two commands: `cwtool-gui` (desktop app) and `cwtool` (command lin
 |---|---|---|
 | `gui` | PySide6, pyqtgraph, matplotlib | the desktop app |
 | `plot` | matplotlib | `cwtool --plot` (PDF plots from the command line) |
-| `logger` | pyserial | `tools/lux_logger.py` |
+| `logger` | pyserial, pyshimmer, pylsl, PySide6, pyqtgraph (and the macOS Bluetooth bindings on a Mac) | the [sensor logger](../usage/logger.md) and `tools/lux_logger.py` |
 | `dev` | pytest | running the tests |
 
 Combine them as needed, e.g. `pip install -e ".[gui,logger,dev]"`.

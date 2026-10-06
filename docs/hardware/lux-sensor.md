@@ -12,12 +12,14 @@ The firmware and 3D-printable mount are in the repository's `Lux Sensor/` folder
 | | Logged to a computer | Logged to the SD card |
 |---|---|---|
 | Hardware | microcontroller + sensor | microcontroller + data logging shield (RTC, SD card) + battery + sensor |
-| Recording | `tools/lux_logger.py` over USB | power the board on |
+| Recording | the [sensor logger](../usage/logger.md) (or `tools/lux_logger.py`) over USB | power the board on |
 | Clock | the computer's, the same as the eye tracker's | the board's real-time clock: drifts seconds per day, no time zones |
 | Cable | 3–4 m ribbon cable to the computer | 1.5 m, logger carried by the participant |
 
-Either way the readings (about 10 per second) are written to one CSV per hour, `<month>_<day>_<hour>.csv`, with the
-Unix time in milliseconds in the first column and lux in the fifth.
+Either way the readings (about 10 per second) are logged with the time of each. The sensor logger writes one `lux.csv`
+per recording (`unix time (s)`, `lux`, with a header). The SD card logger and `tools/lux_logger.py` write one CSV per
+hour, `<month>_<day>_<hour>.csv`, with the Unix time in milliseconds in the first column and lux in the fifth. The
+analysis reads both.
 
 With the SD card logger, set the real-time clock to local time and correct the remaining offset with the
 **time lag** parameter (for example, 3600 s for a clock one hour off).

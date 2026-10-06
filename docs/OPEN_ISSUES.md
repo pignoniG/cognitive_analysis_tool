@@ -984,3 +984,39 @@ is revised; they remain in the git history of this file.
 - **Proposal:** measure the headset's black and white with a photometer; run the sequence with a long black
   lead-in so the black level can be fitted.
 - **Status:** open.
+
+### 49. Sensor logger: clocks and untested paths
+
+- **Where:** `cwtool/logger/` ([Sensor logger](usage/logger.md)).
+- **Problem:** the times in the logger's files are meant to be on one clock, the computer's, but none of the mappings
+  has been checked against an external reference.
+  - *Lux:* stamped when the line arrives over USB; the board reads every ~100 ms (integration time), so the stamp is
+    up to that much after the measurement, and later with a busy computer.
+  - *Shimmer:* the device clock (24-bit ticks at 32768 Hz) is mapped with the smallest `host - device` difference over
+    the last 60 s, which assumes the least delayed sample of each minute has a delay near zero. A Bluetooth link that
+    is always delayed by the same amount is not seen. The mapping can step by the jitter of that minimum when the
+    window moves.
+  - *EmotiBit:* relies on LSL's clock synchronisation and the Oscilloscope's timestamps. In a test the newest sample
+    was about 0.35 s old on arrival; whether the timestamps are exact is not known. The EmotiBit's own timestamps
+    reach LSL through the Oscilloscope, so any offset between the EmotiBit's clock and the Oscilloscope is also
+    included.
+- **Not tested:** a recording with the real devices through the window (the sources were tested one by one, the window
+  with simulated sensors and real EmotiBit and lux); the Shimmer path on Windows and Linux (serial port, never run);
+  the logger with two Shimmers; the EmotiBit's irregular streams (HR, SCR_*) with real events; a long recording (the
+  Shimmer's 24-bit timestamp wrap every 512 s is handled and unit tested, not run for long on a device).
+- **Proposal:** measure the offsets with a common event (a light switched on in front of the lux sensor and the scene
+  camera; a tap seen by the Shimmer's and the EmotiBit's accelerometers) and record them in the documentation.
+  Consider a visible marker the logger can give to all devices at once.
+- **Status:** open, needs recordings with real devices.
+
+### 50. A pipeline test fails on `master_v2.0`
+
+- **Where:** `tests/test_varjo_and_pipeline.py::test_result_reports_the_light_left_in_delta_pd`.
+- **Problem:** the test expects `leak_r2` below 0.1 for the good recording and gets 0.157 (checked on 6 October 2026
+  at commit 6a3648c, with and without the logger changes, so they are not the cause). The other 166 tests of the
+  suite passed.
+- **Not investigated:** the gaze-circle defaults changed shortly before (radius 16.35°, weight 0.26; see issue 47) and
+  the synthetic recording was built for the earlier ones, but this is a guess.
+- **Proposal:** find out whether the model or the test's expectation needs to change; if the new defaults leave more
+  of the light in ΔPD on this recording, that is a finding for issue 47.
+- **Status:** open.

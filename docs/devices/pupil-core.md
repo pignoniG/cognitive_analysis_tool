@@ -14,7 +14,7 @@ recording/
 │   └── 000/                  # the newest numbered export is used
 │       ├── pupil_positions.csv
 │       └── gaze_positions.csv
-├── 4_14_10.csv               # lux logs, here or in lux/
+├── 4_14_10.csv               # lux logs (or lux.csv), here or in lux/
 └── <date>_event_log.csv      # optional
 ```
 

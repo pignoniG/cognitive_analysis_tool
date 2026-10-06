@@ -54,8 +54,8 @@ analysed areas on the scene frame at the cursor. Results are exported as CSV fil
 
 | Path | Content |
 |---|---|
-| `cwtool/` | the analysis as a Python package that runs without a GUI; `cwtool/gui/` is the Qt app |
-| `tools/` | the lux sensor logger and an experiment event logger |
+| `cwtool/` | the analysis as a Python package that runs without a GUI; `cwtool/gui/` is the Qt app, `cwtool/logger/` the multi-sensor logger (lux, Shimmer, EmotiBit) |
+| `tools/` | the command-line lux sensor logger and an experiment event logger |
 | `docs/` | the documentation site, including the calibration presenter (a web page that plays the calibration sequence on a screen or in VR) |
 | `Lux Sensor/` | firmware for the lux logger and the 3D-printable mount for the Pupil Core |
 | `tests/` | pytest suite with synthetic recordings for every device |

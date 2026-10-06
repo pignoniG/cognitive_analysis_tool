@@ -15,7 +15,7 @@ Copy the recording folder from the recording unit's SD card:
 ├── gazedata.gz         # gaze and pupil, one JSON object per line
 ├── eventdata.gz        # events (optional)
 ├── scenevideo.mp4      # scene camera
-├── 9_28_10.csv         # lux logs, here or in lux/
+├── 9_28_10.csv         # lux logs (or lux.csv), here or in lux/
 └── <date>_event_log.csv  # optional, from tools/event_logger.py
 ```
 
