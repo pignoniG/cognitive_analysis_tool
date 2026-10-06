@@ -14,7 +14,7 @@ from pathlib import Path
 os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")
 
 from PySide6.QtCore import QSettings, Qt, QTimer
-from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
                                QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
@@ -105,6 +105,7 @@ class AddSourceDialog(QDialog):
         form.addRow("File name", self.name)
         self.port = QComboBox(editable=True)
         self.match = QComboBox(editable=True)
+        self.set_clock = QCheckBox("Set the Shimmer's clock to the computer's time", checked=True)
         if kind in ("lux", "shimmer"):
             if kind == "lux":
                 self.port.addItem("Automatic", None)
@@ -119,6 +120,8 @@ class AddSourceDialog(QDialog):
             except ImportError:
                 pass
             form.addRow("Serial port" if kind == "lux" else "Serial port (Bluetooth or USB dock)", self.port)
+            if kind == "shimmer":
+                form.addRow(self.set_clock)
         if kind == "emotibit":
             for device, streams in (found or {}).items():  # the devices streaming over LSL right now
                 self.match.addItem(f"{device}  ({len(streams)} streams)", device)
@@ -138,7 +141,7 @@ class AddSourceDialog(QDialog):
         if self.kind == "lux":
             return sources.LuxSerialSource(port, name=name)
         if self.kind == "shimmer":
-            return sources.ShimmerSource(port, name=name)
+            return sources.ShimmerSource(port, name=name, set_clock=self.set_clock.isChecked())
         if self.kind == "emotibit":
             device = self.match.currentData() or self.match.currentText().split()[0:1] and self.match.currentText().split()[0]
             return sources.LslSource(device or "", name=name)

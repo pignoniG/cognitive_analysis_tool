@@ -996,6 +996,8 @@ is revised; they remain in the git history of this file.
     the last 60 s, which assumes the least delayed sample of each minute has a delay near zero. A Bluetooth link that
     is always delayed by the same amount is not seen. The mapping can step by the jitter of that minimum when the
     window moves.
+  - *Shimmer clock setting:* on connecting, the real-time clock is set over Bluetooth and read back; the offset after
+    setting includes the round trip (tens of ms, not measured on a device yet). It does not affect the logger's files.
   - *EmotiBit:* relies on LSL's clock synchronisation and the Oscilloscope's timestamps. In a test the newest sample
     was about 0.35 s old on arrival; whether the timestamps are exact is not known. The EmotiBit's own timestamps
     reach LSL through the Oscilloscope, so any offset between the EmotiBit's clock and the Oscilloscope is also

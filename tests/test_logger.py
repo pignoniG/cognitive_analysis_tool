@@ -284,3 +284,35 @@ def test_watchdog_reports_where_a_frozen_window_is_stuck(tmp_path):
         time.sleep(0.1)
     ok.stop()
     assert not (tmp_path / "ok.log").exists()
+
+
+class _FakeShimmer:
+    """The two clock calls of pyshimmer's ShimmerBluetooth, with a device clock that starts 100 s late."""
+
+    def __init__(self, hang=False):
+        self.offset, self.hang = -100.0, hang
+
+    def get_rtc(self):
+        if self.hang:
+            time.sleep(60)
+        return time.time() + self.offset
+
+    def set_rtc(self, t):
+        self.offset = t - time.time()
+
+
+def test_shimmer_clock_is_set_and_reported():
+    from cwtool.logger.sources.shimmer import ShimmerSource
+
+    dev = _FakeShimmer()
+    r = ShimmerSource.sync_clock(dev)
+    assert r["set"] and r["offset before (s)"] == pytest.approx(-100.0, abs=0.1)
+    assert abs(r["offset after (s)"]) < 0.1
+
+
+def test_shimmer_clock_failure_does_not_stop_the_connection():
+    from cwtool.logger.sources.shimmer import ShimmerSource
+
+    t = time.time()
+    r = ShimmerSource.sync_clock(_FakeShimmer(hang=True), timeout=0.3)  # a device that never answers
+    assert not r["set"] and "no answer" in r["error"] and time.time() - t < 2

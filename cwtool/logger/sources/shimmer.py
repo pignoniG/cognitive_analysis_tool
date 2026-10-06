@@ -3,6 +3,11 @@
 The Shimmer is streaming-configured: the sensors enabled on the device (in Consensys, or ``sensors`` here) are
 logged as raw ADC values, one column per channel, plus the device's own clock. Calibration to mV or µS is
 done in the analysis, as the raw values are what the device sends.
+
+On connecting, the device's real-time clock is set to the computer's time (``set_clock``), as Consensys does. The
+streamed samples are stamped by a different clock (ticks since power-on, mapped onto Unix time by
+:class:`ClockMapper`), so this does not change the logger's files; it makes the device's own SD card recordings
+and its "RTC not set" light agree with the computer. The clock is lost when the unit is switched off.
 """
 
 from __future__ import annotations
@@ -38,9 +43,10 @@ class ShimmerSource(Source):
     kind = "shimmer"
 
     def __init__(self, port: str, name: str = "shimmer", sampling_rate: float | None = None, sensors=None,
-                 timeout: float = 10.0):
+                 timeout: float = 10.0, set_clock: bool = True):
         super().__init__(name)
         self.timeout = timeout
+        self.set_clock = set_clock
         self.port, self.sampling_rate, self.sensors = port, sampling_rate, sensors
         self._dev = None
         self._channels = []
@@ -67,6 +73,8 @@ class ShimmerSource(Source):
                 f"The Shimmer on {self.port} did not answer within {self.timeout:.0f} s. Check that it is on "
                 "and not in its dock, that no other program (Consensys) is connected, and that it runs the "
                 "LogAndStream firmware.")
+        if self.set_clock:
+            self.settings["real-time clock"] = self.sync_clock(self._dev)
         if self.sensors:
             self._dev.set_sensors(self.sensors)
         if self.sampling_rate:
@@ -76,8 +84,33 @@ class ShimmerSource(Source):
 
         self._channels = [c for c in self._dev.get_data_types() if c != EChannelType.TIMESTAMP]
         self.columns = (["unix time (s)", "device time (s)"] + [c.name.lower() for c in self._channels])
-        self.settings = {"port": self.port, "sampling rate (Hz)": self.sampling_rate,
-                         "device": self._dev.get_device_name(), "values": "raw ADC counts"}
+        self.settings.update({"port": self.port, "sampling rate (Hz)": self.sampling_rate,
+                              "device": self._dev.get_device_name(), "values": "raw ADC counts"})
+
+    @staticmethod
+    def sync_clock(dev, timeout: float = 5.0) -> dict:
+        """Set the device's real-time clock to the computer's Unix time and read it back. Returns what happened
+        for ``session.json``: the offset (device minus computer, s) after setting, which includes the Bluetooth
+        round trip, or why it failed. Each call has a timeout, as pyshimmer waits for an answer forever."""
+        def call(fn, *args):
+            out = {}
+            t = threading.Thread(target=lambda: out.update(v=fn(*args)), daemon=True)
+            t.start()
+            t.join(timeout)
+            if t.is_alive():
+                raise TimeoutError(f"no answer within {timeout:.0f} s")
+            return out.get("v")
+
+        try:
+            before = call(dev.get_rtc)
+            asked = time.time()
+            call(dev.set_rtc, asked)
+            after = call(dev.get_rtc)
+            now = time.time()
+            return {"set": True, "offset before (s)": round(before - asked, 3),
+                    "offset after (s)": round(after - now, 3)}
+        except Exception as e:  # an old firmware without the command, a lost link: the stream still works
+            return {"set": False, "error": f"{type(e).__name__}: {e}"}
 
     def _link(self):
         """A serial port, or, for a Bluetooth address (macOS), a direct RFCOMM channel to the paired Shimmer."""

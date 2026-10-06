@@ -55,6 +55,13 @@ mV or µS is done in the analysis. Typical sampling rate 51.2 Hz.
   macOS creates often stays silent. The first attempt can fail and be repeated automatically; connecting takes up to
   half a minute. See the warning above about starting from Terminal.
 
+When connecting, the logger sets the Shimmer's real-time clock to the computer's time (tick the box in the add dialog
+off to skip it), as Consensys does, and saves the offset it measured in `session.json` (`real-time clock`). This does
+**not** change the logger's files: the streamed samples are stamped by another clock (ticks since power-on, mapped onto
+the computer's time as described under [Clocks](#clocks)). It makes the unit's own SD card recordings agree with the
+computer, and clears the blue/green "clock not set" light. The clock is lost when the unit is switched off, and it does
+not correct the drift of the unit's oscillator.
+
 Switch the Shimmer on and wait for its slow blue blink (standby) before connecting; only one computer can be
 connected to it at a time, so close Consensys first. Its status lights:
 
