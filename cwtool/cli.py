@@ -7,8 +7,9 @@ import math
 import sys
 from pathlib import Path
 
-from cwtool import devices, pipeline
+from cwtool import devices, pipeline, sensors
 from cwtool.params import DisplayPhotometry, Parameters, VideoSettings
+from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video
 
 
@@ -23,6 +24,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="display photometry JSON (display devices; participant files do not hold it)")
     ap.add_argument("--lux", type=Path, help="folder with lux sensor logs (glasses; default: in the recording)")
     ap.add_argument("--out", type=Path, help="export folder (default: RECORDING/cwtool_export)")
+    ap.add_argument("--sensors", type=Path, metavar="FOLDER",
+                    help="sensor logger session folder (Shimmer, EmotiBit) to add to the export, trimmed like the "
+                         "rest (default: any in the recording folder)")
+    ap.add_argument("--start", type=float, metavar="S", help="leave out everything before S seconds (export only)")
+    ap.add_argument("--end", type=float, metavar="S", help="leave out everything after S seconds (export only)")
+    ap.add_argument("--exclude", type=float, nargs=2, action="append", default=[], metavar=("FROM", "TO"),
+                    help="leave out FROM..TO seconds, e.g. a calibration (repeatable). Seconds are those of "
+                         "timestamp_relative. Without --start, --end and --exclude, the trim saved by the "
+                         "app with the recording is used")
     ap.add_argument("--reanalyse", action="store_true", help="ignore the cached video analysis")
     ap.add_argument("--workers", type=int, default=0, help="parallel video chunks (default: one per CPU core)")
     ap.add_argument("--plot", action="store_true", help="save a PDF plot (needs matplotlib)")
@@ -56,7 +66,19 @@ def main(argv: list[str] | None = None) -> int:
     for w in result.warnings:
         print(f"warning: {w}", file=sys.stderr)
     out = args.out or rec.folder / "cwtool_export"
-    for p in pipeline.export(result, rec, params, out):
+    if args.start is None and args.end is None and not args.exclude:
+        trim = Trim.load(rec.folder / TRIM_FILE)
+        if trim.active:
+            print(f"Using the trim saved with the recording ({TRIM_FILE})")
+    else:
+        trim = Trim(args.start, args.end, [tuple(x) for x in args.exclude])
+    found = []
+    if len(rec.time) and math.isfinite(rec.epoch_start):
+        span = float(rec.time[-1] - rec.time[0])
+        found = sensors.load_sensors(args.sensors or rec.folder, rec.epoch_start + float(rec.time[0]), span)
+    elif args.sensors:
+        print("The recording has no absolute time: sensor data cannot be aligned", file=sys.stderr)
+    for p in pipeline.export(result, rec, params, out, trim=trim, sensors=found):
         print(f"wrote {p}")
     if args.plot:
         from cwtool.plot import plot_result

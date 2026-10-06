@@ -10,11 +10,12 @@ import matplotlib.pyplot as plt  # noqa: E402
 from cwtool import palette  # noqa: E402
 from cwtool.pipeline import Result  # noqa: E402
 from cwtool.recording import Recording  # noqa: E402
+from cwtool.trim import Trim  # noqa: E402
 
 
-def plot_result(result: Result, rec: Recording):
+def plot_result(result: Result, rec: Recording, trim: Trim | None = None):
     """Figure with the raw, smoothed and expected pupil, ΔPD and the events; saved by ``--plot``
-    and by the GUI's export."""
+    and by the GUI's export. Parts the export leaves out (``trim``) are shaded grey."""
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(result.time, result.measured_raw, color="0.6", lw=0.5, label="Measured PD (raw)")
     ax.plot(result.time, result.measured, color="black", lw=0.8, label="Measured PD")
@@ -24,6 +25,9 @@ def plot_result(result: Result, rec: Recording):
     ax.axhline(result.expected_white, color=palette.EXPECTED, ls=":", lw=1)
     for e in rec.events:
         ax.axvspan(e.start, e.end, alpha=0.12, color=palette.EVENT)
+    if trim is not None and trim.active and len(result.time):
+        for a, b in trim.left_out_spans(float(result.time[0]), float(result.time[-1])):
+            ax.axvspan(a, b, color="0.5", alpha=0.25, lw=0)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Pupil diameter (mm)")
     ax.set_title(f"{rec.name}  ΔPD RMS {result.cw_rms:.3f} mm")

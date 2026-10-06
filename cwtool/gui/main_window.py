@@ -9,21 +9,27 @@ import numpy as np
 from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (QCheckBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
-                               QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QProgressBar,
-                               QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget)
+                               QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox,
+                               QProgressBar, QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget)
 
-from cwtool import __version__, calibration, devices, palette, pipeline
+from cwtool import __version__, calibration, devices, palette, pipeline, sensors
 from cwtool.fit import fit_calibration
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.photometry_dialog import PhotometryDialog
+from cwtool.gui.trim_panel import TrimPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
 from cwtool.params import DisplayPhotometry, Parameters
 from cwtool.photometry import fit_light_response, fit_lux_response
+from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video
 
 RECOMPUTE_DELAY_MS = 150
+# Signals shown when sensor data is imported (the ECG channel of a Shimmer, the EmotiBit's EDA and PPG), the first
+# channel of a sensor with none of these; at most MAX_SHOWN at once, as each is a plot.
+PREFERRED_SIGNALS = ("exg_ads1292r_1_ch1_24bit", "EDA", "PPG_IR")
+MAX_SHOWN = 6
 
 
 class MainWindow(QMainWindow):
@@ -46,6 +52,10 @@ class MainWindow(QMainWindow):
 
         self._recompute_timer = QTimer(self, singleShot=True, interval=RECOMPUTE_DELAY_MS)
         self._recompute_timer.timeout.connect(self.recompute)
+        self.sensors: list[sensors.Sensor] = []     # the logger's sensor files, cut to this recording
+        self._sensor_task: Task | None = None       # reads them, alongside the video analysis
+        self._trim_save_timer = QTimer(self, singleShot=True, interval=400)
+        self._trim_save_timer.timeout.connect(self._save_trim)
 
         self._build_actions()
         self._build_ui()
@@ -72,11 +82,15 @@ class MainWindow(QMainWindow):
         self.save_params_as_action = action("Save parameters as…", self.save_params_as, QKeySequence.SaveAs)
         self.load_display_action = action("Load display photometry…", self.choose_display)
         self.save_display_action = action("Save display photometry…", self.save_display)
+        self.sensors_action = action("Import sensor data…", self.choose_sensors)
+        self.sensors_action.setToolTip("Shimmer and EmotiBit files from the sensor logger: shown under ΔPD and "
+                                       "exported with the results, trimmed the same way")
         self.export_action = action("Export results…", self.export)
         quit_action = action("Quit", self.close, QKeySequence.Quit)
 
         file_menu = self.menuBar().addMenu("&File")
-        for a in (self.open_action, self.lux_action, self.clear_lux_action, None, self.load_params_action, self.save_params_action,
+        for a in (self.open_action, self.lux_action, self.clear_lux_action, self.sensors_action, None,
+                  self.load_params_action, self.save_params_action,
                   self.save_params_as_action, None, self.load_display_action, self.save_display_action, None,
                   self.export_action, None, quit_action):
             file_menu.addSeparator() if a is None else file_menu.addAction(a)
@@ -113,6 +127,34 @@ class MainWindow(QMainWindow):
         self.recording_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         rec_layout.addWidget(self.recording_label)
         side_layout.addWidget(rec_box)
+
+        sensor_box = QGroupBox("Sensor data (optional)")
+        sensor_layout = QVBoxLayout(sensor_box)
+        self.sensors_label = QLabel("Shimmer and EmotiBit files from the sensor logger can be shown under ΔPD and "
+                                    "exported with it, as one package.")
+        self.sensors_label.setWordWrap(True)
+        self.sensors_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        sensor_buttons = QHBoxLayout()
+        self.import_sensors_button = QPushButton("Import…")
+        self.import_sensors_button.setToolTip("Choose a sensor logger session folder (it is looked for in the "
+                                              "recording's own folder when the recording is opened)")
+        self.import_sensors_button.clicked.connect(self.choose_sensors)
+        self.remove_sensors_button = QPushButton("Remove")
+        self.remove_sensors_button.clicked.connect(self.remove_sensors)
+        sensor_buttons.addWidget(self.import_sensors_button)
+        sensor_buttons.addWidget(self.remove_sensors_button)
+        self.signal_list = QListWidget()
+        self.signal_list.setMaximumHeight(150)
+        self.signal_list.setToolTip(f"The signals to show under ΔPD (at most {MAX_SHOWN}). All of them are exported")
+        self.signal_list.itemChanged.connect(self._show_sensors)
+        sensor_layout.addWidget(self.sensors_label)
+        sensor_layout.addLayout(sensor_buttons)
+        sensor_layout.addWidget(self.signal_list)
+        side_layout.addWidget(sensor_box)
+        self.trim_panel = TrimPanel()
+        self.trim_panel.sequence_span = self._sequence_span
+        self.trim_panel.changed.connect(self._trim_changed)
+        side_layout.addWidget(self.trim_panel)
 
         self.params_panel = ParameterPanel()
         self.params_panel.params_changed.connect(self._params_edited)
@@ -253,6 +295,8 @@ class MainWindow(QMainWindow):
         self.summary_label.setWordWrap(True)     # long warnings must not set the window's minimum width
         self.plots = ResultPlots()
         self.plots.sequence_start_changed.connect(self._sequence_dragged)
+        self.plots.trim_dragged.connect(self._trim_dragged)
+        self.trim_panel.cursor_time = self.plots.cursor_time
         right_layout.addWidget(self.summary_label)
         right_layout.addWidget(self.plots, 1)
 
@@ -414,6 +458,7 @@ class MainWindow(QMainWindow):
             + (f"<br>lux folder: {self._lux_folder}" if self._lux_folder and rec.luminance_source == "lux_sensor" else ""))
         self.plots.clear_result()
         self.plots.show_events(rec.events)
+        self._recording_sensors_and_trim(rec)
         self.params_panel.set_video_settings(self.params_panel.video_settings().for_recording(rec))
         # Hide what does not apply to this device: the calibration sequence is shown on a display.
         self.params_panel.set_recording(rec)
@@ -515,6 +560,7 @@ class MainWindow(QMainWindow):
 
     def _sequence_changed(self) -> None:
         self.plots.set_sequence(self.sequence_check.isChecked(), self.sequence_start.value(), self.sequence)
+        self.trim_panel.refresh_buttons()
         self._update_sequence_rms()
         self._update_state()
 
@@ -745,6 +791,148 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Saved {path}", 3000)
         self._update_state()
 
+    # Sensor data and the export range
+
+    def choose_sensors(self) -> None:
+        if self.recording is None:
+            self._error("Import sensor data", "Open a recording first: the sensor data is placed on its time axis.")
+            return
+        start = self._settings.value("last_sensor_dir", str(self.recording.folder))
+        folder = QFileDialog.getExistingDirectory(self, "Sensor logger session folder", start)
+        if folder:
+            self._settings.setValue("last_sensor_dir", str(Path(folder).parent))
+            self.import_sensors(Path(folder))
+
+    def _recording_sensors_and_trim(self, rec) -> None:
+        """A recording was opened: forget the sensor data of the previous one, look for the logger's files in the
+        recording's own folder, and bring back the export range saved with it."""
+        self.sensors = []
+        self.signal_list.clear()
+        self.plots.set_sensors([])
+        self._update_sensors_label()
+        if len(rec.time):
+            lo, hi = float(rec.time[0]), float(rec.time[-1])
+        else:
+            lo = hi = 0.0
+        self.trim_panel.set_bounds(lo, hi)
+        trim = Trim.load(rec.folder / TRIM_FILE)
+        self.trim_panel.set_trim(trim, quiet=True)
+        self.plots.show_trim(trim, lo, hi)
+        if sensors.find_sensor_files(rec.folder):
+            self.import_sensors(rec.folder, quiet=True)
+
+    def import_sensors(self, folder: Path, quiet: bool = False) -> None:
+        rec = self.recording
+        if rec is None or not len(rec.time):
+            return
+        if not np.isfinite(rec.epoch_start):
+            if not quiet:
+                self._error("Import sensor data", "This recording does not say when it started, so the sensor "
+                                                  "data cannot be placed on its time axis.")
+            return
+        if self._sensor_task is not None and self._sensor_task.isRunning():
+            return
+        start, span = rec.epoch_start + float(rec.time[0]), float(rec.time[-1] - rec.time[0])
+
+        def load(progress, cancelled):
+            return sensors.load_sensors(folder, start, span)
+
+        self.statusBar().showMessage(f"Reading the sensor data in {folder.name}…")
+        self._sensor_task = Task(load, self)
+        self._sensor_task.succeeded.connect(lambda found: self._sensors_loaded(found, folder, quiet))
+        self._sensor_task.failed.connect(lambda msg: self._error("Import sensor data", msg))
+        self._sensor_task.finished.connect(lambda: self.statusBar().clearMessage())
+        self._sensor_task.start()
+
+    def _sensors_loaded(self, found, folder: Path, quiet: bool) -> None:
+        if not found:
+            if not quiet:
+                self._error("Import sensor data", f"No sensor data in {folder} overlaps this recording. The files "
+                                                  "must come from the sensor logger (their first column is the "
+                                                  "Unix time) and cover the same time as the recording.")
+            return
+        self.sensors = found
+        self.signal_list.blockSignals(True)
+        self.signal_list.clear()
+        shown = 0
+        for i, sensor in enumerate(found):
+            names = [n for n in sensor.signals() if n != "device time (s)"]
+            wanted = [n for n in names if n in PREFERRED_SIGNALS] or names[:1]
+            for name in names:
+                item = QListWidgetItem(f"{sensor.name}: {name}")
+                item.setData(Qt.UserRole, (i, name))
+                on = name in wanted and shown < MAX_SHOWN
+                shown += on
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Checked if on else Qt.Unchecked)
+                self.signal_list.addItem(item)
+        self.signal_list.blockSignals(False)
+        self._update_sensors_label(folder)
+        self._show_sensors()
+
+    def remove_sensors(self) -> None:
+        self.sensors = []
+        self.signal_list.clear()
+        self.plots.set_sensors([])
+        self._update_sensors_label()
+
+    def _update_sensors_label(self, folder: Path | None = None) -> None:
+        if not self.sensors:
+            self.sensors_label.setText("Shimmer and EmotiBit files from the sensor logger can be shown under ΔPD "
+                                       "and exported with it, as one package.")
+        else:
+            parts = ", ".join(f"{s.name} ({len(s):,} rows)" for s in self.sensors)
+            self.sensors_label.setText(f"{parts}" + (f"<br>from {folder}" if folder else ""))
+        self.remove_sensors_button.setEnabled(bool(self.sensors))
+
+    def _show_sensors(self, *_) -> None:
+        rec = self.recording
+        specs = []
+        for row in range(self.signal_list.count()):
+            item = self.signal_list.item(row)
+            if item.checkState() != Qt.Checked:
+                continue
+            index, name = item.data(Qt.UserRole)
+            t, v = self.sensors[index].series(name)
+            specs.append((f"{self.sensors[index].name}: {name}", t - rec.epoch_start, v))
+        if len(specs) > MAX_SHOWN:
+            self.statusBar().showMessage(f"Showing the first {MAX_SHOWN} of {len(specs)} selected signals", 4000)
+            specs = specs[:MAX_SHOWN]
+        self.plots.set_sensors(specs)
+
+    def _sequence_span(self):
+        """The calibration sequence on the plots, for the export range's "leave out calibration" button."""
+        if self.sequence_check.isChecked():
+            start = self.sequence_start.value()
+            return start, start + self.sequence.duration
+        return None
+
+    def _trim_changed(self, trim: Trim) -> None:
+        """The user edited the export range in the sidebar."""
+        rec = self.recording
+        if rec is not None and len(rec.time):
+            self.plots.show_trim(trim, float(rec.time[0]), float(rec.time[-1]))
+        self._trim_save_timer.start()
+
+    def _trim_dragged(self, trim: Trim) -> None:
+        """The user dragged the export range on the plots."""
+        self.trim_panel.set_trim(trim, quiet=True)
+        self._trim_save_timer.start()
+
+    def _save_trim(self) -> None:
+        """Keep the export range with the recording, so it comes back when it is opened again."""
+        if self.recording is None:
+            return
+        path = self.recording.folder / TRIM_FILE
+        trim = self.trim_panel.trim()
+        try:
+            if trim.active:
+                trim.save(path)
+            elif path.exists():
+                path.unlink()
+        except OSError:
+            self.statusBar().showMessage("Could not save the export range next to the recording", 4000)
+
     def _params_dir(self) -> str:
         return self._settings.value("last_params_dir", str(Path.home()))
 
@@ -755,15 +943,26 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Export to folder", default)
         if not folder:
             return
-        paths = pipeline.export(self.result, self.recording, self.params_panel.params(), Path(folder))
+        trim = self.trim_panel.trim()
+        try:
+            paths = pipeline.export(self.result, self.recording, self.params_panel.params(), Path(folder),
+                                    trim=trim, sensors=self.sensors)
+        except OSError as e:
+            self._error("Cannot export", str(e))
+            return
         try:
             from cwtool.plot import plot_result
             p = Path(folder) / f"{self.recording.name}_plot.pdf"
-            plot_result(self.result, self.recording).savefig(p, bbox_inches="tight")
+            plot_result(self.result, self.recording, trim).savefig(p, bbox_inches="tight")
             paths.append(p)
         except ImportError:
             pass
-        self.statusBar().showMessage(f"Exported {len(paths)} files to {folder}", 5000)
+        extra = ""
+        if self.sensors:
+            extra += f", {len(self.sensors)} sensor file{'s' if len(self.sensors) != 1 else ''}"
+        if trim.active:
+            extra += ", trimmed"
+        self.statusBar().showMessage(f"Exported {len(paths)} files{extra} to {folder}", 6000)
 
     def closeEvent(self, event) -> None:
         if self._task is not None and self._task.isRunning():

@@ -130,6 +130,9 @@ flushed every second, so a crash loses little. Every data file starts with a hea
 | `event_log.csv` | `Event`, `Start Time`, `End Time`, `Duration (s)`, `Start (unix s)`, `End (unix s)`, as written by `tools/event_logger.py` |
 | `session.json` | start and end, the computer's UTC offset, and for each sensor its file, kind, columns, settings (port, sampling rate, ...) and row count |
 
+The main app can show the Shimmer and EmotiBit files under ΔPD and export them with the results, trimmed to what
+you choose ([Sensor data](gui.md#sensor-data-optional)).
+
 `lux.csv` is read by the analysis as it is: put it (the recording's folder) with the eye tracker's recording, or
 point the *lux folder* setting at it ([Luminance](../processing/luminance.md#lux-sensor-devices)). The older hourly
 `<month>_<day>_<hour>.csv` files remain supported.

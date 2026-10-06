@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,10 +12,11 @@ from typing import Optional
 import numpy as np
 from scipy.signal import savgol_filter
 
-from cwtool import luminance, model
+from cwtool import __version__, luminance, model
 from cwtool import lux as lux_module
 from cwtool.params import Parameters
 from cwtool.recording import Recording
+from cwtool.trim import Trim
 from cwtool.video import VideoResult
 
 
@@ -578,31 +580,61 @@ def luminance_route(r: Result) -> Optional[dict]:
     return out
 
 
-def event_means(result: Result, events) -> list[tuple[str, float, float, float]]:
-    """Mean ΔPD (mm) within each event: (label, start, end, mean)."""
+def event_means(result: Result, events, trim: Optional[Trim] = None) -> list[tuple[str, float, float, float]]:
+    """Mean ΔPD (mm) within each event: (label, start, end, mean). With a ``trim``, an event is clipped to its
+    range and averaged over the ΔPD windows that are kept; one with nothing left is dropped."""
     out = []
+    keep = trim.keep_mask(result.cw_time) if trim is not None and trim.active else None
     for e in events:
-        sel = (result.cw_time >= e.start) & (result.cw_time <= e.end)
+        start, end = e.start, e.end
+        if keep is not None:
+            if trim.start is not None:
+                start = max(start, trim.start)
+            if trim.end is not None:
+                end = min(end, trim.end)
+            if end <= start:
+                continue
+        sel = (result.cw_time >= start) & (result.cw_time <= end)
+        if keep is not None:
+            sel &= keep
+            if not sel.any():
+                continue
         vals = result.cw[sel]
         vals = vals[np.isfinite(vals)]
-        out.append((e.label, e.start, e.end, float(vals.mean()) if len(vals) else float("nan")))
+        out.append((e.label, start, end, float(vals.mean()) if len(vals) else float("nan")))
     return out
 
 
-def export(result: Result, rec: Recording, params: Parameters, out_dir: Path) -> list[Path]:
-    """Write ``<name>_pupil.csv``, ``<name>_cw.csv``, ``<name>_events.csv`` (with events) and
-    ``<name>_params.json`` to ``out_dir``; returns their paths. See docs/reference/outputs.md."""
+def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, trim: Optional[Trim] = None,
+           sensors=()) -> list[Path]:
+    """Write the results of a recording as one package in ``out_dir``: ``<name>_pupil.csv``, ``<name>_cw.csv``,
+    ``<name>_events.csv`` (with events), ``<name>_lux.csv`` (with a lux log), one ``<name>_<sensor>.csv`` for each
+    of ``sensors`` (:class:`cwtool.sensors.Sensor`), ``<name>_params.json`` and ``<name>_export.json`` (what the
+    package holds); returns their paths.
+
+    ``trim`` (:class:`cwtool.trim.Trim`) leaves out the parts of the recording that are not wanted, from every
+    file; ΔPD in SD units is then normalised with the SD of what is kept. See docs/reference/outputs.md."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    trim = trim or Trim()
     paths = []
+    first, last = (float(rec.time[0]), float(rec.time[-1])) if len(rec.time) else (0.0, 0.0)
+
+    keep = trim.keep_mask(result.time)
+    keep_cw = trim.keep_mask(result.cw_time)
+    sd = result.cw_sd
+    if trim.active:
+        kept = result.cw[keep_cw]
+        kept = kept[np.isfinite(kept)]
+        sd = float(np.std(kept)) if len(kept) else float("nan")
 
     p = out_dir / f"{rec.name}_pupil.csv"
     with open(p, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["timestamp_unix", "timestamp_relative", "luminance_cdm2",
                     "pupil_measured_mm", "pupil_measured_raw_mm", "pupil_expected_mm"])
-        for row in zip(result.time + rec.epoch_start, result.time, result.luminance,
-                       result.measured, result.measured_raw, result.expected):
+        for row in zip(result.time[keep] + rec.epoch_start, result.time[keep], result.luminance[keep],
+                       result.measured[keep], result.measured_raw[keep], result.expected[keep]):
             w.writerow([f"{v:.6f}" for v in row])
     paths.append(p)
 
@@ -610,20 +642,59 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path) ->
     with open(p, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["timestamp_unix", "timestamp_relative", "delta_pd_mm", "delta_pd_sd"])
-        for t, v in zip(result.cw_time, result.cw):
-            w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}", f"{v / result.cw_sd:.6f}"])
+        for t, v in zip(result.cw_time[keep_cw], result.cw[keep_cw]):
+            w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}", f"{v / sd:.6f}"])
     paths.append(p)
 
-    if rec.events:
+    means = event_means(result, rec.events, trim) if rec.events else []
+    if means:
         p = out_dir / f"{rec.name}_events.csv"
         with open(p, "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(["event", "start_relative", "end_relative", "mean_delta_pd_mm", "mean_delta_pd_sd"])
-            for label, s, e, m in event_means(result, rec.events):
-                w.writerow([label, f"{s:.3f}", f"{e:.3f}", f"{m:.6f}", f"{m / result.cw_sd:.6f}"])
+            for label, s, e, m in means:
+                w.writerow([label, f"{s:.3f}", f"{e:.3f}", f"{m:.6f}", f"{m / sd:.6f}"])
         paths.append(p)
+
+    if rec.lux_time is not None and len(rec.lux_time):
+        p = out_dir / f"{rec.name}_lux.csv"
+        sel = trim.keep_mask(rec.lux_time, first, last)
+        with open(p, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["timestamp_unix", "timestamp_relative", "lux"])
+            for t, v in zip(rec.lux_time[sel], rec.lux_values[sel]):
+                w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}"])
+        paths.append(p)
+
+    sensor_info = []
+    for sensor in sensors:
+        kept_rows = sensor.select(trim.keep_mask(sensor.unix - rec.epoch_start, first, last))
+        p = out_dir / f"{rec.name}_{sensor.name}.csv"
+        kept_rows.write_csv(p, rec.epoch_start)
+        paths.append(p)
+        sensor_info.append({"file": p.name, "kind": sensor.kind, "source": str(sensor.path), "rows": len(kept_rows),
+                            "columns": ["timestamp_unix", "timestamp_relative"] + sensor.header[1:]})
 
     p = out_dir / f"{rec.name}_params.json"
     params.save(p)
+    paths.append(p)
+
+    p = out_dir / f"{rec.name}_export.json"
+    p.write_text(json.dumps({
+        "recording": rec.name,
+        "device": rec.device,
+        "recording folder": str(rec.folder),
+        "time": {"timestamp_unix": "Unix time (s)",
+                 "timestamp_relative": "seconds from the recording's first sample (time zero of the plots)",
+                 "unix time of time zero": rec.epoch_start,
+                 "recording span, relative (s)": [first, last]},
+        "trim": trim.to_dict() if trim.active else None,
+        "kept seconds": (sum(b - a for a, b in trim.kept_spans(first, last)) if trim.active else last - first),
+        "delta_pd_sd": "recording" if not trim.active else "kept data",
+        "delta_pd_sd_mm": sd,
+        "sensors": sensor_info,
+        "files": [q.name for q in paths] + [p.name],
+        "cwtool": __version__,
+    }, indent=2))
     paths.append(p)
     return paths

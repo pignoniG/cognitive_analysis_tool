@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import QToolButton
 
 from cwtool import calibration, palette
 from cwtool.pipeline import Result, residual_rms
+from cwtool.trim import Trim
 
 pg.setConfigOptions(background="w", foreground="k", antialias=True)
 
@@ -23,6 +26,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
     sequence_start_changed = Signal(float)
     cursor_changed = Signal(float)
+    trim_dragged = Signal(object)    # the export range (cwtool.trim.Trim) after the user dragged a line or segment
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -31,6 +35,18 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.ratio = self.addPlot(row=2, col=0)
         self.cw = self.addPlot(row=3, col=0)
         self._plots = (self.pupil, self.lum, self.ratio, self.cw)
+        self._base_plots = self._plots
+        self._sensor_plots: list = []
+        self._sensor_cursors: list = []
+        self._events: list = []
+        self._cursor_time = 0.0
+        self._trim = Trim()
+        self._trim_span = (0.0, 0.0)
+        self._trim_items: list = []        # (plot, item) of everything drawn for the export range
+        self._start_line = self._end_line = None
+        self._start_shades: list = []
+        self._end_shades: list = []
+        self._exclusion_shades: list = []  # per excluded segment: its region on every plot, the pupil plot's first
         self._stretch = (3, 1.6, 1.1, 2)
         for row, stretch in enumerate(self._stretch):
             self.ci.layout.setRowStretchFactor(row, stretch)
@@ -127,8 +143,12 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.reset_button.adjustSize()
         self.reset_button.move(self.width() - self.reset_button.width() - 12, 8)
 
+    def cursor_time(self) -> float:
+        return self._cursor_time
+
     def set_cursor(self, t: float) -> None:
         """Move the bar without reporting it (the caller already knows the time)."""
+        self._cursor_time = t
         self._moving_cursor = True
         try:
             for line in self.cursors:
@@ -225,6 +245,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.ci.layout.setRowMaximumHeight(2, 16777215 if ratio else 0)
 
     def show_events(self, events) -> None:
+        self._events = list(events)
         for plot, item in self._event_items:
             plot.removeItem(item)
         self._event_items = []
@@ -239,6 +260,141 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             label.setPos(e.start, 0)
             self.cw.addItem(label, ignoreBounds=True)
             self._event_items.append((self.cw, label))
+
+    # Sensor signals (the logger's Shimmer and EmotiBit files), one plot each under ΔPD
+
+    def set_sensors(self, specs) -> None:
+        """Show ``specs``, a list of ``(label, time, values)`` (time in the recording's relative seconds), as
+        plots under ΔPD on the shared time axis; an empty list removes them."""
+        for plot, line in self._sensor_cursors:
+            self.cursors.remove(line)
+        for row in range(4, 4 + len(self._sensor_plots)):
+            self.ci.layout.setRowStretchFactor(row, 0)
+        for plot in self._sensor_plots:
+            self.removeItem(plot)
+        self._sensor_plots, self._sensor_cursors = [], []
+        red = palette.rgb(palette.CURSOR)
+        for i, (label, t, v) in enumerate(specs):
+            plot = self.addPlot(row=4 + i, col=0)
+            plot.setXLink(self.pupil)
+            plot.showGrid(x=True, y=True, alpha=0.2)
+            plot.setClipToView(True)
+            plot.setDownsampling(auto=False)       # decimated once, below
+            for side in ("left", "bottom"):
+                plot.getAxis(side).enableAutoSIPrefix(False)
+            plot.vb.sigRangeChangedManually.connect(self._moved_by_user)
+            plot.hideButtons()
+            plot.disableAutoRange()   # the sensor files reach a little past the recording: they do not set the view
+            plot.setTitle(label, size="8pt")
+            plot.plot(*peak_decimate(t, v), pen=pg.mkPen((40, 90, 150), width=1.2), connect="finite")
+            lo, hi = data_range(v, 0.5)             # fitted once to the signal (without the outermost 0.5 %)
+            if lo is not None:
+                margin = 0.08 * (hi - lo)
+                plot.setYRange(lo - margin, hi + margin, padding=0)
+            line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(red, width=2),
+                                   hoverPen=pg.mkPen(red, width=4))
+            line.setZValue(20)
+            line.setCursor(pg.QtCore.Qt.SizeHorCursor)
+            line.setValue(self._cursor_time)
+            line.sigPositionChanged.connect(self._cursor_dragged)
+            plot.addItem(line, ignoreBounds=True)
+            self.ci.layout.setRowStretchFactor(4 + i, 1.6)
+            self._sensor_plots.append(plot)
+            self._sensor_cursors.append((plot, line))
+            self.cursors.append(line)
+        self._plots = self._base_plots + tuple(self._sensor_plots)
+        self._arrange_axes()
+        self.show_events(self._events)
+        self._redraw_trim()
+
+    def _arrange_axes(self) -> None:
+        """The time axis (values and label) is on the last plot of the stack."""
+        for plot in self._plots:
+            last = plot is self._plots[-1]
+            plot.getAxis("bottom").setStyle(showValues=last)
+            plot.getAxis("bottom").setLabel("Time (s)" if last else "")
+
+    # Export range: where the export starts and ends and what it leaves out (cwtool.trim.Trim)
+
+    SHADE = (90, 90, 90, 80)
+    FAR = 1e7    # shading runs far past the data on the open side
+
+    def show_trim(self, trim: Trim, lo: float, hi: float) -> None:
+        """Draw the export range over the plots; ``lo``, ``hi`` is the recording's time span."""
+        self._trim, self._trim_span = trim, (lo, hi)
+        self._redraw_trim()
+
+    def _add_trim_item(self, plot, item, z: float) -> None:
+        item.setZValue(z)
+        plot.addItem(item, ignoreBounds=True)
+        self._trim_items.append((plot, item))
+
+    def _redraw_trim(self) -> None:
+        for plot, item in self._trim_items:
+            if item.scene() is not None:
+                plot.removeItem(item)
+        self._trim_items = []
+        self._start_line = self._end_line = None
+        self._start_shades, self._end_shades, self._exclusion_shades = [], [], []
+        trim = self._trim
+        brush = pg.mkBrush(*self.SHADE)
+        edge = pg.mkPen((60, 60, 60), width=2, style=pg.QtCore.Qt.DashLine)
+        if trim.start is not None:
+            for plot in self._plots:
+                shade = pg.LinearRegionItem((-self.FAR, trim.start), movable=False, brush=brush, pen=pg.mkPen(None))
+                self._add_trim_item(plot, shade, -15)
+                self._start_shades.append(shade)
+            self._start_line = pg.InfiniteLine(trim.start, angle=90, movable=True, pen=edge, label="export starts",
+                                               labelOpts={"position": 0.9, "color": (60, 60, 60)})
+            self._start_line.sigPositionChanged.connect(self._edge_moved)
+            self._add_trim_item(self.pupil, self._start_line, 15)
+        if trim.end is not None:
+            for plot in self._plots:
+                shade = pg.LinearRegionItem((trim.end, self.FAR), movable=False, brush=brush, pen=pg.mkPen(None))
+                self._add_trim_item(plot, shade, -15)
+                self._end_shades.append(shade)
+            self._end_line = pg.InfiniteLine(trim.end, angle=90, movable=True, pen=edge, label="export ends",
+                                             labelOpts={"position": 0.9, "color": (60, 60, 60)})
+            self._end_line.sigPositionChanged.connect(self._edge_moved)
+            self._add_trim_item(self.pupil, self._end_line, 15)
+        for k, (a, b) in enumerate(trim.exclude):
+            regions = []
+            for plot in self._plots:   # the pupil plot's region can be dragged; the others follow it
+                region = pg.LinearRegionItem((a, b), movable=plot is self.pupil, brush=brush, pen=edge)
+                self._add_trim_item(plot, region, 12 if plot is self.pupil else -14)
+                regions.append(region)
+            regions[0].sigRegionChanged.connect(partial(self._exclusion_moved, k))
+            regions[0].sigRegionChangeFinished.connect(self._drag_finished)
+            self._exclusion_shades.append(regions)
+
+    def _current_trim(self) -> Trim:
+        start = float(self._start_line.value()) if self._start_line is not None else None
+        end = float(self._end_line.value()) if self._end_line is not None else None
+        return Trim(start, end, [tuple(regions[0].getRegion()) for regions in self._exclusion_shades])
+
+    def _edge_moved(self, *_) -> None:
+        if self._start_line is not None:
+            for shade in self._start_shades:
+                shade.setRegion((-self.FAR, float(self._start_line.value())))
+        if self._end_line is not None:
+            for shade in self._end_shades:
+                shade.setRegion((float(self._end_line.value()), self.FAR))
+        self._emit_dragged()
+
+    def _exclusion_moved(self, k: int, *_) -> None:
+        regions = self._exclusion_shades[k]
+        span = regions[0].getRegion()
+        for region in regions[1:]:
+            region.setRegion(span)
+        self._emit_dragged()
+
+    def _emit_dragged(self) -> None:
+        self._trim = self._current_trim()
+        self.trim_dragged.emit(self._trim)
+
+    def _drag_finished(self, *_) -> None:
+        # Segments dragged over each other merge: draw the normalised ones, after this signal has returned.
+        QTimer.singleShot(0, self._redraw_trim)
 
     # Calibration sequence overlay
 

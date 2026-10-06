@@ -6,9 +6,9 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 
 | Area | Contents |
 |---|---|
-| Left panel | Recording, Scene video, Calibration sequence and the parameter editors |
+| Left panel | Recording, Sensor data, Export range, Scene video, Calibration sequence and the parameter editors |
 | Summary line | ΔPD RMS and SD, expected pupil at the display's black and white points (display devices) or where the luminance comes from (with the lux sensor: its median luminance × the median video ratio and its 10th–90th percentile range), pupil scale and offset applied, sampling rates, share of the recording in gaps, and warnings in red |
-| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis |
+| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis, with the imported sensor signals under them |
 | Video preview (dock) | The scene frame at the cursor with the analysis circles; toggle it in **View** |
 
 ## Menus
@@ -25,8 +25,45 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
   the display photometry. Files written by version 1.x are converted when loaded.
 - **Load display photometry… / Save display photometry…**: the headset's nominal Lmin, Lmax and gamma. The last
   file used with a device is loaded automatically with its recordings; the window title shows which one is in use.
-- **Export results…**: CSVs, the parameters used and a PDF plot, into a folder of your choice
-  (default `cwtool_export` inside the recording).
+- **Import sensor data…**: the Shimmer and EmotiBit files of a [sensor logger](logger.md) session, shown under ΔPD
+  and exported with the results (see [Sensor data](#sensor-data-optional)).
+- **Export results…**: one package into a folder of your choice (default `cwtool_export` inside the recording): the
+  results CSVs, the sensor files, the parameters used, a manifest and a PDF plot, all trimmed to the
+  [export range](#export-range).
+
+## Sensor data (optional)
+
+Files from the [sensor logger](logger.md), the Shimmer's ECG and the EmotiBit's EDA, PPG and motion, can be put next
+to the pupil data. They are not used by the analysis; they let you see heart and skin responses against ΔPD, and
+export everything for one participant as a single package.
+
+- **Import…** (or **File → Import sensor data…**): choose a logger session folder. When a recording is opened, the
+  logger's files in its own folder are imported automatically. Only the rows that overlap the recording are read. The
+  recording must say when it started (its absolute time), as the sensor files are on the Unix clock.
+- The list under the buttons holds every signal of every file (the Shimmer's channels, the EmotiBit's streams). The
+  ticked ones are drawn, one plot each, under ΔPD on the same time axis, cursor and events; at first the ECG channel
+  of the Shimmer and the EmotiBit's EDA and PPG. At most six at a time.
+- Values are shown as the logger saved them: the Shimmer's are raw ADC counts, not millivolts.
+- **Remove** forgets the sensor data. All the signals, not only the ticked ones, go into the export.
+
+## Export range
+
+What the export leaves out: the calibration sequence, a break, a test run before the participant started. The
+analysis and the plots always use the whole recording (the model needs the history of the light); the range only
+decides what is written by **Export results…**, for every file at once (results, lux, sensors, events).
+
+- **Start at / End at**: leave out everything before or after a time. **Cursor** takes the time of the red cursor.
+  Both are drawn on the plots as dashed lines you can drag.
+- **Left out**: any number of segments in between, drawn as grey bands. **Leave out from cursor** adds 10 s at the
+  cursor to adjust; **Leave out calibration** leaves out the calibration sequence while its overlay is shown. Drag a
+  band by its body or edges on the pupil plot, or double-click a row (or **Edit…**) to type the times. Bands dragged
+  over each other merge.
+- Times are those of the plots' axis (`timestamp_relative` in the exports).
+- The range is saved next to the recording (`cwtool_trim.json`) and comes back when it is opened again; clearing it
+  removes the file. It is separate from the participant's parameter file, since it belongs to one recording.
+
+ΔPD in SD units (`delta_pd_sd`) is normalised with the SD of what is kept, so a calibration with large swings does not
+shrink the other values; see [Output files](../reference/outputs.md).
 
 ## Scene video
 

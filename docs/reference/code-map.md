@@ -12,7 +12,9 @@ cwtool/
 │   ├── pupil_core.py   Pupil Core (Pupil Player export)
 │   ├── neon.py         Pupil Neon (Pupil Cloud export, native format), experimental
 │   └── tobii_g3.py     Tobii Pro Glasses 3 (SD card recording folder), experimental
-├── lux.py              lux log files: find, read, smooth, lux → average luminance
+├── lux.py              lux log files (hourly 1.x files and the logger's lux.csv): find, read, smooth, lux → average luminance
+├── sensors.py          the sensor logger's Shimmer and EmotiBit files: find, read, cut, write
+├── trim.py             Trim: the part of a recording an export keeps (start, end, left-out segments)
 ├── video.py            scene video pass: frame clock, decoding (PyAV/OpenCV), parallel chunks, two-area
 │                       measurement, gamma grid, gaze weighting (VideoResult.weighted), cache
 ├── luminance.py        code values → linear, relative and absolute luminance
@@ -35,7 +37,8 @@ cwtool/
 └── gui/
     ├── main_window.py  window, menus, recording/video/calibration panels, background tasks
     ├── param_panel.py  parameter editors (every Parameters field must have one)
-    ├── plots.py        pyqtgraph plots, sequence overlay, cursor
+    ├── plots.py        pyqtgraph plots, sequence overlay, cursor, sensor plots, export range overlay
+    ├── trim_panel.py   the export range editor in the sidebar
     ├── photometry_dialog.py  result window of the light sensitivity fit
     ├── video_preview.py      scene frame at the cursor with the analysis circles
     └── workers.py      QThread wrapper for the video pass and the fit
@@ -58,7 +61,8 @@ Lux Sensor/             lux logger firmware and 3D-printable mount
 | `video.analyse_video(video, time, gaze, settings, frame_times=...)` | video pass |
 | `video.VideoResult.load_cached(...)` / `.save(...)` | cache |
 | `pipeline.run(rec, video, params)` | signal pass, returns a `Result` |
-| `pipeline.export(result, rec, params, folder)` | CSVs and parameters |
+| `pipeline.export(result, rec, params, folder, trim=, sensors=)` | the export package: CSVs, sensor files, parameters, manifest; trimmed |
+| `sensors.load_sensors(folder, epoch_start, duration)` | the logger's sensor files, cut to a recording |
 | `calibration.locate(time, rgb, sequence, gamma)` | find the calibration sequence |
 | `photometry.fit_light_response(rec, video, params, start, sequence)` | participant fit, step 1: light response |
 | `fit.fit_calibration(rec, video, params, start, end, sequence=...)` | participant fit, step 2: latency and dynamics |
