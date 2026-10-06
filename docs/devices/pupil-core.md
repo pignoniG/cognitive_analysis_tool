@@ -45,8 +45,10 @@ frames are matched to gaze samples by their recorded timestamps, taking the **ne
 
 ## Scene camera
 
-The field of view comes from `world.intrinsics` with a pinhole model (about 75° × 48.5° for the 1280×720 wide-angle
-lens when the file is missing). It converts the gaze circle radius from degrees to pixels. The eye, however, adapts
+The field of view comes from `world.intrinsics`, with the lens distortion taken into account: the angle between the
+middles of opposite edges of the frame. For the 1280×720 wide-angle lens this gives 103° × 54°, the values Pupil Labs
+list (a pinhole model would give only 78° × 49°, the view near the centre); without the file those values are used.
+It converts the gaze circle radius from degrees to pixels. The eye, however, adapts
 to the whole binocular field, so the adapting field area uses 200° × 135° (Pignoni et al. 2021).
 
 ## Luminance

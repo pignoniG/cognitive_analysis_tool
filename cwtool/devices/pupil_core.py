@@ -22,7 +22,8 @@ from typing import Optional
 import numpy as np
 
 from cwtool import lux
-from cwtool.devices.common import bin_samples as _bin, pinhole_fov, read_event_log, sample_rate, video_resolution
+from cwtool.devices.common import (bin_samples as _bin, lens_fov, pinhole_fov, read_event_log, sample_rate,
+                                   video_resolution)
 from cwtool.recording import DeviceProfile, Recording
 
 NAME = "pupil_core"
@@ -30,8 +31,9 @@ MIN_CONFIDENCE = 0.6
 # The eye adapts to the whole binocular visual field, not just the scene camera's view
 # (Pignoni et al. 2021).
 ADAPTING_FIELD = (200.0, 135.0)
-# Used when world.intrinsics cannot be read: the 1280x720 wide-angle scene camera.
-DEFAULT_CAMERA_FOV = (75.0, 48.5)
+# Used when world.intrinsics cannot be read: the 1280x720 wide-angle scene camera (Pupil Labs' measured field of
+# view for that lens, open issue 33).
+DEFAULT_CAMERA_FOV = (103.0, 54.0)
 
 
 def _export_dir(folder: Path) -> Optional[Path]:
@@ -49,12 +51,24 @@ def detect(folder: Path) -> bool:
 
 
 def camera_fov(folder: Path, resolution: tuple[int, int]) -> tuple[float, float]:
-    """Scene camera field of view (deg) from world.intrinsics (pinhole approximation)."""
+    """Scene camera field of view (deg) from world.intrinsics: the whole frame with the lens distortion, which for
+    the wide-angle lens gives the 103° × 54° Pupil Labs list (the pinhole value is only the view near the centre,
+    78° × 49°); the pinhole value when the distortion cannot be used."""
     try:
         import msgpack
 
         data = msgpack.unpackb((folder / "world.intrinsics").read_bytes(), raw=False)
-        return pinhole_fov(data[str(tuple(resolution))]["camera_matrix"], resolution)
+        entry = data[str(tuple(resolution))]
+    except Exception:
+        return DEFAULT_CAMERA_FOV
+    try:
+        fov = lens_fov(entry["camera_matrix"], entry["dist_coefs"], resolution, entry.get("cam_type") == "fisheye")
+        if fov is not None:
+            return fov
+    except Exception:
+        pass
+    try:
+        return pinhole_fov(entry["camera_matrix"], resolution)
     except Exception:
         return DEFAULT_CAMERA_FOV
 

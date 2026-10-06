@@ -469,7 +469,21 @@ is revised; they remain in the git history of this file.
   with (`Y_frame`), and it covers only about 103° × 54° of the eye's 200° × 135°, so that field is a part of what the
   eye sees, and the sensor's may not be the same part.
 - **Proposed:** undistort the gaze point and circle with the distortion coefficients, which both devices provide.
-- **Status:** open.
+- **2.0 (October 2026), Pupil Core:** the field of view now includes the lens distortion (`devices/common.lens_fov`:
+  the angle between the middles of opposite edges of the frame, through the principal point, using OpenCV's radial or
+  fisheye model with the coefficients of `world.intrinsics`). On the recordings of 29 and 30 September (the file has 8
+  coefficients and the principal point at 633.0, 397.4) it gives **103.0° × 53.6°, diagonal 121.5°**, against Pupil
+  Labs' 103° × 54° and 122° for the wide-angle lens at 1280×720: the lens is identified and the value checked. The
+  sample recording `sample_recording_v2` (5 coefficients) gives 98.6° × 53.0°, diagonal 100°, so that camera is another
+  one or its distortion model is less complete. Without `world.intrinsics` the reader assumes 103° × 54°.
+  - The gaze circle's radius in pixels is smaller by about 9 % for this camera (13.4 px per degree vertically, from
+    53.6°, against 14.7 with the pinhole 48.8°). The central scale of the lens is 13.85 px per degree, so the
+    conversion, which treats the frame as linear in angle, is still about 3 % too small at the centre and wrong at the
+    edges; a recording's video analysis is made again after the update (the radius is part of its cache key).
+- **Still open:** the Neon and Glasses 3 readers keep the pinhole value (no recording of either to check a
+  distortion-aware value against; Neon's nominal field is 103° × 77°), the gaze point and circle are not undistorted,
+  and the lens comparison with the narrow-angle and C930e intrinsics is not made.
+- **Status:** partly fixed (Pupil Core); open for Neon, Glasses 3 and the undistortion.
 
 ### 34. Clocks of the Neon phone and the lux logger
 - **Where:** Neon timestamps are UTC from the Companion phone's clock (NTP); the lux logger stamps readings with

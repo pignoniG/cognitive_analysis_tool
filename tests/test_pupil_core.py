@@ -223,3 +223,33 @@ def test_video_ratio_is_bounded(tmp_path):
     assert any("reached its bound" in w for w in r.warnings)
     free = pipeline.run(rec, video, Parameters(fixation_weight=1.0, lux_ratio_limit=0))
     assert np.nanmax(free.luminance_ratio) == pytest.approx(50.0, rel=0.05)
+
+
+def test_lens_field_of_view_includes_the_distortion():
+    from cwtool.devices.common import lens_fov, pinhole_fov
+
+    # world.intrinsics of the 29 and 30 September 2026 recordings (1280x720, "radial", 8 coefficients)
+    k = [[794.3311, 0.0, 633.0104], [0.0, 793.529, 397.3693], [0.0, 0.0, 1.0]]
+    d = [-0.375863, 0.164333, 0.000122, 0.000134, 0.033437, 0.082352, -0.082258, 0.144634]
+    h, v = lens_fov(k, d, (1280, 720))
+    # Pupil Labs list 103° × 54° for the wide-angle lens at this resolution; the pinhole value is 78° × 49°
+    assert h == pytest.approx(103.0, abs=1.0) and v == pytest.approx(54.0, abs=1.0)
+    assert pinhole_fov(k, (1280, 720))[0] < 80
+    # no distortion: the pinhole value
+    assert lens_fov(k, [0, 0, 0, 0, 0], (1280, 720)) == pytest.approx(pinhole_fov(k, (1280, 720)), abs=0.1)
+    # unusable coefficients give None, not a wrong number
+    assert lens_fov(k, [50.0, 0, 0, 0, 0], (1280, 720)) is None or lens_fov(k, [50.0, 0, 0, 0, 0], (1280, 720))[0] < 179
+
+
+def test_core_reader_uses_the_lens_field_of_view(tmp_path):
+    import msgpack
+    from cwtool.devices import pupil_core
+
+    k = [[794.3311, 0.0, 633.0104], [0.0, 793.529, 397.3693], [0.0, 0.0, 1.0]]
+    d = [-0.375863, 0.164333, 0.000122, 0.000134, 0.033437, 0.082352, -0.082258, 0.144634]
+    (tmp_path / "world.intrinsics").write_bytes(msgpack.packb(
+        {"version": 1, "(1280, 720)": {"camera_matrix": k, "dist_coefs": [d], "resolution": [1280, 720],
+                                       "cam_type": "radial"}}))
+    h, v = pupil_core.camera_fov(tmp_path, (1280, 720))
+    assert h == pytest.approx(103.0, abs=1.0) and v == pytest.approx(54.0, abs=1.0)
+    assert pupil_core.camera_fov(tmp_path / "missing", (1280, 720)) == pupil_core.DEFAULT_CAMERA_FOV

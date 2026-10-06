@@ -147,6 +147,33 @@ def pinhole_fov(camera_matrix, resolution: tuple[int, int]) -> tuple[float, floa
     return (2 * math.degrees(math.atan(w / 2 / k[0, 0])), 2 * math.degrees(math.atan(h / 2 / k[1, 1])))
 
 
+def lens_fov(camera_matrix, dist_coefs, resolution: tuple[int, int], fisheye: bool = False):
+    """Field of view (deg, h × v) of the whole frame with the lens distortion: the angle between the rays through
+    the middle of opposite edges, along the principal point's row and column (OpenCV's radial model, 5 or 8
+    coefficients, or the fisheye model). Unlike :func:`pinhole_fov` it covers the edges of a wide-angle lens, and
+    for a distortion of zero it is the same. None if the coefficients do not give a usable result."""
+    import cv2
+
+    k = np.asarray(camera_matrix, dtype=np.float64).reshape(3, 3)
+    d = np.asarray(dist_coefs, dtype=np.float64).ravel()
+    w, h = resolution
+    cx, cy = float(k[0, 2]), float(k[1, 2])
+    pts = np.array([[[0, cy]], [[w, cy]], [[cx, 0]], [[cx, h]]], dtype=np.float64)
+    try:
+        if fisheye:
+            rays = cv2.fisheye.undistortPoints(pts, k, d[:4].reshape(4, 1)).reshape(-1, 2)
+        else:
+            rays = cv2.undistortPoints(pts, k, d).reshape(-1, 2)
+    except cv2.error:
+        return None
+    if not np.isfinite(rays).all():
+        return None
+    ray = lambda i: np.array([rays[i, 0], rays[i, 1], 1.0])   # noqa: E731
+    angle = lambda a, b: math.degrees(math.acos(np.clip(a @ b / np.linalg.norm(a) / np.linalg.norm(b), -1, 1)))  # noqa: E731
+    fov = (angle(ray(0), ray(1)), angle(ray(2), ray(3)))
+    return fov if all(1.0 < v < 179.0 for v in fov) else None
+
+
 def video_resolution(path: Path) -> tuple[int, int]:
     import cv2
 
