@@ -84,6 +84,7 @@ The file loads in cwtool's *Load sequence…* as it is, giving the sequence as a
 column is on the presenting computer's clock, so when that is the computer that recorded the eye tracker, cwtool
 places the sequence in the recording from it without searching.
 
-!!! note "Not yet checked in a headset"
-    The colour of the sphere was checked on a normal canvas only. Check the light in the headset with the
-    [lux sensor](../hardware/lux-sensor.md) before relying on the nominal levels; see open issue 46.
+!!! note "The light in the headset is not measured yet"
+    The VR session has been run in a headset, but the colour of the sphere was only checked on a normal canvas. Check
+    the light in the headset with the [lux sensor](../hardware/lux-sensor.md) before relying on the nominal levels;
+    see open issue 46.

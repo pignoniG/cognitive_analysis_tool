@@ -926,7 +926,7 @@ is revised; they remain in the git history of this file.
 - **Status:** needs data (the real-recording checks above).
 
 
-### 46. The VR calibration presenter has not been run in a headset
+### 46. The VR calibration presenter's colours have not been measured in a headset
 - **Where:** `docs/calibration-tool/index.html` (WebXR path, `startVR`), with `vendor/three-slim.module.js`.
 - **Checked:** the sphere renders the requested sRGB code exactly to a normal canvas (seven levels read back); the
   screen mode, editor, seeded scrambling and CSV files were run in a browser, and the CSVs load in
@@ -940,7 +940,13 @@ is revised; they remain in the git history of this file.
   context lost and restored: the context had not been created XR-compatible, so making it so at session start
   recreated it. Now created with `xrCompatible: true`, and the session is ended if setup fails. If it recurs, the
   browser is probably not on the GPU the headset is connected to (hybrid-graphics computers).
-- **Status:** needs data.
+- **Retested (reported by G. Pignoni, October 2026):** after that fix the presenter runs in the headset. Which headset
+  and browser, and whether the colours were compared, are not recorded here.
+- **Still to measure:** that the framebuffer keeps the sRGB value (the lux sensor's reading of the grey levels
+  against the screen mode's), that the logged frame timestamps match the display (they are the frame's submission,
+  not its scan-out), and how the runtime's refresh rate affects steps of a few seconds. The trigger and the end of
+  the session were not reported on.
+- **Status:** the session works; the light in the headset still needs a measurement.
 
 ### 47. Fixation and background weights
 - **Where:** `Parameters.fixation_weight` (default 0.65), used by every luminance method (`VideoResult.weighted`).
@@ -1034,11 +1040,20 @@ is revised; they remain in the git history of this file.
 ### 50. A pipeline test fails on `master_v2.0`
 
 - **Where:** `tests/test_varjo_and_pipeline.py::test_result_reports_the_light_left_in_delta_pd`.
-- **Problem:** the test expects `leak_r2` below 0.1 for the good recording and gets 0.157 (checked on 6 October 2026
-  at commit 6a3648c, with and without the logger changes, so they are not the cause). The other 166 tests of the
-  suite passed.
-- **Not investigated:** the gaze-circle defaults changed shortly before (radius 16.35°, weight 0.26; see issue 47) and
-  the synthetic recording was built for the earlier ones, but this is a guess.
-- **Proposal:** find out whether the model or the test's expectation needs to change; if the new defaults leave more
-  of the light in ΔPD on this recording, that is a finding for issue 47.
-- **Status:** open.
+- **Problem:** the test expects `leak_r2` below 0.1 (and no "still explains" warning) for a pupil that follows the model
+  exactly, and gets 0.157. It fails on this machine at every commit checked, **including 4748c94, which added it**
+  (numpy 2.5.2, scipy 1.18.1, OpenCV 5.0), so it is not caused by later changes, the gaze-circle defaults (issue 47)
+  or the logger. The other tests of the suite pass.
+- **Checked (6 October 2026):** the synthetic video is exact (the colours and the step times come back unchanged),
+  and in the middle of each step the measured and the expected pupil are equal to 3 decimals. What is left is ΔPD
+  within about 0.4 s of each luminance step (RMS 0.06 mm): the measured pupil is smoothed, the expected one is
+  computed from the luminance without the same smoothing, so a perfect pupil still leaves a small step-shaped
+  residual, and that residual correlates with the luminance change that the leakage measure (issue: "light left")
+  regresses on. So the 0.1 limit is close to what a luminance staircase leaves even for a perfect model, and it
+  may be a property of the measure on steps, not of this machine.
+- **Open question:** is 0.1 the right level to warn at for staircase-like light (the calibration sequence is one),
+  or should the windows within a few tenths of a second of a step be left out of the measure? With real pupils the
+  dynamics already blur the steps.
+- **Proposal:** decide the threshold, or exclude the transitions, then update the test (a perfect pupil should pass,
+  a flat one must still exceed 0.8).
+- **Status:** open; diagnosed, needs a decision.
