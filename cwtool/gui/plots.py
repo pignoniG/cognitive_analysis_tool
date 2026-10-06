@@ -16,6 +16,20 @@ from cwtool.trim import Trim
 pg.setConfigOptions(background="w", foreground="k", antialias=True)
 
 
+class LogAxis(pg.AxisItem):
+    """Left axis of the luminance plot, which is logarithmic: ticks and labels at 1, 2 and 5 times a power of ten.
+    pyqtgraph's own log ticks (every multiple, 1 to 9) print overlapping labels on a short plot."""
+
+    def tickValues(self, minVal, maxVal, size):   # the range is in log10 units
+        first, last = int(np.floor(minVal)) - 1, int(np.ceil(maxVal)) + 1
+        decades = [float(n) for n in range(first, last + 1) if minVal <= n <= maxVal]
+        halves = [n + np.log10(k) for n in range(first, last + 1) for k in (2, 5) if minVal <= n + np.log10(k) <= maxVal]
+        return [(1.0, decades), (0.5, halves)]
+
+    def tickStrings(self, values, scale, spacing):
+        return [f"{10 ** v:.3g}" for v in values]
+
+
 class ResultPlots(pg.GraphicsLayoutWidget):
     """Stacked plots sharing the time axis: pupil, luminance, the video ratio (lux route only) and ΔPD.
     The calibration sequence start is a draggable vertical line on the pupil plot.
@@ -31,7 +45,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pupil = self.addPlot(row=0, col=0)
-        self.lum = self.addPlot(row=1, col=0)
+        self.lum = self.addPlot(row=1, col=0, axisItems={"left": LogAxis("left")})
         self.ratio = self.addPlot(row=2, col=0)
         self.cw = self.addPlot(row=3, col=0)
         self._plots = (self.pupil, self.lum, self.ratio, self.cw)

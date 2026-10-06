@@ -882,7 +882,8 @@ class MainWindow(QMainWindow):
                                        "and exported with it, as one package.")
         else:
             parts = ", ".join(f"{s.name} ({len(s):,} rows)" for s in self.sensors)
-            self.sensors_label.setText(f"{parts}" + (f"<br>from {folder}" if folder else ""))
+            self.sensors_label.setText(f"{parts}" + (f"<br>from {folder.name}" if folder else ""))
+            self.sensors_label.setToolTip(str(folder) if folder else "")
         self.remove_sensors_button.setEnabled(bool(self.sensors))
 
     def _show_sensors(self, *_) -> None:
