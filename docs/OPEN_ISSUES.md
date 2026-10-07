@@ -1004,6 +1004,38 @@ is revised; they remain in the git history of this file.
   weights are still compensating for a luminance that hardly moves. The caveats above hold (one recording, one
   participant, a screen filling part of the view). It does not support a weight of 0.26 for glasses on a screen in a
   room, but it is not Eckert's scene (a cube moving over the field), so it does not contradict them either.
+- **Check against the paper (7 October 2026):** Eckert et al. (2022, sections 3.2.1 and 4) give the weights as
+  w_Fixation = 0.26 and w_Background = 0.74, the background being the whole screen except the fixation circle
+  (radius display width/5 = 16.35°); `weighted_lin` applies them in that order. The weights come from the cube
+  scene (gaze alternating between a black and a white cube on a screen that otherwise stays constant) and the free
+  exploration; they suggest that users move the head rather than the gaze, and that the weighting could move towards
+  the screen centre.
+- **Hypothesis: the weight depends on the task and the scene (G. Pignoni, 7 October 2026).** The pupil follows what is
+  attended, not only what reaches the retina, so a small, high-contrast target that the task needs (the odometer
+  of a car, a phone screen in a dark room) may count for much more than its area, and a scene with a large, uniform
+  surround for much less. The glasses recording above, a screen in a room with the gaze on it, preferred a weight of
+  1, which fits. Two things follow if it holds: a single default (0.26, or 0.65 before) cannot suit all tasks, and
+  the gaze circle is only a proxy, because attention can leave the gaze point.
+  - *References (found on 7 October 2026 through their publishers' and the authors' pages and the 2015 review's
+    reference list; the full papers have not been read):*
+    Mathôt S., van der Linden L., Grainger J., Vitu F. (2013). The pupillary response to light reflects the focus of
+    covert visual attention. *PLoS ONE* 8(10), e78168, doi:10.1371/journal.pone.0078168 (participants fixating the
+    centre of a screen with a bright and a dark half: attending the bright half gave a smaller pupil, from about
+    600 ms after the cue);
+    Binda P., Pereverzeva M., Murray S. O. (2013). Attention to bright surfaces enhances the pupillary light reflex.
+    *Journal of Neuroscience* 33, 2199–2204, doi:10.1523/JNEUROSCI.3440-12.2013;
+    Mathôt S., Dalmaijer E., Grainger J., Van der Stigchel S. (2014). The pupillary light response reflects exogenous
+    attention and inhibition of return. *Journal of Vision* 14(14), 7, doi:10.1167/14.14.7;
+    Mathôt S., Van der Stigchel S. (2015). New light on the mind's eye: the pupillary light response as active vision.
+    *Current Directions in Psychological Science* 24(5), 374–378, doi:10.1177/0963721415593725 (a review; also links
+    the light response to the preparation of eye movements).
+    What they show is that attention changes the light response with the gaze fixed. The abstracts do not say how
+    the effect depends on the size or contrast of the attended region, and the displays were large bright and dark
+    areas, so they do not give a weight for a small target; that stays the hypothesis above.
+  - *Test:* record the same participant with the gaze on (a) a small bright target on a dim surround (phone in a dark
+    room, a dashboard-like scene), (b) the same target on a bright surround, (c) a uniform field; fit the weight on
+    each (*Also fit the fixation weight*) and see whether it moves with the contrast of the target. A weight per
+    task type, or one estimated per recording, would then replace the single default.
 - **Proposal:** choose the weight together with the circle radius from a reference (G. Pignoni has one suggesting a
   different weighting), possibly per device type, and report both.
 - **Status:** open.
