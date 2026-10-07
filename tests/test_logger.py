@@ -1,3 +1,7 @@
+"""Tests of the sensor logger: the session folder and files, the live buffers, the clock mapping, the LSL, Shimmer and
+RFCOMM sources, the watchdog and the window.
+"""
+
 import csv
 import json
 import threading

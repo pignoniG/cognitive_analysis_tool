@@ -1,3 +1,7 @@
+"""Tests of the analysis window: opening and analysing a recording, the parameter panel, the video preview, the fits
+and the plots.
+"""
+
 from dataclasses import replace
 import os
 import time

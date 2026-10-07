@@ -1,3 +1,5 @@
+"""Tests of the resampling of the pupil signal: gaps, a missing eye, the artefact filter and the analysis rate."""
+
 import numpy as np
 import pytest
 

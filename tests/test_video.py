@@ -1,3 +1,7 @@
+"""Tests of the video analysis: the fixation and background areas, the gamma handling, the cache and the decoding
+backends.
+"""
+
 import numpy as np
 import pytest
 

@@ -1,3 +1,5 @@
+"""Tests of the Pupil Labs Neon reader and of the pipeline with a lux sensor or a fixed-exposure camera."""
+
 import numpy as np
 import pytest
 

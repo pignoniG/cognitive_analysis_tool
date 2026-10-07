@@ -1,3 +1,5 @@
+"""Tests of the Tobii Pro Glasses 3 reader and its pipeline."""
+
 import numpy as np
 import pytest
 

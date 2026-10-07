@@ -1,3 +1,7 @@
+"""Tests of the fit of the sensitivity, the pupil offset and the fixation weight for glasses recordings with a lux
+sensor.
+"""
+
 from dataclasses import replace
 
 import numpy as np

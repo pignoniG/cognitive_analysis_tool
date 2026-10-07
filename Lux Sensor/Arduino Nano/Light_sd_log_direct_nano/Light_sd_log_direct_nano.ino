@@ -1,3 +1,8 @@
+// Lux sensor logger: reads an Adafruit TSL2591 light sensor, switching its gain to suit the light, prints each
+// reading in lux on the serial port (250000 baud, one number per line: what the sensor logger and
+// tools/lux_logger.py read) and appends it to an hourly CSV file on the SD card (<month>_<day>_<hour>.csv: Unix
+// time in milliseconds, hour, minute, second, lux). The time comes from the board's DS1307 real-time clock (DS1307RTC).
+// Hardware: Arduino Nano + Deek-Robot data logging shield + TSL2591. See ../../ReadMe.txt and docs/hardware/lux-sensor.md.
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include "Adafruit_TSL2591.h"

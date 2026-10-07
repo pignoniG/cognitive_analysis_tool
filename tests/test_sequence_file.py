@@ -1,3 +1,5 @@
+"""Tests of the calibration sequence files, the presenter's default sequence and finding a sequence in a recording."""
+
 import pytest
 
 from cwtool import calibration

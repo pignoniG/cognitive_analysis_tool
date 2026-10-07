@@ -1,3 +1,5 @@
+"""Tests of the stand-alone tools: the protocol and event log files, the time zones and the lux logger."""
+
 import importlib.util
 from datetime import datetime, timedelta, timezone
 from pathlib import Path

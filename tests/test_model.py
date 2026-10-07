@@ -1,3 +1,5 @@
+"""Tests of the pupil model: the steady-state size, the latency, the attack and release, and the transient."""
+
 import numpy as np
 import pytest
 

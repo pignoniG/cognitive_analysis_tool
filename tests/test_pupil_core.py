@@ -1,3 +1,5 @@
+"""Tests of the Pupil Core reader, its lux log handling, the video ratio and the scene camera's field of view."""
+
 import numpy as np
 import pytest
 

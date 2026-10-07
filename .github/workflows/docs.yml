@@ -1,3 +1,4 @@
+# Builds the documentation with MkDocs and publishes it to GitHub Pages when the docs change on master_v2.0.
 name: Documentation
 
 on:

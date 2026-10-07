@@ -1,3 +1,7 @@
+"""Shared test fixtures: synthetic Varjo, Pupil Core, Neon and Tobii recordings written to a temporary folder, and an
+isolated settings file for the GUI tests.
+"""
+
 import csv
 from pathlib import Path
 

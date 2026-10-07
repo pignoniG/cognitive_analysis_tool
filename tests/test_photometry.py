@@ -1,3 +1,7 @@
+"""Tests of the display photometry fit: sensitivity, channel weights, black level and the photometry and participant
+files.
+"""
+
 import json
 
 import numpy as np

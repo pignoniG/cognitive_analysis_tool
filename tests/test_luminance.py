@@ -1,3 +1,6 @@
+"""Tests of the colour to luminance conversion: the gamma curves, the display's black and white and the channel gains.
+"""
+
 import numpy as np
 import pytest
 

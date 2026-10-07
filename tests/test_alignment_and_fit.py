@@ -1,3 +1,6 @@
+"""Tests of the pupil alignment modes and of the latency, dynamics, transient and offset fits on synthetic recordings.
+"""
+
 import csv
 
 import numpy as np

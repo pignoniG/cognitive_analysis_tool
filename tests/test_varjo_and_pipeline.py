@@ -1,3 +1,7 @@
+"""Tests of the Varjo reader and of the pipeline end to end: ΔPD, the light left in it, the parameter files and the
+command line.
+"""
+
 import json
 
 import numpy as np
