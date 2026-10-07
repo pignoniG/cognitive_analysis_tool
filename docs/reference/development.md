@@ -29,6 +29,18 @@ data. The GUI tests need a display or `QT_QPA_PLATFORM=offscreen`.
 - Changing what the video pass stores means bumping `CACHE_FORMAT` in `video.py`.
 - Inconsistencies found in the code, the data or the papers go in `docs/OPEN_ISSUES.md`.
 
+### Comments
+
+- **Every source file starts with a header** saying what it contains: the module docstring of a Python file (tests
+  included), a `//` comment at the top of an Arduino sketch, a comment in the page for the calibration presenter, the
+  settings and the workflow. Keep it to what the file is for and what it does not do, not a list of its functions.
+- **Every public class and function has a docstring** (one line is enough when the name and the arguments say the
+  rest): what it returns and the units (s, mm, cd/m²) and the clock a time is on, where that is not obvious. Private
+  helpers get one when their logic is not clear from the code.
+- **Comments explain why**, not what: the assumption behind a number, the reason for an order of operations, the open
+  issue a workaround refers to (`issue 47`). Tests are named after what they check and need no docstring.
+- A docstring that disagrees with the code is a bug: change both together.
+
 ## Icons
 
 The windows use Tabler's outline icons (MIT; the licence is in `cwtool/gui/icons/`), stored as SVG files and drawn

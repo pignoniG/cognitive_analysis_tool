@@ -7,7 +7,7 @@ cwtool/
 │                       JSON load/save, 1.x conversion, unused_parameters() for the GUI
 ├── devices/
 │   ├── __init__.py     READERS, detect(), load()
-│   ├── common.py       event logs, markers → events, binning, sample rate, pinhole field of view
+│   ├── common.py       event logs, markers → events, binning, sample rate, field of view (pinhole and lens distortion)
 │   ├── varjo.py        Varjo XR-4 (Varjo Base)
 │   ├── pupil_core.py   Pupil Core (Pupil Player export)
 │   ├── neon.py         Pupil Neon (Pupil Cloud export, native format), experimental
@@ -33,6 +33,7 @@ cwtool/
 │   └── sources/        lux (serial), shimmer (pyshimmer), lsl (EmotiBit via the Oscilloscope), simulated;
 │                       rfcomm_mac.py + rfcomm_helper.py: direct Bluetooth channel on macOS
 ├── cli.py              the cwtool command
+                        (gui/ and logger/ each have a __main__.py: python -m cwtool.gui, python -m cwtool.logger)
 ├── plot.py             matplotlib figure for exports
 ├── palette.py          project colours, shared by the app, its plots and the PDF plot
 └── gui/
@@ -51,7 +52,8 @@ tools/
 ├── event_logger.py     experiment phases → event_log CSV
 └── example_protocol.csv
 
-tests/                  pytest suite with synthetic recordings for every device (conftest.py)
+tests/                  pytest suite with synthetic recordings for every device (conftest.py); one file per area,
+                        each with a header saying what it covers
 docs/                   this site (MkDocs)
 Lux Sensor/             lux logger firmware and 3D-printable mount
 ```
