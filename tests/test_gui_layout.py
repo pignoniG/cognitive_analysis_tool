@@ -116,7 +116,7 @@ def test_warnings_collapse_into_a_badge(app, varjo_folder):
     assert wait_for(app, lambda: w.result is not None)
     w.result.warnings[:] = ["First problem.", "Second problem."]
     w._update_state()
-    assert not w.warnings_button.isHidden() and w.warnings_button.text() == "2 warnings"
+    assert not w.warnings_button.isHidden() and w.warnings_button.text() == "2 warnings" and not w.warnings_button.icon().isNull()
     assert w.warnings_label.isHidden() and "First problem." in w.warnings_label.text()
     assert "First problem" not in w.summary_label.text()                     # the strip stays one short line
     w.warnings_button.setChecked(True)

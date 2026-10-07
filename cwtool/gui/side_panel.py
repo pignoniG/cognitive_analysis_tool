@@ -3,9 +3,11 @@ numbered steps of the calibration, and the holder that lets the video preview co
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (QButtonGroup, QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
                                QStackedWidget, QToolButton, QVBoxLayout, QWidget)
+
+from cwtool.gui.icons import icon
 
 RAIL_STYLE = (
     "QToolButton { border: none; border-radius: 6px; padding: 8px 2px; font-size: 12px; }"
@@ -25,7 +27,7 @@ class Rail(QWidget):
 
     changed = Signal(int)
 
-    def __init__(self, titles, parent=None):
+    def __init__(self, titles, icons=None, parent=None):
         super().__init__(parent)
         self.setFixedWidth(70)
         self._titles = list(titles)
@@ -39,9 +41,14 @@ class Rail(QWidget):
             button = QToolButton()
             button.setText(title)
             button.setCheckable(True)
-            button.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            if icons:
+                button.setIcon(icon(icons[i], 26, checked_on_highlight=True))
+                button.setIconSize(QSize(26, 26))
+                button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            else:
+                button.setToolButtonStyle(Qt.ToolButtonTextOnly)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            button.setMinimumHeight(54)
+            button.setMinimumHeight(66 if icons else 54)
             button.setStyleSheet(RAIL_STYLE)
             button.setToolTip(f"{title} (Ctrl+{i + 1})")
             self._group.addButton(button, i)
@@ -177,20 +184,24 @@ class PreviewHolder(QWidget):
         title.setStyleSheet("font-weight: bold;")
         self.values_button = QToolButton()
         self.values_button.setText("Values")
+        self.values_button.setIcon(icon("list-details", 16))
         self.values_button.setCheckable(True)
         self.values_button.setToolTip("Show the colours and luminance measured at the cursor")
         self.pop_button = QToolButton()
         self.pop_button.setText("Pop out")
+        self.pop_button.setIcon(icon("external-link", 16))
         self.pop_button.setToolTip("Show the preview in a window of its own")
         self.hide_button = QToolButton()
         self.hide_button.setText("Hide")
+        self.hide_button.setIcon(icon("eye-off", 16))
         self.hide_button.setToolTip("Hide the preview (P)")
         header = QHBoxLayout()
         header.setContentsMargins(6, 2, 6, 0)
         header.addWidget(title)
         header.addStretch(1)
         for b in (self.values_button, self.pop_button, self.hide_button):
-            b.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            b.setIconSize(QSize(16, 16))
+            b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             b.setStyleSheet("QToolButton { border: none; padding: 2px 6px; }")
             header.addWidget(b)
         self.body = QWidget()
@@ -221,6 +232,7 @@ class PreviewHolder(QWidget):
         self._open = open_
         self.body.setVisible(open_)
         self.hide_button.setText("Hide" if open_ else "Show")
+        self.hide_button.setIcon(icon("eye-off" if open_ else "eye", 16))
         self.hide_button.setToolTip("Hide the preview (P)" if open_ else "Show the preview (P)")
         self.open_changed.emit(open_)
 

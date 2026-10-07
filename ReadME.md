@@ -119,4 +119,5 @@ master's thesis in MIXD at NTNU Gjøvik (2018–2019).
 
 ## License
 
-MIT License, see [LICENSE.md](LICENSE.md).
+MIT License, see [LICENSE.md](LICENSE.md). The icons are [Tabler Icons](https://tabler.io/icons) (MIT,
+`cwtool/gui/icons/LICENSE-tabler-icons.txt`).

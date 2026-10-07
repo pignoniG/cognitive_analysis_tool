@@ -41,6 +41,7 @@ cwtool/
     ├── plots.py        pyqtgraph plots, sequence overlay, cursor, sensor plots, export range overlay
     ├── side_panel.py   the rail of tabs, pills, numbered steps and the preview holder of the left column
     ├── trim_panel.py   the export range editor in the sidebar
+    ├── icons.py        the icon loader (Tabler outline SVGs in icons/, drawn in the palette's colours)
     ├── photometry_dialog.py  result window of the light sensitivity fit
     ├── video_preview.py      scene frame at the cursor with the analysis circles
     └── workers.py      QThread wrapper for the video pass and the fit

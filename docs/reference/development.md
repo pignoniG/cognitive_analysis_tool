@@ -29,6 +29,14 @@ data. The GUI tests need a display or `QT_QPA_PLATFORM=offscreen`.
 - Changing what the video pass stores means bumping `CACHE_FORMAT` in `video.py`.
 - Inconsistencies found in the code, the data or the papers go in `docs/OPEN_ISSUES.md`.
 
+## Icons
+
+The windows use Tabler's outline icons (MIT; the licence is in `cwtool/gui/icons/`), stored as SVG files and drawn
+by `cwtool.gui.icons.icon(name, size)` in the colours of the current palette, at twice the resolution on high-DPI
+screens. To add one, copy its SVG from [tabler.io/icons](https://tabler.io/icons) (outline) into `cwtool/gui/icons/`,
+add its name to `NAMES` in `icons.py` and use `icon("name")`; a test checks that every named icon has a clean file
+and that no file is left unnamed. The SVGs are included in the installed package (`package-data` in `pyproject.toml`).
+
 ## Documentation
 
 This site is built with [MkDocs](https://www.mkdocs.org/) and the Material theme from `docs/` and `mkdocs.yml`.

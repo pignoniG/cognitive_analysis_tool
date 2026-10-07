@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDia
 import pyqtgraph as pg  # noqa: E402
 
 from cwtool import palette
+from cwtool.gui.icons import icon
 from cwtool.gui.plots import data_range
 from cwtool.gui.workers import Task
 from cwtool.logger.protocol import read_protocol
@@ -243,8 +244,12 @@ class LoggerWindow(QMainWindow):
         box = QGroupBox("Sensors")
         v = QVBoxLayout(box)
         row = QHBoxLayout()
-        for kind, text in (("lux", "Lux"), ("shimmer", "Shimmer"), ("emotibit", "EmotiBit"), ("simulated", "Simulated")):
-            b = QPushButton(f"+ {text}")
+        row.addWidget(QLabel("Add:"))
+        for kind, text, name in (("lux", "Lux", "sun"), ("shimmer", "Shimmer", "heartbeat"),
+                                 ("emotibit", "EmotiBit", "activity"), ("simulated", "Simulated", "flask")):
+            b = QPushButton(text)
+            b.setIcon(icon(name, 18))
+            b.setToolTip(f"Add a {text} sensor" if kind != "simulated" else "Add a simulated sensor to try the logger")
             b.clicked.connect(lambda _=False, k=kind: self.add_source(k))
             row.addWidget(b)
         v.addLayout(row)

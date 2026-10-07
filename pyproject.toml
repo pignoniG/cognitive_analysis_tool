@@ -33,5 +33,8 @@ cwtool-logger = "cwtool.logger.gui:main"
 [tool.setuptools.packages.find]
 include = ["cwtool*"]
 
+[tool.setuptools.package-data]
+"cwtool.gui" = ["icons/*.svg", "icons/*.txt"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayo
 from cwtool import __version__, calibration, devices, palette, pipeline, sensors
 from cwtool.fit import fit_calibration
 from cwtool.gui.param_panel import ParameterPanel
+from cwtool.gui.icons import icon, tinted
 from cwtool.gui.photometry_dialog import PhotometryDialog
 from cwtool.gui.side_panel import PreviewHolder, Rail, Step
 from cwtool.gui.trim_panel import TrimPanel
@@ -116,7 +117,9 @@ class MainWindow(QMainWindow):
             f"QToolButton:hover {{ background: palette(light); border-color: {palette.ACCENT}; }}"
             "QToolButton:pressed { background: palette(midlight); }"
             "QToolButton:disabled { color: palette(mid); }")
-        for a in (self.open_action, self.load_params_action, self.save_params_action, self.export_action):
+        for a, name in ((self.open_action, "folder-open"), (self.load_params_action, "file-import"),
+                        (self.save_params_action, "device-floppy"), (self.export_action, "file-export")):
+            a.setIcon(icon(name, 20))
             toolbar.addAction(a)
 
     def _build_ui(self) -> None:
@@ -341,7 +344,7 @@ class MainWindow(QMainWindow):
 
         # --- the left column: a rail of tabs, their pages, and the preview under them
         self.tab_titles = ("Data", "Params", "Calibrate", "Export")
-        self.rail = Rail(self.tab_titles)
+        self.rail = Rail(self.tab_titles, ("database", "adjustments-horizontal", "target", "file-export"))
         self.pages = QStackedWidget()
         for page in (data_page, params_page, cal_page, export_page):
             scroll = QScrollArea()
@@ -381,6 +384,8 @@ class MainWindow(QMainWindow):
         self.summary_label.setWordWrap(True)     # a long text must not set the window's minimum width
         self.warnings_button = QToolButton()
         self.warnings_button.setCheckable(True)
+        self.warnings_button.setIcon(tinted("alert-triangle", palette.WARNING, 18))
+        self.warnings_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.warnings_button.setStyleSheet(f"QToolButton {{ color: {palette.WARNING}; font-weight: bold; }}")
         self.warnings_button.toggled.connect(lambda on: self.warnings_label.setVisible(on))
         self.warnings_button.hide()
