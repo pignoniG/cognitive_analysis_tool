@@ -11,6 +11,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 pytest.importorskip("pyqtgraph")
 
+pytestmark = pytest.mark.usefixtures("isolated_qsettings")
+
 from PySide6.QtWidgets import QApplication, QFileDialog  # noqa: E402
 
 from cwtool.gui.main_window import MainWindow  # noqa: E402

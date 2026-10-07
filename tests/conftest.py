@@ -252,3 +252,15 @@ def write_tobii_g3_recording(folder: Path, grays, fps=25, pupil_mm=4.0, rate=50,
             for t in np.arange(-1, duration + 1, 0.1):
                 wr.writerow([f"{(epoch0 + t) * 1000:.0f}", 1, 1, 1, lux(t)])
     return folder
+
+
+@pytest.fixture
+def isolated_qsettings(tmp_path_factory, monkeypatch):
+    """The analysis window's saved settings (last folders, layout, sequence) in a temporary file, so a test neither
+    reads nor changes the user's own."""
+    from PySide6.QtCore import QSettings
+
+    import cwtool.gui.main_window as main_window
+
+    path = str(tmp_path_factory.mktemp("qsettings") / "settings.ini")
+    monkeypatch.setattr(main_window, "QSettings", lambda *a, **k: QSettings(path, QSettings.IniFormat))

@@ -9,6 +9,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 pytest.importorskip("pyqtgraph")
 
+pytestmark = pytest.mark.usefixtures("isolated_qsettings")
+
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from cwtool.gui.main_window import MainWindow  # noqa: E402
@@ -136,13 +138,14 @@ def test_options_follow_the_recording(app, varjo_folder, tmp_path):
     w.open_recording(write_neon_recording(tmp_path / "lux", GRAYS, FRAME_TIMES, lux=lambda t: 300.0))
     assert wait_for(app, lambda: w.result is not None and w.recording.device == "pupil_neon")
     assert shown("lux_gain") and shown("gamma") and not w.sequence_controls.isHidden()    # the lux fit
-    assert w._cal_layout.isRowVisible(w.lux_fit_button) and not w._cal_layout.isRowVisible(w.light_button)
-    assert not w.cal_box.isHidden() and w.cal_box.title() == "Calibration sequence" and shown("attack")
+    assert not w.step_lux.isHidden() and w.step_light.isHidden() and w.step_timing.isHidden()
+    assert shown("attack")
     assert not shown("l_max") and not shown("camera_exposure") and not shown("field_radius")
 
     w.open_recording(write_neon_recording(tmp_path / "nolux", GRAYS, FRAME_TIMES))
     assert wait_for(app, lambda: w.result is not None and w.recording.lux_values is None)
-    assert w.sequence_controls.isHidden() and w.cal_box.title() == "Pupil dynamics"     # no lux log: dynamics only
+    assert w.sequence_controls.isHidden() and w.step_lux.isHidden()      # no lux log: nothing to fit, a note says why
+    assert not w.cal_note.isHidden()
     assert shown("camera_exposure") and shown("l_max") and not shown("camera_white") and not shown("lux_gain")
     p = w.params_panel.params()
     p.camera_exposure = "fixed"
@@ -248,7 +251,7 @@ def test_video_and_dynamics_settings_are_drop_downs_next_to_their_controls(app, 
     panel = w.params_panel
     video, dynamics = panel.video_section, panel.dynamics_section
     assert video.parent() is not None and video.parentWidget().title() == "Scene video"
-    assert dynamics.parentWidget() is w.cal_box
+    assert panel.pills.page(0).isAncestorOf(dynamics)        # the dynamics are fitted per participant: Participant pill
     assert not video.is_expanded() and not dynamics.is_expanded()
     dynamics.header.click()
     assert dynamics.is_expanded() and not dynamics.content.isHidden()
@@ -372,17 +375,14 @@ def test_glasses_calibration_controls_and_run_file(app, tmp_path):
     rec = devices.load(write_core_recording(tmp_path / "core", [128] * 300, np.arange(300) / 30, lux=lambda t: 100.0))
     w = MainWindow()
     w.recording = rec
-    layout = w._cal_layout
     w._show_sequence_controls("lux")
-    assert w.cal_box.title() == "Calibration sequence" and not w.sequence_controls.isHidden()
-    assert layout.isRowVisible(w.lux_fit_button) and layout.isRowVisible(w.fit_weight_check)
-    assert not layout.isRowVisible(w.light_button)
-    assert not layout.isRowVisible(w.fit_button) and not layout.isRowVisible(w.find_sequence_button)
+    assert not w.sequence_controls.isHidden() and not w.step_lux.isHidden()
+    assert w.step_light.isHidden() and w.step_timing.isHidden() and w.find_sequence_button.isHidden()
     w._show_sequence_controls("display")
-    assert layout.isRowVisible(w.light_button) and not layout.isRowVisible(w.lux_fit_button)
-    assert not layout.isRowVisible(w.fit_weight_check)
+    assert not w.step_light.isHidden() and not w.step_timing.isHidden() and w.step_lux.isHidden()
+    assert not w.find_sequence_button.isHidden()
     w._show_sequence_controls("none")
-    assert w.cal_box.title() == "Pupil dynamics" and w.sequence_controls.isHidden()
+    assert w.sequence_controls.isHidden() and w.step_lux.isHidden() and not w.cal_note.isHidden()
 
     # A presenter run file places the sequence from its onset times on the computer's clock.
     run = tmp_path / "run.csv"

@@ -6,16 +6,18 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtCore import QSettings, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import (QCheckBox, QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
+from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox,
                                QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox,
-                               QProgressBar, QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget)
+                               QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget, QToolButton,
+                               QVBoxLayout, QWidget)
 
 from cwtool import __version__, calibration, devices, palette, pipeline, sensors
 from cwtool.fit import fit_calibration
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.photometry_dialog import PhotometryDialog
+from cwtool.gui.side_panel import PreviewHolder, Rail, Step
 from cwtool.gui.trim_panel import TrimPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
@@ -60,6 +62,7 @@ class MainWindow(QMainWindow):
         self._build_actions()
         self._build_ui()
         self._restore_sequence()
+        self._restore_layout()
         self._update_state()
 
     # UI
@@ -103,7 +106,8 @@ class MainWindow(QMainWindow):
 
         toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        toolbar.setIconSize(QSize(20, 20))
         # Framed, padded buttons: plain text actions are easy to miss.
         toolbar.setStyleSheet(
             "QToolBar { spacing: 8px; padding: 6px; }"
@@ -116,49 +120,27 @@ class MainWindow(QMainWindow):
             toolbar.addAction(a)
 
     def _build_ui(self) -> None:
-        # Left: recording, video, calibration and parameters.
-        side = QWidget()
-        side_layout = QVBoxLayout(side)
+        self.params_panel = ParameterPanel()
+        self.params_panel.params_changed.connect(self._params_edited)
+        self.params_panel.video_settings_changed.connect(self._video_settings_edited)
 
+        # --- Data: what is loaded
         rec_box = QGroupBox("Recording")
         rec_layout = QVBoxLayout(rec_box)
         self.recording_label = QLabel("No recording loaded")
         self.recording_label.setWordWrap(True)
         self.recording_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         rec_layout.addWidget(self.recording_label)
-        side_layout.addWidget(rec_box)
-
-        sensor_box = QGroupBox("Sensor data (optional)")
-        sensor_layout = QVBoxLayout(sensor_box)
-        self.sensors_label = QLabel("Shimmer and EmotiBit files from the sensor logger can be shown under ΔPD and "
-                                    "exported with it, as one package.")
-        self.sensors_label.setWordWrap(True)
-        self.sensors_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        sensor_buttons = QHBoxLayout()
-        self.import_sensors_button = QPushButton("Import…")
-        self.import_sensors_button.setToolTip("Choose a sensor logger session folder (it is looked for in the "
-                                              "recording's own folder when the recording is opened)")
-        self.import_sensors_button.clicked.connect(self.choose_sensors)
-        self.remove_sensors_button = QPushButton("Remove")
-        self.remove_sensors_button.clicked.connect(self.remove_sensors)
-        sensor_buttons.addWidget(self.import_sensors_button)
-        sensor_buttons.addWidget(self.remove_sensors_button)
-        self.signal_list = QListWidget()
-        self.signal_list.setMaximumHeight(150)
-        self.signal_list.setToolTip(f"The signals to show under ΔPD (at most {MAX_SHOWN}). All of them are exported")
-        self.signal_list.itemChanged.connect(self._show_sensors)
-        sensor_layout.addWidget(self.sensors_label)
-        sensor_layout.addLayout(sensor_buttons)
-        sensor_layout.addWidget(self.signal_list)
-        side_layout.addWidget(sensor_box)
-        self.trim_panel = TrimPanel()
-        self.trim_panel.sequence_span = self._sequence_span
-        self.trim_panel.changed.connect(self._trim_changed)
-        side_layout.addWidget(self.trim_panel)
-
-        self.params_panel = ParameterPanel()
-        self.params_panel.params_changed.connect(self._params_edited)
-        self.params_panel.video_settings_changed.connect(self._video_settings_edited)
+        self.lux_box = QGroupBox("Lux sensor log")
+        lux_layout = QHBoxLayout(self.lux_box)
+        lux_choose = QPushButton("Choose folder…")
+        lux_choose.setToolTip(self.lux_action.toolTip())
+        lux_choose.clicked.connect(self.choose_lux_folder)
+        self.lux_own_button = QPushButton("Use the recording's own")
+        self.lux_own_button.clicked.connect(self.clear_lux_folder)
+        lux_layout.addWidget(lux_choose)
+        lux_layout.addWidget(self.lux_own_button)
+        self.lux_box.hide()
 
         video_box = QGroupBox("Scene video")
         video_layout = QVBoxLayout(video_box)
@@ -185,21 +167,54 @@ class MainWindow(QMainWindow):
         self.camera_button.clicked.connect(self.calibrate_camera)
         video_layout.addWidget(self.camera_button)
         video_layout.addWidget(self.params_panel.video_section)
-        side_layout.addWidget(video_box)
 
-        # Sequence controls (display devices) and, for every device, the dynamics settings.
-        self.cal_box = cal_box = QGroupBox("Calibration sequence")
-        cal_box_layout = QVBoxLayout(cal_box)
-        self.sequence_controls = QWidget()
-        cal_layout = QFormLayout(self.sequence_controls)
-        cal_layout.setContentsMargins(0, 0, 0, 0)
-        cal_box_layout.addWidget(self.sequence_controls)
+        sensor_box = QGroupBox("Sensor data (optional)")
+        sensor_layout = QVBoxLayout(sensor_box)
+        self.sensors_label = QLabel("Shimmer and EmotiBit files from the sensor logger can be shown under ΔPD and "
+                                    "exported with it, as one package.")
+        self.sensors_label.setWordWrap(True)
+        self.sensors_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        sensor_buttons = QHBoxLayout()
+        self.import_sensors_button = QPushButton("Import…")
+        self.import_sensors_button.setToolTip("Choose a sensor logger session folder (it is looked for in the "
+                                              "recording's own folder when the recording is opened)")
+        self.import_sensors_button.clicked.connect(self.choose_sensors)
+        self.remove_sensors_button = QPushButton("Remove")
+        self.remove_sensors_button.clicked.connect(self.remove_sensors)
+        sensor_buttons.addWidget(self.import_sensors_button)
+        sensor_buttons.addWidget(self.remove_sensors_button)
+        self.signal_list = QListWidget()
+        self.signal_list.setMaximumHeight(150)
+        self.signal_list.setToolTip(f"The signals to show under ΔPD (at most {MAX_SHOWN}). All of them are exported")
+        self.signal_list.itemChanged.connect(self._show_sensors)
+        sensor_layout.addWidget(self.sensors_label)
+        sensor_layout.addLayout(sensor_buttons)
+        sensor_layout.addWidget(self.signal_list)
+
+        data_page = QWidget()
+        data_layout = QVBoxLayout(data_page)
+        for box in (rec_box, self.lux_box, video_box, sensor_box):
+            data_layout.addWidget(box)
+        data_layout.addStretch(1)
+
+        # --- Params: the parameters in pills, with the files they are saved in
+        params_page = QWidget()
+        params_layout = QVBoxLayout(params_page)
+        file_row = QHBoxLayout()
+        for text, action in (("Load…", self.load_params_action), ("Save", self.save_params_action),
+                             ("Save as…", self.save_params_as_action)):
+            button = QPushButton(text)
+            button.setToolTip(action.text().replace("&", ""))
+            button.clicked.connect(action.trigger)
+            file_row.addWidget(button)
+        params_layout.addLayout(file_row)
+        params_layout.addWidget(self.params_panel, 1)
+
+        # --- Calibrate: numbered steps
         self.cal_note = QLabel()
         self.cal_note.setWordWrap(True)
         self.cal_note.setStyleSheet("font-style: italic;")
         self.cal_note.setVisible(False)
-        cal_box_layout.addWidget(self.cal_note)
-        cal_box_layout.addWidget(self.params_panel.dynamics_section)
         self.sequence_check = QCheckBox("Show sequence overlay")
         self.sequence_check.toggled.connect(self._sequence_changed)
         self.sequence_start = QDoubleSpinBox()
@@ -233,12 +248,19 @@ class MainWindow(QMainWindow):
         self.find_sequence_button.setToolTip("Locate the sequence in the analysed video and adapt its step "
                                              "length if the recording used different timing")
         self.find_sequence_button.clicked.connect(self.find_sequence)
-        cal_layout.addRow(self.sequence_label)
-        cal_layout.addRow(sequence_buttons)
-        cal_layout.addRow(self.find_sequence_button)
-        cal_layout.addRow(self.sequence_check)
-        cal_layout.addRow("Start", self.sequence_start)
-        cal_layout.addRow("ΔPD RMS in sequence", self.sequence_rms)
+
+        sequence_content = QWidget()
+        sequence_form = QFormLayout(sequence_content)
+        sequence_form.setContentsMargins(0, 0, 0, 0)
+        sequence_form.addRow(self.sequence_label)
+        sequence_form.addRow(sequence_buttons)
+        sequence_form.addRow(self.find_sequence_button)
+        sequence_form.addRow(self.sequence_check)
+        sequence_form.addRow("Start", self.sequence_start)
+        sequence_form.addRow("ΔPD RMS in sequence", self.sequence_rms)
+        self.step_sequence = Step(1, "Sequence", sequence_content)
+        self.sequence_controls = self.step_sequence
+
         self.fit_gamma_check = QCheckBox("Also fit gamma")
         self.fit_gamma_check.setToolTip("Fit the display gamma from the spacing of the grey steps (usually "
                                         "weakly determined; keep the datasheet value unless it clearly fails)")
@@ -246,76 +268,170 @@ class MainWindow(QMainWindow):
         self.fit_black_check.setToolTip("Fit the display's black level with the white held at its nominal value. "
                                         "Needs steps long enough to dark-adapt; otherwise the black looks "
                                         "brighter than it is. Compare the contrast with the datasheet's")
-        self.light_button = QPushButton("1. Fit light sensitivity")
+        self.light_button = QPushButton("Fit light sensitivity")
         self.light_button.setToolTip("Fits the participant's light sensitivity and channel weights from the "
                                      "steady-state pupil on each step, given the display photometry")
         self.light_button.clicked.connect(self.fit_light)
-        cal_layout.addRow(self.fit_gamma_check)
-        cal_layout.addRow(self.fit_black_check)
-        cal_layout.addRow(self.light_button)
+        light_content = QWidget()
+        light_form = QFormLayout(light_content)
+        light_form.setContentsMargins(0, 0, 0, 0)
+        light_form.addRow(self.fit_gamma_check)
+        light_form.addRow(self.fit_black_check)
+        light_form.addRow(self.light_button)
+        self.step_light = Step(2, "Fit light sensitivity", light_content)
+
         self.fit_dynamics_check = QCheckBox("Include dynamics (time constants and transient)")
         self.fit_dynamics_check.setChecked(True)
         self.fit_dynamics_check.setToolTip("Also fit the dilation and constriction time constants and the "
                                            "transient constriction after brightening (pupillary escape), and "
                                            "turn the dynamics on")
-        self.fit_button = QPushButton("2. Fit latency and offset")
+        self.fit_button = QPushButton("Fit latency and offset")
         self.fit_button.setToolTip("Fits the participant's latency, dilation/constriction time constants and pupil "
                                    "offset on the sequence. The pupil scale is not fitted (set it by hand). Fit the "
                                    "light sensitivity first.")
         self.fit_button.clicked.connect(self.fit_sequence)
-        cal_layout.addRow(self.fit_dynamics_check)
-        cal_layout.addRow(self.fit_button)
+        timing_content = QWidget()
+        timing_form = QFormLayout(timing_content)
+        timing_form.setContentsMargins(0, 0, 0, 0)
+        timing_form.addRow(self.fit_dynamics_check)
+        timing_form.addRow(self.fit_button)
+        self.step_timing = Step(3, "Fit latency and offset", timing_content)
+
         self.fit_weight_check = QCheckBox("Also fit the fixation weight")
-        self.fit_weight_check.setToolTip("Also fit the gaze circle's share of the weighted colour (open issue 47). It "
+        self.fit_weight_check.setToolTip("Also fit the gaze circle's weight of the weighted colour (open issue 47). It "
                                          "needs a scene where the gaze area and the background differ, such as a "
                                          "screen in a room; on a uniform field it cannot be determined. Check the "
                                          "result on other recordings before relying on it")
-        cal_layout.addRow(self.fit_weight_check)
         self.lux_fit_button = QPushButton("Fit sensitivity and offset")
         self.lux_fit_button.setToolTip("Glasses with a lux sensor: fits the light sensitivity and the pupil offset "
                                        "by least squares on ΔPD over the sequence, with the luminance the analysis "
                                        "builds from the sensor (and the video)")
         self.lux_fit_button.clicked.connect(self.fit_lux)
-        cal_layout.addRow(self.lux_fit_button)
-        self._cal_layout = cal_layout
-        self._sequence_buttons = sequence_buttons
-        side_layout.addWidget(cal_box)
-        side_layout.addWidget(self.params_panel)
+        lux_content = QWidget()
+        lux_form = QFormLayout(lux_content)
+        lux_form.setContentsMargins(0, 0, 0, 0)
+        lux_form.addRow(self.fit_weight_check)
+        lux_form.addRow(self.lux_fit_button)
+        self.step_lux = Step(2, "Fit sensitivity and offset", lux_content)
 
-        scroll = QScrollArea()
-        scroll.setWidget(side)
-        scroll.setWidgetResizable(True)
-        scroll.setMinimumWidth(360)
+        cal_page = QWidget()
+        cal_layout = QVBoxLayout(cal_page)
+        cal_layout.addWidget(self.cal_note)
+        for step in (self.step_sequence, self.step_light, self.step_timing, self.step_lux):
+            cal_layout.addWidget(step)
+        cal_layout.addStretch(1)
 
-        # Right: summary line and plots.
+        # --- Export: the range and the package
+        self.trim_panel = TrimPanel()
+        self.trim_panel.sequence_span = self._sequence_span
+        self.trim_panel.changed.connect(self._trim_changed)
+        self.export_summary = QLabel()
+        self.export_summary.setWordWrap(True)
+        self.export_button = QPushButton("Export results…")
+        self.export_button.setMinimumHeight(40)
+        self.export_button.setToolTip("One package: the results, the lux and sensor files, the parameters, a manifest "
+                                      "and a PDF plot, all cut to the export range")
+        self.export_button.clicked.connect(self.export_action.trigger)
+        export_page = QWidget()
+        export_layout = QVBoxLayout(export_page)
+        export_layout.addWidget(self.trim_panel)
+        export_layout.addWidget(self.export_summary)
+        export_layout.addWidget(self.export_button)
+        export_layout.addStretch(1)
+
+        # --- the left column: a rail of tabs, their pages, and the preview under them
+        self.tab_titles = ("Data", "Params", "Calibrate", "Export")
+        self.rail = Rail(self.tab_titles)
+        self.pages = QStackedWidget()
+        for page in (data_page, params_page, cal_page, export_page):
+            scroll = QScrollArea()
+            scroll.setWidget(page)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.pages.addWidget(scroll)
+        self.rail.changed.connect(self.pages.setCurrentIndex)
+
+        self.preview = VideoPreview()
+        self.preview_holder = PreviewHolder(self.preview)
+        self.preview_holder.open_changed.connect(self._preview_toggled)
+        self.left_split = QSplitter(Qt.Vertical)
+        self.left_split.addWidget(self.pages)
+        self.left_split.addWidget(self.preview_holder)
+        self.left_split.setStretchFactor(0, 1)
+        self.left_split.setChildrenCollapsible(False)
+        self.preview_holder.setMinimumHeight(150)
+        self.left_split.setSizes([620, 270])      # the preview a little over a third of the column
+        self._preview_height = 270
+        left = QWidget()
+        left_layout = QHBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+        left_layout.addWidget(self.rail)
+        left_layout.addWidget(self.left_split, 1)
+        left.setMinimumWidth(400)
+
+        # --- the right: a status strip over the plots
         right = QWidget()
         right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(6, 4, 6, 4)
+        strip = QHBoxLayout()
         self.summary_label = QLabel()
-        self.summary_label.setStyleSheet("font-size: 14px; padding: 4px;")
-        self.summary_label.setWordWrap(True)     # long warnings must not set the window's minimum width
+        self.summary_label.setStyleSheet("font-size: 14px; padding: 2px;")
+        self.summary_label.setWordWrap(True)     # a long text must not set the window's minimum width
+        self.warnings_button = QToolButton()
+        self.warnings_button.setCheckable(True)
+        self.warnings_button.setStyleSheet(f"QToolButton {{ color: {palette.WARNING}; font-weight: bold; }}")
+        self.warnings_button.toggled.connect(lambda on: self.warnings_label.setVisible(on))
+        self.warnings_button.hide()
+        strip.addWidget(self.summary_label, 1)
+        strip.addWidget(self.warnings_button, 0, Qt.AlignTop)
+        self.warnings_label = QLabel()
+        self.warnings_label.setWordWrap(True)
+        self.warnings_label.hide()
         self.plots = ResultPlots()
         self.plots.sequence_start_changed.connect(self._sequence_dragged)
         self.plots.trim_dragged.connect(self._trim_dragged)
         self.trim_panel.cursor_time = self.plots.cursor_time
-        right_layout.addWidget(self.summary_label)
+        right_layout.addLayout(strip)
+        right_layout.addWidget(self.warnings_label)
         right_layout.addWidget(self.plots, 1)
 
         splitter = QSplitter()
-        splitter.addWidget(scroll)
+        splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([380, 1020])
+        splitter.setSizes([430, 1130])
         self.setCentralWidget(splitter)
+        self.main_split = splitter
 
-        self.preview = VideoPreview()
         self.preview.time_changed.connect(self.plots.set_cursor)
         self.plots.cursor_changed.connect(self.preview.request_time)
-        dock = QDockWidget("Video preview", self)
-        dock.setObjectName("video_preview")
-        dock.setWidget(self.preview)
-        self.addDockWidget(Qt.RightDockWidgetArea, dock)
-        self.resizeDocks([dock], [420], Qt.Horizontal)
-        self.view_menu.addAction(dock.toggleViewAction())
+        self.preview_action = QAction("Show video preview", self, checkable=True, checked=True)
+        self.preview_action.setShortcut(QKeySequence("P"))
+        self.preview_action.toggled.connect(self.preview_holder.set_open)
+        self.view_menu.addAction(self.preview_action)
+        self.view_menu.addSeparator()
+        for i, title in enumerate(self.tab_titles):
+            tab_action = QAction(f"{title} tab", self)
+            tab_action.setShortcut(QKeySequence(f"Ctrl+{i + 1}"))
+            tab_action.triggered.connect(lambda _=False, i=i: self.rail.set_current(i))
+            self.view_menu.addAction(tab_action)
+
+    def _preview_toggled(self, open_: bool) -> None:
+        """The preview was hidden, shown or popped out: give its room to the page above, or back."""
+        sizes = self.left_split.sizes()
+        total = sum(sizes)
+        self.preview_holder.setMinimumHeight(150 if open_ else 0)     # only an open preview needs room
+        if open_:
+            self.left_split.setSizes([max(total - self._preview_height, 100), self._preview_height])
+        else:
+            if sizes[1] > 40:
+                self._preview_height = sizes[1]
+            self.left_split.setSizes([total, 0])
+        self.preview_action.blockSignals(True)
+        self.preview_action.setChecked(open_)
+        self.preview_action.blockSignals(False)
 
     def _restore_sequence(self) -> None:
         path = self._settings.value("last_sequence", "")
@@ -328,23 +444,19 @@ class MainWindow(QMainWindow):
         self.set_sequence(sequence)
 
     def _show_sequence_controls(self, mode: str) -> None:
-        """The calibration box for a display device (both fits), a glasses recording with a lux log (the
-        sensitivity and offset fit) or neither (only the dynamics)."""
-        layout = self._cal_layout
-        layout.setRowVisible(self._sequence_buttons, True)
-        for widget in (self.find_sequence_button, self.fit_gamma_check, self.fit_black_check, self.light_button, self.fit_dynamics_check,
-                       self.fit_button):
-            layout.setRowVisible(widget, mode == "display")
-        layout.setRowVisible(self.lux_fit_button, mode == "lux")
-        layout.setRowVisible(self.fit_weight_check, mode == "lux")
-        self.sequence_controls.setVisible(mode != "none")
-        self.cal_box.setTitle("Calibration sequence" if mode != "none" else "Pupil dynamics")
+        """The calibration steps for a display device (the sequence and both fits), a glasses recording with a lux
+        log (the sequence and the sensitivity and offset fit) or neither (nothing to fit, a note says why)."""
+        self.step_sequence.setVisible(mode != "none")
+        self.find_sequence_button.setVisible(mode == "display")
+        self.step_light.setVisible(mode == "display")
+        self.step_timing.setVisible(mode == "display")
+        self.step_lux.setVisible(mode == "lux")
         self.cal_note.setText({
             "lux": "Glasses have no display photometry, so the light comes from the lux sensor. Load the "
                    "presenter's run file: its onset times place the start. The fit sets the light sensitivity "
-                   "and the pupil offset; set the dynamics by hand.",
+                   "and the pupil offset; set the dynamics by hand (Params, Participant).",
             "none": "The calibration sequence and its fits need the display photometry (Varjo) or a lux sensor "
-                    "log (glasses). Set the dynamics by hand here.",
+                    "log (glasses). Set the dynamics by hand in Params, Participant.",
         }.get(mode, ""))
         self.cal_note.setVisible(mode != "display")
 
@@ -366,6 +478,14 @@ class MainWindow(QMainWindow):
         has_lux = has_rec and self.recording.lux_values is not None
         self.camera_button.setVisible(has_rec and self.recording.luminance_source == "lux_sensor")
         self.camera_button.setEnabled(has_lux and self.video is not None and not busy)
+        warnings = [] if self.result is None else list(self.result.warnings)
+        self.warnings_button.setVisible(bool(warnings))
+        self.warnings_button.setText(f"{len(warnings)} warning{'s' if len(warnings) != 1 else ''}")
+        self.warnings_button.setToolTip("Show or hide the warnings")
+        self.warnings_label.setText("".join(f"<span style='color:{palette.WARNING}'>⚠ {w}</span><br>"
+                                            for w in warnings))
+        if not warnings:
+            self.warnings_button.setChecked(False)
         if self.result is None:
             self.summary_label.setText("Open a recording to start." if not has_rec else "")
         else:
@@ -373,13 +493,18 @@ class MainWindow(QMainWindow):
             gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
             leak = (f" &nbsp;&nbsp; <b>light left</b> R² {r.leak_r2:.2f} ({r.leak_slope:+.2f} mm/decade)"
                     if np.isfinite(r.leak_r2) else "")
-            warn = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {w}</span>" for w in r.warnings)
             ends = (f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
                     if np.isfinite(r.expected_black) else self._route_text(r) + " &nbsp;&nbsp; ")
             self.summary_label.setText(
                 f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm{leak} &nbsp;&nbsp; {ends}"
                 f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
-                f"{r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}{warn}")
+                f"{r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}")
+        self.lux_box.setVisible(has_rec and self.recording.luminance_source == "lux_sensor")
+        self.lux_own_button.setEnabled(self._lux_folder is not None and not busy)
+        missing_lux = has_rec and self.recording.luminance_source == "lux_sensor" and self.recording.lux_values is None
+        self.rail.mark(0, bool(missing_lux), "No lux sensor readings found for this recording")
+        self.export_button.setEnabled(self.result is not None)
+        self._update_export_summary()
         name = self._params_path.name if self._params_path else "unsaved parameters"
         if has_rec and self.recording.luminance_source == "display":
             name += ", display " + (self._display_path.name if self._display_path else "defaults")
@@ -577,6 +702,7 @@ class MainWindow(QMainWindow):
     def _light_done(self, fit) -> None:
         if PhotometryDialog(fit, self).exec():
             self.params_panel.set_params(fit.params)
+            self.step_light.set_summary(f"Applied: light sensitivity ×{fit.params.sensitivity:.3g}")
 
     def fit_lux(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
@@ -603,6 +729,8 @@ class MainWindow(QMainWindow):
                           f"participant's other recordings.", QMessageBox.Apply | QMessageBox.Cancel, self)
         if box.exec() == QMessageBox.Apply:
             self.params_panel.set_params(fit.params)
+            self.step_lux.set_summary(f"Applied: sensitivity ×{fit.sensitivity:.3g}, offset {fit.offset:+.3f} mm, "
+                                      f"ΔPD RMS in sequence {fit.rms_after:.3f} mm")
 
     def fit_sequence(self) -> None:
         rec, video, params = self.recording, self.video, self.params_panel.params()
@@ -635,6 +763,8 @@ class MainWindow(QMainWindow):
                           QMessageBox.Apply | QMessageBox.Cancel, self)
         if box.exec() == QMessageBox.Apply:
             self.params_panel.set_params(fit.params)
+            self.step_timing.set_summary(f"Applied: latency {fit.delay:.2f} s, ΔPD RMS in sequence "
+                                         f"{fit.rms_after:.3f} mm")
 
     def calibrate_camera(self) -> None:
         params = self.params_panel.params()
@@ -790,6 +920,41 @@ class MainWindow(QMainWindow):
             self._settings.setValue(f"display_photometry/{self._device()}", path)
         self.statusBar().showMessage(f"Saved {path}", 3000)
         self._update_state()
+
+    def _update_export_summary(self) -> None:
+        rec = self.recording
+        if rec is None or self.result is None:
+            self.export_summary.setText("")
+            return
+        parts = ["pupil", "ΔPD"]
+        if rec.events:
+            parts.append(f"{len(rec.events)} event{'s' if len(rec.events) != 1 else ''}")
+        if rec.lux_values is not None:
+            parts.append("lux")
+        parts += [s.name for s in self.sensors]
+        parts += ["parameters", "manifest", "PDF plot"]
+        self.export_summary.setText("The package holds: " + ", ".join(parts) + ".")
+
+    def _restore_layout(self) -> None:
+        """The tab, the pill and the preview as they were left."""
+        st = self._settings
+        self.rail.set_current(int(st.value("ui/tab", 0)))
+        self.pages.setCurrentIndex(self.rail.current())
+        self.params_panel.pills.set_current(int(st.value("ui/pill", 0)))
+        if str(st.value("ui/preview_open", "true")) == "false":
+            self.preview_holder.set_open(False)
+        self.preview_holder.values_button.setChecked(str(st.value("ui/values", "false")) == "true")
+        sizes = st.value("ui/main_sizes")
+        if sizes:
+            self.main_split.setSizes([int(v) for v in sizes])
+
+    def _save_layout(self) -> None:
+        st = self._settings
+        st.setValue("ui/tab", self.rail.current())
+        st.setValue("ui/pill", self.params_panel.pills.current())
+        st.setValue("ui/preview_open", "true" if self.preview_holder.is_open() else "false")
+        st.setValue("ui/values", "true" if self.preview_holder.values_button.isChecked() else "false")
+        st.setValue("ui/main_sizes", self.main_split.sizes())
 
     # Sensor data and the export range
 
@@ -969,4 +1134,5 @@ class MainWindow(QMainWindow):
         if self._task is not None and self._task.isRunning():
             self._task.cancel()
             self._task.wait(5000)
+        self._save_layout()
         super().closeEvent(event)

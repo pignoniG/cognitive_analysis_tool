@@ -39,6 +39,7 @@ cwtool/
     ├── main_window.py  window, menus, recording/video/calibration panels, background tasks
     ├── param_panel.py  parameter editors (every Parameters field must have one)
     ├── plots.py        pyqtgraph plots, sequence overlay, cursor, sensor plots, export range overlay
+    ├── side_panel.py   the rail of tabs, pills, numbered steps and the preview holder of the left column
     ├── trim_panel.py   the export range editor in the sidebar
     ├── photometry_dialog.py  result window of the light sensitivity fit
     ├── video_preview.py      scene frame at the cursor with the analysis circles

@@ -4,12 +4,29 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 
 ## Layout
 
+The window has the controls on the left, the plots on the right, and the video preview under the controls.
+
 | Area | Contents |
 |---|---|
-| Left panel | Recording, Sensor data, Export range, Scene video, Calibration sequence and the parameter editors |
-| Summary line | ΔPD RMS and SD, expected pupil at the display's black and white points (display devices) or where the luminance comes from (with the lux sensor: its median luminance × the median video ratio and its 10th–90th percentile range), pupil scale and offset applied, sampling rates, share of the recording in gaps, and warnings in red |
-| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis, with the imported sensor signals under them |
-| Video preview (dock) | The scene frame at the cursor with the analysis circles; toggle it in **View** |
+| Rail (far left) | Four tabs: **Data**, **Params**, **Calibrate**, **Export** (Ctrl+1 to Ctrl+4). A red dot under a tab's name says it needs attention, for example **Data** when a glasses recording has no lux readings |
+| Tab page | **Data**: the recording, the lux log (glasses), the scene video and its analysis settings, the sensor data. **Params**: the parameters, in pills (below). **Calibrate**: numbered steps. **Export**: the export range and the Export button |
+| Video preview | Under the page, 16:9, following the cursor. **Values** shows the colours and luminance measured at the cursor, **Pop out** moves it to a window of its own, **Hide** (or **P**) gives its room back to the page. Drag the divider above it to resize |
+| Status strip | One line over the plots: ΔPD RMS and SD, the light left in ΔPD, the expected pupil at the display's black and white points (display devices) or where the luminance comes from (with the lux sensor: its median luminance × the median video ratio and its 10th–90th percentile range), the pupil scale and offset applied, sampling rates and the share of the recording in gaps. A red **⚠ N warnings** button on its right opens the list |
+| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis, with the imported sensor signals under them. They use the whole width of the window |
+
+The last tab, pill, preview state and sizes are remembered between sessions.
+
+### Params: pills
+
+| Pill | Holds |
+|---|---|
+| **Participant** | age, eyes, and the **Dynamics** drop-down (latency, time constants, transient: fitted per participant) |
+| **Light** | only what applies to the device: display photometry and the participant's light response (Varjo), or the lux sensor and the scene camera without a lux log (glasses) |
+| **Signal** | the pupil signal (scale, alignment, offset, time lag, gaps, artefacts) and ΔPD (window, smoothing) |
+
+A dot after a pill's name means something in it differs from the defaults. **Restore this group's defaults** (under
+the pills, with a confirmation) puts the open pill's settings back. **Load…**, **Save** and **Save as…** at the top
+of the tab are the participant's parameter file.
 
 ## Menus
 
@@ -30,6 +47,12 @@ Start it with `cwtool-gui`, optionally followed by a recording folder, or with `
 - **Export results…**: one package into a folder of your choice (default `cwtool_export` inside the recording): the
   results CSVs, the sensor files, the parameters used, a manifest and a PDF plot, all trimmed to the
   [export range](#export-range).
+
+**View**
+
+- **Reset view** (Ctrl+0): show all the data on the plots again.
+- **Show video preview** (P): show or hide the preview under the tab pages.
+- **Data tab**, **Params tab**, **Calibrate tab**, **Export tab** (Ctrl+1 to Ctrl+4).
 
 ## Sensor data (optional)
 
@@ -81,10 +104,11 @@ fixed-exposure scene camera, for recordings of the same exposure without a lux l
 
 ## Parameters
 
-Parameters are grouped as in [Parameters](../reference/parameters.md): Participant, Display photometry, Participant
-light response, Pupil signal, Luminance from lux sensor, Scene camera without lux log, ΔPD, with Dynamics in a drop-down under the
-calibration controls and the video analysis settings in one under the scene video buttons. Every change re-runs the
-analysis from the cached video pass, so the plots follow instantly.
+Parameters are in the pills of the **Params** tab, with the groups of [Parameters](../reference/parameters.md): Participant
+(with Dynamics in a drop-down), Display photometry, Participant light response, Luminance from lux sensor, Scene camera
+without lux log (these four under Light), Pupil signal and ΔPD (under Signal). The video analysis settings are in a
+drop-down under the scene video buttons, in the **Data** tab. Every change re-runs the analysis from the cached video
+pass, so the plots follow instantly.
 
 Only the options that affect the loaded recording are shown (all of them before a recording is opened); hidden
 options keep their values and are still saved in the parameter file:
@@ -95,10 +119,11 @@ options keep their values and are still saved in the parameter file:
 | Pupil Core / Neon / Glasses 3 with a lux log | Lmin, Lmax, Scene camera without lux log, scene circle radius |
 | Pupil Core / Neon / Glasses 3 without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
 
-The calibration box depends on the device. A display device (Varjo) has the whole sequence and both fits. Glasses
-with a lux log have the sequence overlay and one fit, **Fit sensitivity and offset**, with a note that they have no
-display photometry (see below). Glasses without a lux log have only **Pupil dynamics**, the Dynamics drop-down, and
-a note saying what the sequence would need. The lux sensor group starts with a line saying which route the luminance takes (sensor ×
+The **Calibrate** tab depends on the device. A display device (Varjo) has three steps: the sequence, **Fit light
+sensitivity** and **Fit latency and offset**. Glasses with a lux log have the sequence and one fit, **Fit sensitivity
+and offset**, with a note that they have no display photometry (see below). Glasses without a lux log have no steps,
+only a note saying what the sequence would need; their dynamics are set by hand in Params → Participant. Once a fit
+is applied, its step shows the result under its title. The lux sensor group starts with a line saying which route the luminance takes (sensor ×
 video ratio, or sensor only); the video preview shows the same product for the frame at the cursor, and the weights
 of the gaze circle and the background.
 
@@ -138,9 +163,9 @@ See [Participant calibration](calibration.md) for the procedure.
 - **Start**: the sequence start in seconds.
 - **ΔPD RMS in sequence**: how well the model fits within the sequence, the value to minimise when calibrating
   by hand.
-- **1. Fit light sensitivity**: the participant's light sensitivity and channel weights (optionally gamma and the display's black level, *Also fit the black level*), with a
+- **Fit light sensitivity** (step 2): the participant's light sensitivity and channel weights (optionally gamma and the display's black level, *Also fit the black level*), with a
   result window showing each step's steady-state pupil against the model.
-- **2. Fit latency and offset**: the participant's timing and dynamics (neither the pupil scale nor the offset is fitted: set
+- **Fit latency and offset** (step 3): the participant's timing and dynamics (neither the pupil scale nor the offset is fitted: set
   *Pupil scale correction* and *Pupil offset* by hand), optionally with the
   transient constriction after brightening (pupillary escape). Its result shows two errors: the **fit error**, what
   the fit minimises (measured − expected in the sequence, without an offset), and the ΔPD RMS in the sequence with
@@ -151,11 +176,12 @@ See [Participant calibration](calibration.md) for the procedure.
   least squares on ΔPD over the sequence, with the luminance the analysis builds from the sensor (and the video). The
   result window gives the RMS before and after, the sensitivity with its interval, the correlation and warnings;
   Apply also sets the alignment to `fixed` (see [Calibration fit](../processing/calibration-fit.md#glasses-with-a-lux-sensor)).
-- **Dynamics** (drop-down): the latency, always applied, and one switch for the rest: dilation and constriction time
+- **Dynamics** (Params → Participant, drop-down): the latency, always applied, and one switch for the rest: dilation and constriction time
   constants, constriction stages, transient and escape τ (greyed out while the switch is off).
 
 ## Video preview
 
 Shows the scene frame matched to the cursor time (by recorded frame timestamps where the device provides them),
-the scene circle used as background on Varjo videos (green), the gaze circle (orange), and the mean colour and luminance measured
-in each. **◀ Frame / Frame ▶** step through frames.
+the scene circle used as background on Varjo videos (green), the gaze circle (orange), and, with **Values**, the mean
+colour and luminance measured in each. **◀ Frame / Frame ▶** step through frames. It sits under the tab pages; **Pop
+out** puts it in its own window to see the frame larger and **Dock back** (or closing that window) returns it.

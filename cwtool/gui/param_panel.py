@@ -6,8 +6,10 @@ from dataclasses import fields, replace
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox, QLabel,
-                               QLineEdit, QSizePolicy, QSpinBox, QToolButton, QVBoxLayout, QWidget)
+                               QLineEdit, QMessageBox, QPushButton, QSizePolicy, QSpinBox, QToolButton, QVBoxLayout,
+                               QWidget)
 
+from cwtool.gui.side_panel import Pills
 from cwtool.params import Parameters, VideoSettings, unused_parameters
 
 # name: (label, min, max, step, decimals, tooltip)
@@ -88,18 +90,24 @@ TEXTS = {
     "baseline_events": ("Baseline events", "Comma-separated event labels used by alignment 'baseline'"),
 }
 
-GROUPS = [
-    ("Participant", ["age", "eyes", "eye"]),
+PARTICIPANT_GROUPS = [("Participant", ["age", "eyes", "eye"])]
+LIGHT_GROUPS = [
     ("Display photometry (datasheet)", ["l_min", "l_max", "gamma"]),
     ("Participant light response", ["sensitivity", "gain_r", "gain_g", "gain_b", "fixation_weight"]),
-    ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
-                      "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
     ("Luminance from lux sensor (glasses)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video",
                                              "lux_ratio_limit"]),
     ("Scene camera without lux log (glasses)",
      ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
+]
+SIGNAL_GROUPS = [
+    ("Pupil signal", ["pupil_correction", "alignment", "baseline_events", "pupil_offset",
+                      "timelag", "analysis_rate", "max_gap", "max_pupil_speed", "artefact_padding"]),
     ("ΔPD", ["cw_window", "cw_smoothing"]),
 ]
+# The pills of the Params tab: the participant (with the dynamics, which are fitted per participant), the light that
+# reaches the eye (only the groups that apply to the device are shown), and the pupil signal with ΔPD.
+PAGES = (("Participant", PARTICIPANT_GROUPS), ("Light", LIGHT_GROUPS), ("Signal", SIGNAL_GROUPS))
+GROUPS = PARTICIPANT_GROUPS + LIGHT_GROUPS + SIGNAL_GROUPS
 # Shown in drop-down sections next to the controls they belong to (see ParameterPanel).
 DYNAMICS_GROUP = (None, ["delay", "dynamics", "attack", "release", "constriction_stages", "transient", "escape"])
 DYNAMICS_SWITCHED = ("attack", "release", "constriction_stages", "transient", "escape")
@@ -246,29 +254,47 @@ class _Form(QWidget):
 
 
 class ParameterPanel(QWidget):
-    """All editable settings. Most are laid out in the panel itself; the video analysis settings
-    and the dynamics are drop-down sections (``video_section``, ``dynamics_section``) that the
-    window places next to the controls they belong to."""
+    """All editable settings. The parameters are in pills (Participant, Light, Signal); the video analysis settings
+    are a drop-down section (``video_section``) that the window places next to the video controls, and the dynamics
+    one (``dynamics_section``) sits in the Participant pill."""
 
     params_changed = Signal()
     video_settings_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self._params = _Form(GROUPS, Parameters())
+        self._base = Parameters()
+        self._pages = [_Form(groups, Parameters()) for _, groups in PAGES]
         self._dynamics = _Form([DYNAMICS_GROUP], Parameters())
         self._video = _Form([VIDEO_GROUP], VideoSettings())
+        self._forms = self._pages + [self._dynamics]
         self._recording = None
-        for form in (self._params, self._dynamics):
+        for form in self._forms:
             form.changed.connect(self._update_visible)
             form.changed.connect(self.params_changed)
         self._video.changed.connect(self.video_settings_changed)
-        layout.addWidget(self._params)
-        layout.addStretch(1)
+
+        self.dynamics_section = Collapsible("Dynamics", self._dynamics)
+        self.pills = Pills()
+        for (title, _), form in zip(PAGES, self._pages):
+            page = QWidget()
+            page_layout = QVBoxLayout(page)
+            page_layout.setContentsMargins(0, 6, 0, 0)
+            page_layout.addWidget(form)
+            if title == "Participant":
+                page_layout.addWidget(self.dynamics_section)
+            page_layout.addStretch(1)
+            self.pills.add(title, page)
+        self.reset_button = QPushButton("Restore this group's defaults")
+        self.reset_button.setToolTip("Put the settings of the pill that is open back to their default values")
+        self.reset_button.clicked.connect(self.reset_current)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.pills, 1)
+        layout.addWidget(self.reset_button)
+
         # A line at the top of the lux sensor group saying which route the luminance takes.
-        _, lux_form, _ = next(b for b in self._params._boxes if "lux_use_video" in b[2])
+        _, lux_form, _ = next(b for f in self._forms for b in f._boxes if "lux_use_video" in b[2])
         self.route_label = QLabel()
         self.route_label.setWordWrap(True)
         self.route_label.setStyleSheet("font-style: italic;")
@@ -283,17 +309,20 @@ class ParameterPanel(QWidget):
         video_layout.addWidget(self._video)
         video_layout.addWidget(note)
         self.video_section = Collapsible("Video analysis settings", video)
-        self.dynamics_section = Collapsible("Dynamics", self._dynamics)
         covered = {n for _, names in GROUPS + [DYNAMICS_GROUP] for n in names}
         missing = {f.name for f in fields(Parameters)} - covered - {"version"}
         assert not missing, f"Parameters without an editor: {missing}"
 
     def params(self) -> Parameters:
-        return replace(self._params.value(), **self._dynamics.updates())
+        updates: dict = {}
+        for form in self._forms:
+            updates.update(form.updates())
+        return replace(self._base, **updates)
 
     def set_params(self, p: Parameters) -> None:
-        self._params.set_value(p)
-        self._dynamics.set_value(p)
+        self._base = p
+        for form in self._forms:
+            form.set_value(p)
         self._update_visible()
         self.params_changed.emit()
 
@@ -304,13 +333,24 @@ class ParameterPanel(QWidget):
 
     def is_shown(self, name: str) -> bool:
         """Whether the option applies to the loaded recording (a collapsed section counts as shown)."""
-        form = next(f for f in (self._video, self._dynamics, self._params) if name in f._editors)
+        form = next(f for f in (self._video, self._dynamics, *self._pages) if name in f._editors)
         return form.is_shown(name)
+
+    def reset_current(self) -> None:
+        """Back to the defaults for the settings of the open pill, after asking."""
+        index = self.pills.current()
+        names = list(self._pages[index]._editors) + (list(self._dynamics._editors) if index == 0 else [])
+        title = PAGES[index][0]
+        if QMessageBox.question(self, "Restore defaults", f"Put the {title} settings back to their defaults?") \
+                != QMessageBox.Yes:
+            return
+        defaults = Parameters()
+        self.set_params(replace(self.params(), **{n: getattr(defaults, n) for n in names}))
 
     def _update_visible(self) -> None:
         params = self.params()
         hidden = unused_parameters(self._recording, params)
-        for form in (self._params, self._dynamics, self._video):
+        for form in (*self._forms, self._video):
             form.hide_fields(hidden)
         self.route_label.setText(
             "Route: L = sensor average × (gaze weighted / whole frame) relative luminance from the video, using "
@@ -320,6 +360,13 @@ class ParameterPanel(QWidget):
         # One switch: the dynamics settings apply only with it on (the delay always applies).
         for name in DYNAMICS_SWITCHED:
             self._dynamics._editors[name].setEnabled(params.dynamics)
+        # A dot on a pill whose settings differ from the defaults.
+        defaults = Parameters()
+        for index, form in enumerate(self._pages):
+            names = [n for n in form._editors if n not in hidden]
+            if index == 0:
+                names += [n for n in self._dynamics._editors if n not in hidden]
+            self.pills.mark(index, any(getattr(params, n) != getattr(defaults, n) for n in names))
 
     def video_settings(self) -> VideoSettings:
         return self._video.value()
