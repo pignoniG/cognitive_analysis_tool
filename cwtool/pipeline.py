@@ -223,6 +223,12 @@ LEAK_CHANGE_TAU = 2.0
 LEAK_MIN_WINDOWS = 20
 LEAK_MIN_SPREAD = 0.05
 LEAK_NOTE_R2 = 0.1
+# Windows within LEAK_SETTLE s after a luminance step (a change of log10 luminance of LEAK_STEP within 0.1 s) are
+# left out: the measured pupil is smoothed and the expected one is not, so even a perfect pupil leaves a small
+# step-shaped residual there, which the measure would count as light left in ΔPD (issue 50).
+LEAK_STEP = 0.1
+LEAK_MIN_SD = 0.01    # mm: a ΔPD flatter than this has nothing left for the light to explain
+LEAK_SETTLE = 0.5
 
 
 def light_leakage(cw: np.ndarray, log_lum: np.ndarray, change: np.ndarray) -> tuple[float, float]:
@@ -232,13 +238,29 @@ def light_leakage(cw: np.ndarray, log_lum: np.ndarray, change: np.ndarray) -> tu
     barely varies. If the task itself changes with the light, this also measures that."""
     ok = np.isfinite(cw) & np.isfinite(log_lum) & np.isfinite(change)
     y, x1, x2 = cw[ok], log_lum[ok], change[ok]
-    if ok.sum() < LEAK_MIN_WINDOWS or np.std(x1) < LEAK_MIN_SPREAD or np.std(y) == 0:
+    if ok.sum() < LEAK_MIN_WINDOWS or np.std(x1) < LEAK_MIN_SPREAD:
         return float("nan"), float("nan")
+    if np.std(y) < LEAK_MIN_SD:
+        return 0.0, 0.0
     slope = float(np.polyfit(x1, y, 1)[0])
     design = np.column_stack([np.ones(len(y)), x1, x2])
     fit = design @ np.linalg.lstsq(design, y, rcond=None)[0]
     r2 = 1 - float(np.sum((y - fit) ** 2) / np.sum((y - y.mean()) ** 2))
     return slope, max(r2, 0.0)
+
+
+def step_windows(log_lum: np.ndarray, fs: float, window_n: int) -> np.ndarray:
+    """Per ΔPD window: True if it starts within LEAK_SETTLE s after (or contains) a luminance step."""
+    lag = max(int(round(0.1 * fs)), 1)
+    jump = np.zeros(len(log_lum), dtype=bool)
+    jump[lag:] = np.abs(log_lum[lag:] - log_lum[:-lag]) > LEAK_STEP
+    start = np.flatnonzero(jump & ~np.concatenate([[False], jump[:-1]])) - lag    # where the step began
+    near = np.zeros(len(log_lum), dtype=bool)
+    for i in start:
+        reach = int(round(LEAK_SETTLE * fs))
+        near[max(i - reach, 0): i + lag + reach + 1] = True
+    n = len(near) // window_n
+    return near[: n * window_n].reshape(n, window_n).any(axis=1)
 
 
 def window_means(x: np.ndarray, window_n: int) -> np.ndarray:
@@ -544,7 +566,8 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
 
     log_lum = np.log10(np.maximum(prep.luminance, 1e-4))
     change = log_lum - model.lowpass(log_lum, fs, LEAK_CHANGE_TAU)
-    leak_slope, leak_r2 = light_leakage(cw, window_means(log_lum, window_n), window_means(change, window_n))
+    leak_cw = np.where(step_windows(log_lum, fs, window_n)[: len(cw)], np.nan, cw)
+    leak_slope, leak_r2 = light_leakage(leak_cw, window_means(log_lum, window_n), window_means(change, window_n))
     if leak_r2 > LEAK_NOTE_R2:
         notes.append(f"The light still explains {leak_r2:.0%} of the variance of ΔPD ({leak_slope:+.2f} mm per tenfold "
                      "luminance): the model does not remove it fully, so ΔPD changes where the light changes may "

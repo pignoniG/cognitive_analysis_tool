@@ -1051,9 +1051,9 @@ is revised; they remain in the git history of this file.
   residual, and that residual correlates with the luminance change that the leakage measure (issue: "light left")
   regresses on. So the 0.1 limit is close to what a luminance staircase leaves even for a perfect model, and it
   may be a property of the measure on steps, not of this machine.
-- **Open question:** is 0.1 the right level to warn at for staircase-like light (the calibration sequence is one),
-  or should the windows within a few tenths of a second of a step be left out of the measure? With real pupils the
-  dynamics already blur the steps.
-- **Proposal:** decide the threshold, or exclude the transitions, then update the test (a perfect pupil should pass,
-  a flat one must still exceed 0.8).
-- **Status:** open; diagnosed, needs a decision.
+- **Fixed (7 October 2026):** the windows within 0.5 s of a luminance step (more than 0.1 change of log10 luminance
+  within 0.1 s) are left out of the measure, on both sides, since the residual of smoothing is seen both before and after
+  the step. A ΔPD with a spread below 0.01 mm is reported as 0 (R² of a signal that flat is noise). The test now uses
+  3 s steps so that windows remain between the steps; with 1 s steps there are too few and the figures are NaN. A flat
+  pupil still gives R² above 0.8. The 0.1 limit is unchanged.
+- **Status:** fixed in 2.0.

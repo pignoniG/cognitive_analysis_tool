@@ -33,7 +33,7 @@ empty.
 | ΔPD RMS | root mean square of ΔPD about zero: how far the pupil strays from the model overall |
 | ΔPD SD | standard deviation of ΔPD: its spread around its own mean |
 | ΔPD in SD units | ΔPD / SD, exported next to ΔPD in mm |
-| Light left in ΔPD | how much of ΔPD the luminance still explains: the slope of ΔPD on log₁₀ luminance (mm per tenfold luminance) and the R² of ΔPD on log₁₀ luminance and its recent change. Shown in the summary; a warning above R² 0.1 |
+| Light left in ΔPD | how much of ΔPD the luminance still explains: the slope of ΔPD on log₁₀ luminance (mm per tenfold luminance) and the R² of ΔPD on log₁₀ luminance and its recent change, without the windows within 0.5 s of a luminance step (there the smoothed measured pupil and the expected one differ even for a perfect model). Shown in the summary; a warning above R² 0.1 |
 
 The light left in ΔPD is the first check of a result: if the model removed the light, ΔPD does not follow the
 luminance, and both figures are near 0. A large value means ΔPD changes where the light changes may not be workload.

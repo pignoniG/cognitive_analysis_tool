@@ -134,7 +134,7 @@ The expected pupil is still computed through such stretches, so its filters run 
 | ΔPD RMS | root mean square of ΔPD about zero | `residual_rms` |
 | ΔPD SD | standard deviation of ΔPD; ΔPD / SD is exported as the normalised ΔPD | `run` |
 | Gap fraction | share of the grid left out: pupil gaps longer than `max_gap` and unknown luminance (3d) | `run` |
-| Light left in ΔPD | slope of ΔPD on log₁₀ luminance (mm per tenfold luminance) and R² of ΔPD on log₁₀ luminance and its recent change (its excess over a 2 s low-pass), per ΔPD window; a note above R² 0.1. Near 0 when the model removes the light; NaN when the luminance barely varies | `light_leakage` |
+| Light left in ΔPD | slope of ΔPD on log₁₀ luminance (mm per tenfold luminance) and R² of ΔPD on log₁₀ luminance and its recent change (its excess over a 2 s low-pass), per ΔPD window, leaving out the windows within 0.5 s of a luminance step (a change of more than 0.1 in log₁₀ luminance within 0.1 s); a note above R² 0.1. Near 0 when the model removes the light; NaN when the luminance barely varies or too few windows are left | `light_leakage` |
 | Black and white point | expected pupil at `l_min` and `l_max` (display and relative camera modes only) | `run` |
 | Warnings | experimental reader, missing lux data, saturation, baseline events not found, implausible pupil | `prepare`, `run` |
 | Event means | mean ΔPD (mm and SD units) inside each event | `event_means` |

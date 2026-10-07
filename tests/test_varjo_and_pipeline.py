@@ -211,7 +211,8 @@ def test_result_reports_the_light_left_in_delta_pd(tmp_path):
     """A pupil that follows the model leaves little light in ΔPD; one that ignores the light leaves most of it,
     and a note says so."""
     params = Parameters(delay=0.0, dynamics=False)
-    grays = [0, 200, 60, 255, 30, 150, 90, 240]
+    # 3 s steps: the windows around each step are left out of the measure (issue 50), so it needs some in between
+    grays = [g for g in (0, 200, 60, 255, 30, 150, 90, 240) for _ in range(3)]
     area = varjo.PROFILE.field_area
     from cwtool import luminance, model
 
