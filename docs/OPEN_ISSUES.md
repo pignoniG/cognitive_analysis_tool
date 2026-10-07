@@ -984,6 +984,26 @@ is revised; they remain in the git history of this file.
   reference rather than a value of the 1.x build. Parameter files keep the weight they were saved with (0.65 in
   files from before), and changing the radius needs a new video analysis. The Pupil Core recording above
   preferred the gaze area alone with a 5.25° circle; the comparison should be repeated with the 16.35° circle.
+- **Repeated with the 16.35° circle (7 October 2026):** the same recording (`2026_09_30/000`, the run file's onset
+  times for the sequence start, current defaults including the dynamics), gaze circle 5.25° and 16.35°, the fit's
+  sensitivity and offset with the weight held:
+
+  | Gaze weight | RMS 5.25° (mm) | Correlation 5.25° | RMS 16.35° (mm) | Correlation 16.35° |
+  |---|---|---|---|---|
+  | 0.26 (Eckert) | 0.82 | 0.42 | 0.85 | 0.37 |
+  | 0.50 | 0.80 | 0.48 | 0.82 | 0.43 |
+  | 0.65 | 0.78 | 0.51 | 0.80 | 0.47 |
+  | 0.90 | 0.75 | 0.56 | 0.76 | 0.55 |
+  | 1.00 | 0.75 | 0.55 | 0.74 | 0.58 |
+
+  The trend is the same as before at both radii: the fit improves towards the gaze circle alone, and the weight of
+  Eckert et al. (0.26) is the worst on this recording; the larger circle with the gaze alone is the best (RMS 0.74 mm,
+  correlation 0.58) but only slightly better than the small circle. The figures differ from the table above (RMS 0.78
+  against 0.72 mm at 0.65), because the run is not the same: the sequence is placed from the run file here, and the
+  defaults have changed since. The sensitivity stays far from 1 until the weight nears 1 (0.04 at 0.65), so low
+  weights are still compensating for a luminance that hardly moves. The caveats above hold (one recording, one
+  participant, a screen filling part of the view). It does not support a weight of 0.26 for glasses on a screen in a
+  room, but it is not Eckert's scene (a cube moving over the field), so it does not contradict them either.
 - **Proposal:** choose the weight together with the circle radius from a reference (G. Pignoni has one suggesting a
   different weighting), possibly per device type, and report both.
 - **Status:** open.
