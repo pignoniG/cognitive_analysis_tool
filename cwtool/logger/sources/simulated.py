@@ -9,6 +9,7 @@ from cwtool.logger.base import Source
 
 
 class SimulatedSource(Source):
+    """Sine waves at a fixed rate, to try the logger without hardware."""
     kind = "simulated"
 
     def __init__(self, name: str = "simulated", rate: float = 50.0, channels: int = 2):
@@ -18,6 +19,7 @@ class SimulatedSource(Source):
         self.settings = {"rate (Hz)": rate}
 
     def run(self, emit, stopped) -> None:
+        """Emit the sine samples that are due, at the set rate."""
         n, start = 0, time.time()
         while not stopped.is_set():
             due = int((time.time() - start) * self.rate)

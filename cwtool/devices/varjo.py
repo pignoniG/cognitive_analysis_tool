@@ -82,6 +82,7 @@ def pupil_scale(left_iris: np.ndarray, right_iris: np.ndarray) -> float:
 
 
 def detect(folder: Path) -> bool:
+    """True if the folder has a Varjo gaze output file."""
     return folder.is_dir() and _find(folder, "varjo_gaze_output_") is not None
 
 
@@ -107,6 +108,7 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
         raise ValueError(f"{gaze_file.name} has no data rows")
 
     def col(key: str) -> np.ndarray:
+        """A column of the gaze file as floats (NaN where a value is missing)."""
         i = cols[key]
         return np.array([_number(r[i]) for r in rows])
 
@@ -118,6 +120,7 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
     tracked = {eye: valid & (col(f"{eye}_status") > MIN_STATUS) for eye in ("left", "right")}
 
     def pupil(eye: str) -> np.ndarray:
+        """Pupil size of one eye, NaN where the eye is not tracked or the size is not positive."""
         d = col(f"{eye}_pupil")
         with np.errstate(invalid="ignore"):
             ok = tracked[eye] & (d > 0)  # the plausible range is checked in mm by the pipeline

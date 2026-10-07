@@ -39,6 +39,7 @@ def read_event_log(folder: Path, epoch_start: float, utc_offset: float | None = 
     zone = timezone(timedelta(seconds=utc_offset)) if utc_offset is not None else None
 
     def start_of(r) -> float:
+        """Unix start time (s) of a row: its unix column if it has one, else its ISO time in the log's time zone."""
         if unix_col is not None and unix_col < len(r) and r[unix_col].strip():
             return float(r[unix_col])
         when = datetime.fromisoformat(r[1].strip())
@@ -175,6 +176,7 @@ def lens_fov(camera_matrix, dist_coefs, resolution: tuple[int, int], fisheye: bo
 
 
 def video_resolution(path: Path) -> tuple[int, int]:
+    """Width and height (pixels) of a video file."""
     import cv2
 
     cap = cv2.VideoCapture(str(path))

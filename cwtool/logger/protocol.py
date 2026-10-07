@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 def read_protocol(path: Path) -> list[tuple[str, float | None]]:
+    """Read a protocol file: a list of (phase name, duration in s or None for until the next phase is called)."""
     events = []
     with open(path, newline="") as f:
         for row in csv.reader(f):

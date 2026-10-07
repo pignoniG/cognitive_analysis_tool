@@ -36,6 +36,10 @@ MAX_SHOWN = 6
 
 
 class MainWindow(QMainWindow):
+    """The analysis window: the tabs on the left (Data, Params, Calibrate, Export) with the video preview under them,
+    the plots on the right, and the status strip. It owns the open recording, its video analysis and its result, and
+    recomputes the result when a parameter changes.
+    """
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"Cognitive Workload Tool {__version__}")
@@ -70,6 +74,7 @@ class MainWindow(QMainWindow):
 
     def _build_actions(self) -> None:
         def action(text, slot, shortcut=None):
+            """A menu or toolbar action with its slot and optional shortcut."""
             a = QAction(text, self)
             a.triggered.connect(slot)
             if shortcut:
@@ -540,6 +545,7 @@ class MainWindow(QMainWindow):
     # Recording and video
 
     def choose_recording(self) -> None:
+        """Ask for a recording folder and open it."""
         start = self._settings.value("last_recording_dir", str(Path.home()))
         folder = QFileDialog.getExistingDirectory(self, "Open recording folder", start)
         if folder:
@@ -547,6 +553,7 @@ class MainWindow(QMainWindow):
             self.open_recording(Path(folder))
 
     def choose_lux_folder(self) -> None:
+        """Ask for the folder with the lux sensor logs, when it is not in the recording's."""
         start = str(self._lux_folder or self._settings.value("last_recording_dir", str(Path.home())))
         folder = QFileDialog.getExistingDirectory(self, "Folder with the lux sensor logs", start)
         if folder:
@@ -562,12 +569,15 @@ class MainWindow(QMainWindow):
         self._update_state()
 
     def clear_lux_folder(self) -> None:
+        """Go back to looking for the lux logs in the recording's own folder."""
         self.set_lux_folder(None)
 
     def open_recording(self, folder: Path) -> None:
+        """Load a recording in the background, then set up the plots, the preview and the controls for its device."""
         lux_folder = self._lux_folder
 
         def load(progress, cancelled):
+            """Background task: read the recording."""
             return devices.load(folder, lux_folder=lux_folder)
 
         self._start_task(load, self._recording_loaded, f"Loading {folder.name}…")
@@ -611,6 +621,9 @@ class MainWindow(QMainWindow):
             self.analyse(use_cache=True)
 
     def analyse(self, use_cache: bool) -> None:
+        """Analyse the scene video in the background (or take the cached analysis if ``use_cache`` and one matches) and
+        then compute the result.
+        """
         rec = self.recording
         settings = self.params_panel.video_settings().for_recording(rec)
         if use_cache:
@@ -621,6 +634,7 @@ class MainWindow(QMainWindow):
                 return
 
         def work(progress, cancelled):
+            """Background task: analyse the video and save the analysis next to the recording."""
             res = analyse_video(rec.scene_video, rec.time, rec.gaze, settings, progress, cancelled,
                                 frame_times=rec.scene_frame_times)
             if cancelled():
@@ -665,6 +679,7 @@ class MainWindow(QMainWindow):
         self._update_state()
 
     def cancel_task(self) -> None:
+        """Stop the running background task."""
         if self._task is not None:
             self._task.cancel()
 
@@ -674,6 +689,7 @@ class MainWindow(QMainWindow):
         self._recompute_timer.start()
 
     def recompute(self) -> None:
+        """Run the pipeline with the current parameters and show the result; the status shows the error if it fails."""
         if self.recording is None or self.video is None:
             return
         try:
@@ -695,11 +711,15 @@ class MainWindow(QMainWindow):
         self._update_state()
 
     def fit_light(self) -> None:
+        """Fit the display photometry (sensitivity, gains, gamma, black level) on the calibration sequence, in the
+        background.
+        """
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, sequence, gamma = self.sequence_start.value(), self.sequence, self.fit_gamma_check.isChecked()
         black = self.fit_black_check.isChecked()
 
         def work(progress, cancelled):
+            """Background task: the display photometry fit."""
             return fit_light_response(rec, video, params, start, sequence, fit_gamma=gamma, fit_black=black)
 
         self._start_task(work, self._light_done, "Fitting the light response on the calibration sequence…")
@@ -710,11 +730,14 @@ class MainWindow(QMainWindow):
             self.step_light.set_summary(f"Applied: light sensitivity ×{fit.params.sensitivity:.3g}")
 
     def fit_lux(self) -> None:
+        """Fit the sensitivity and pupil offset of a glasses recording on the calibration sequence, in the background.
+        """
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, sequence = self.sequence_start.value(), self.sequence
         weight = self.fit_weight_check.isChecked()
 
         def work(progress, cancelled):
+            """Background task: the lux sensor fit."""
             return fit_lux_response(rec, video, params, start, sequence, fit_fixation=weight)
 
         self._start_task(work, self._lux_done, "Fitting the light sensitivity and offset on the sequence…")
@@ -738,12 +761,14 @@ class MainWindow(QMainWindow):
                                       f"ΔPD RMS in sequence {fit.rms_after:.3f} mm")
 
     def fit_sequence(self) -> None:
+        """Fit latency, dynamics and pupil scale on the calibration sequence, in the background."""
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, dynamics = self.sequence_start.value(), self.fit_dynamics_check.isChecked()
         sequence = self.sequence
         end = start + sequence.duration
 
         def work(progress, cancelled):
+            """Background task: the calibration sequence fit."""
             return fit_calibration(rec, video, params, start, end, fit_dynamics=dynamics, cancelled=cancelled,
                                    sequence=sequence, fit_transient=dynamics)
 
@@ -772,6 +797,7 @@ class MainWindow(QMainWindow):
                                          f"{fit.rms_after:.3f} mm")
 
     def calibrate_camera(self) -> None:
+        """Calibrate the camera's full-scale luminance against the lux sensor and put it in the parameters."""
         params = self.params_panel.params()
         try:
             cal = pipeline.calibrate_camera(self.recording, self.video, params)
@@ -805,6 +831,7 @@ class MainWindow(QMainWindow):
         self.sequence_rms.setText(f"{rms_in(self.result, s, s + self.sequence.duration):.3f} mm")
 
     def choose_sequence(self) -> None:
+        """Load a sequence file; a presenter run file also places it in the recording from its onset times."""
         start = self._settings.value("last_sequence_dir", str(Path.home()))
         path, _ = QFileDialog.getOpenFileName(self, "Load calibration sequence", start, "CSV (*.csv *.txt)")
         if not path:
@@ -836,6 +863,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Sequence placed at {start:.2f} s from the run file's onset times", 6000)
 
     def find_sequence(self) -> None:
+        """Find the calibration sequence in the recording from the colours the video saw, and place it."""
         if self.video is None:
             return
         base = self._base_sequence or self.sequence
@@ -852,6 +880,7 @@ class MainWindow(QMainWindow):
                                      f"(colour match error {loc.error:.0%}{gaps})", 5000)
 
     def set_sequence(self, sequence: calibration.Sequence, keep_base: bool = False) -> None:
+        """Use this sequence for the overlay and the fits (``keep_base`` keeps the unscaled one to search with)."""
         if not keep_base:
             self._base_sequence = sequence
         self.sequence = sequence
@@ -859,6 +888,7 @@ class MainWindow(QMainWindow):
         self._sequence_changed()
 
     def choose_params(self) -> None:
+        """Ask for a participant parameter file and load it (the display photometry is kept)."""
         path, _ = QFileDialog.getOpenFileName(self, "Load parameters", self._params_dir(), "Parameters (*.json)")
         if path:
             try:
@@ -872,6 +902,7 @@ class MainWindow(QMainWindow):
             self._update_state()
 
     def save_params(self) -> None:
+        """Save the participant parameters to the current file, or ask for one."""
         if self._params_path is None:
             self.save_params_as()
         else:
@@ -879,6 +910,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Saved {self._params_path} (display photometry is saved separately)", 4000)
 
     def save_params_as(self) -> None:
+        """Ask for a file and save the participant parameters there."""
         path, _ = QFileDialog.getSaveFileName(self, "Save parameters", self._params_dir(), "Parameters (*.json)")
         if path:
             if not path.endswith(".json"):
@@ -892,12 +924,14 @@ class MainWindow(QMainWindow):
         return self.recording.device if self.recording is not None else ""
 
     def choose_display(self) -> None:
+        """Ask for a display photometry file and load it."""
         path, _ = QFileDialog.getOpenFileName(self, "Load display photometry", self._params_dir(),
                                               "Display photometry (*.json)")
         if path:
             self.load_display(Path(path))
 
     def load_display(self, path: Path, quiet: bool = False) -> None:
+        """Load a display photometry file (black, white, gamma) into the parameters."""
         try:
             display = DisplayPhotometry.load(path)
         except Exception as e:
@@ -913,6 +947,7 @@ class MainWindow(QMainWindow):
         self._update_state()
 
     def save_display(self) -> None:
+        """Save the display photometry in the parameters to a file."""
         path, _ = QFileDialog.getSaveFileName(self, "Save display photometry", self._params_dir(),
                                               "Display photometry (*.json)")
         if not path:
@@ -964,6 +999,7 @@ class MainWindow(QMainWindow):
     # Sensor data and the export range
 
     def choose_sensors(self) -> None:
+        """Ask for a sensor logger session folder and import its sensor data."""
         if self.recording is None:
             self._error("Import sensor data", "Open a recording first: the sensor data is placed on its time axis.")
             return
@@ -992,6 +1028,9 @@ class MainWindow(QMainWindow):
             self.import_sensors(rec.folder, quiet=True)
 
     def import_sensors(self, folder: Path, quiet: bool = False) -> None:
+        """Load the Shimmer and EmotiBit files of a logger session, cut to the recording's span and placed on its time
+        axis.
+        """
         rec = self.recording
         if rec is None or not len(rec.time):
             return
@@ -1005,6 +1044,7 @@ class MainWindow(QMainWindow):
         start, span = rec.epoch_start + float(rec.time[0]), float(rec.time[-1] - rec.time[0])
 
         def load(progress, cancelled):
+            """Background task: read the sensor files."""
             return sensors.load_sensors(folder, start, span)
 
         self.statusBar().showMessage(f"Reading the sensor data in {folder.name}…")
@@ -1041,6 +1081,7 @@ class MainWindow(QMainWindow):
         self._show_sensors()
 
     def remove_sensors(self) -> None:
+        """Forget the imported sensor data."""
         self.sensors = []
         self.signal_list.clear()
         self.plots.set_sensors([])
@@ -1108,6 +1149,9 @@ class MainWindow(QMainWindow):
         return self._settings.value("last_params_dir", str(Path.home()))
 
     def export(self) -> None:
+        """Ask for a folder and export the results (trimmed as set in the Export tab) with the sensor data and the
+        manifest.
+        """
         if self.result is None:
             return
         default = str(self.recording.folder / "cwtool_export")
@@ -1136,6 +1180,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Exported {len(paths)} files{extra} to {folder}", 6000)
 
     def closeEvent(self, event) -> None:
+        """Stop the running task and save the layout before closing."""
         if self._task is not None and self._task.isRunning():
             self._task.cancel()
             self._task.wait(5000)

@@ -61,6 +61,7 @@ def _layout(folder: Path) -> Optional[str]:
 
 
 def detect(folder: Path) -> bool:
+    """True if the folder has a Neon recording (either layout)."""
     return _layout(Path(folder)) is not None
 
 

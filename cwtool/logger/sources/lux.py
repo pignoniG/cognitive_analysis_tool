@@ -19,6 +19,7 @@ def list_ports() -> list[tuple[str, str]]:
 
 
 class LuxSerialSource(Source):
+    """The TSL2591 lux logger on a serial port: one reading per line, stamped when it arrives."""
     kind = "lux"
 
     def __init__(self, port: str | None = None, baud: int = 250000, name: str = "lux"):
@@ -28,6 +29,7 @@ class LuxSerialSource(Source):
         self._ser = None
 
     def open(self) -> None:
+        """Open the serial port, choosing the board by its name if no port was given."""
         import serial
 
         if self.port is None:
@@ -39,6 +41,7 @@ class LuxSerialSource(Source):
         self.settings = {"port": self.port, "baud": self.baud}
 
     def run(self, emit, stopped) -> None:
+        """Read lines, skip anything that is not a number (start-up messages) and emit (time, lux)."""
         while not stopped.is_set():
             line = self._ser.readline()
             if not line:
@@ -51,5 +54,6 @@ class LuxSerialSource(Source):
             emit([(now, lux)])
 
     def close(self) -> None:
+        """Close the serial port."""
         if self._ser is not None:
             self._ser.close()

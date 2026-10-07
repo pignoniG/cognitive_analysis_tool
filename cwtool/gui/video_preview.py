@@ -79,6 +79,7 @@ class VideoPreview(QWidget):
         self.next_button.setEnabled(on)
 
     def set_recording(self, rec: Optional[Recording], settings: VideoSettings) -> None:
+        """Open the recording's scene video (or none) and forget the previous one's frame and analysis."""
         if self._cap is not None:
             self._cap.release()
         self._rec, self._settings, self._video, self._result = rec, settings, None, None
@@ -99,14 +100,17 @@ class VideoPreview(QWidget):
         self.show_time(float(rec.time[0]) if len(rec.time) else 0.0)
 
     def set_settings(self, settings: VideoSettings) -> None:
+        """Use new video settings (circle sizes, field of view) and redraw."""
         self._settings = settings
         self.refresh()
 
     def set_analysis(self, video: Optional[VideoResult], result: Optional[Result]) -> None:
+        """Use the video analysis and the result to draw the measured values with the frame, and redraw."""
         self._video, self._result = video, result
         self.refresh()
 
     def refresh(self) -> None:
+        """Redraw the current frame."""
         if self._cap is not None and self._pending is None:   # a pending frame is drawn with the new state
             self.show_time(self._time)
 
@@ -154,6 +158,7 @@ class VideoPreview(QWidget):
         return frame
 
     def show_time(self, t: float) -> None:
+        """Show the frame at time ``t`` (s) with the gaze circle and the measured colours."""
         # A frame requested while scrubbing and not drawn yet is older than this: drop it.
         self._pending = None
         self._pending_timer.stop()
@@ -238,5 +243,6 @@ class VideoPreview(QWidget):
         return out
 
     def resizeEvent(self, event) -> None:
+        """Redraw the frame to fit the new size."""
         super().resizeEvent(event)
         self.refresh()

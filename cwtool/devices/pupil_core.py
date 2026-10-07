@@ -46,6 +46,7 @@ def _export_dir(folder: Path) -> Optional[Path]:
 
 
 def detect(folder: Path) -> bool:
+    """True if the folder is a Pupil Capture recording with an export."""
     folder = Path(folder)
     return (folder / "info.player.json").exists() and _export_dir(folder) is not None
 

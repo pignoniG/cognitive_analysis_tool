@@ -36,6 +36,7 @@ class Sensor:
 
     @property
     def long(self) -> bool:
+        """True for the long layout of the file (one row per sample with a signal name), as the EmotiBit's."""
         return self.header[1:] == ["signal", "value"]
 
     def signals(self) -> list[str]:
@@ -52,6 +53,7 @@ class Sensor:
         return self.unix, self.data[signal]
 
     def select(self, mask) -> "Sensor":
+        """The sensor with only the rows where ``mask`` is True."""
         mask = np.asarray(mask, dtype=bool)
         return Sensor(self.name, self.kind, self.path, self.header, self.unix[mask],
                       {k: v[mask] for k, v in self.data.items()})

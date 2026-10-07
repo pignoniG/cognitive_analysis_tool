@@ -135,6 +135,7 @@ class Collapsible(QWidget):
         content.setVisible(False)
 
     def set_expanded(self, expanded: bool) -> None:
+        """Open or fold the section, without emitting the toggle signal."""
         self.header.blockSignals(True)
         self.header.setChecked(expanded)
         self.header.blockSignals(False)
@@ -142,6 +143,7 @@ class Collapsible(QWidget):
         self.content.setVisible(expanded)
 
     def is_expanded(self) -> bool:
+        """True if the section is open."""
         return self.header.isChecked()
 
 
@@ -181,10 +183,12 @@ class _Form(QWidget):
             box.setVisible(any(name not in hidden for name in names))
 
     def is_shown(self, name: str) -> bool:
+        """True if the editor of this parameter is visible (its box and the editor itself)."""
         box = next(b for b, _, names in self._boxes if name in names)
         return not box.isHidden() and not self._editors[name].isHidden()
 
     def updates(self) -> dict:
+        """The parameter values currently in the editors, by name."""
         return {name: getattr(self.value(), name) for name in self._editors}
 
     def _make(self, name):
@@ -225,6 +229,7 @@ class _Form(QWidget):
         return w, label
 
     def set_value(self, value) -> None:
+        """Show the values of a parameters object in the editors, without emitting changes."""
         self._value = value
         for name, w in self._editors.items():
             v = getattr(value, name)
@@ -240,6 +245,7 @@ class _Form(QWidget):
             w.blockSignals(False)
 
     def value(self):
+        """The parameters object with the editors' values applied to the one last set."""
         updates = {}
         for name, w in self._editors.items():
             if isinstance(w, QLineEdit):
@@ -314,12 +320,14 @@ class ParameterPanel(QWidget):
         assert not missing, f"Parameters without an editor: {missing}"
 
     def params(self) -> Parameters:
+        """The parameters in the panel: the loaded ones with every editor's value on top."""
         updates: dict = {}
         for form in self._forms:
             updates.update(form.updates())
         return replace(self._base, **updates)
 
     def set_params(self, p: Parameters) -> None:
+        """Show a parameters object in all the pages."""
         self._base = p
         for form in self._forms:
             form.set_value(p)
@@ -369,7 +377,9 @@ class ParameterPanel(QWidget):
             self.pills.mark(index, any(getattr(params, n) != getattr(defaults, n) for n in names))
 
     def video_settings(self) -> VideoSettings:
+        """The video analysis settings in the panel."""
         return self._video.value()
 
     def set_video_settings(self, s: VideoSettings) -> None:
+        """Show video analysis settings in the panel."""
         self._video.set_value(s)

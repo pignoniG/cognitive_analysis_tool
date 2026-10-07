@@ -146,6 +146,7 @@ def check_session(folder: Path, max_lag: float = 2.0) -> dict:
 
 
 def format_report(report: dict) -> str:
+    """The report of :func:`check_session` as text for the terminal."""
     lines = ["Regularity (interval between samples):"]
     for name, s in report["regularity"].items():
         if "rate_hz" in s:
@@ -175,6 +176,7 @@ def format_report(report: dict) -> str:
 
 
 def main(argv=None) -> int:
+    """Command line: check a session folder and print (and with --save, write) the report."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("session", type=Path, help="logger session folder")
     ap.add_argument("--max-lag", type=float, default=2.0, help="largest offset looked for between devices (s)")

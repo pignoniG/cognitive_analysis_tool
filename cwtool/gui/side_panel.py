@@ -59,9 +59,11 @@ class Rail(QWidget):
         self._group.idClicked.connect(self.changed)
 
     def current(self) -> int:
+        """Index of the selected tab."""
         return self._group.checkedId()
 
     def set_current(self, index: int) -> None:
+        """Select a tab and tell listeners."""
         if 0 <= index < len(self._buttons) and index != self.current():
             self._buttons[index].setChecked(True)
             self.changed.emit(index)
@@ -97,6 +99,7 @@ class Pills(QWidget):
         self._group.idClicked.connect(self._chosen)
 
     def add(self, title: str, page: QWidget) -> int:
+        """Add a pill that shows ``page``; returns its index."""
         index = len(self._buttons)
         button = QPushButton(title)
         button.setCheckable(True)
@@ -116,9 +119,11 @@ class Pills(QWidget):
         self.changed.emit(index)
 
     def current(self) -> int:
+        """Index of the page shown."""
         return self._stack.currentIndex()
 
     def set_current(self, index: int) -> None:
+        """Show a page."""
         if 0 <= index < len(self._buttons):
             self._buttons[index].setChecked(True)
             self._stack.setCurrentIndex(index)
@@ -129,6 +134,7 @@ class Pills(QWidget):
         self._buttons[index].setToolTip("Differs from the defaults" if on else "")
 
     def page(self, index: int) -> QWidget:
+        """The page widget at an index."""
         return self._stack.widget(index)
 
 
@@ -159,6 +165,7 @@ class Step(QFrame):
         layout.addWidget(content)
 
     def set_expanded(self, expanded: bool) -> None:
+        """Open or fold the step's content, without emitting the toggle signal."""
         self.header.blockSignals(True)
         self.header.setChecked(expanded)
         self.header.blockSignals(False)
@@ -166,6 +173,7 @@ class Step(QFrame):
         self.content.setVisible(expanded)
 
     def set_summary(self, text: str) -> None:
+        """Show a one-line result under the title (hidden when empty)."""
         self.summary.setText(text)
         self.summary.setVisible(bool(text))
 
@@ -223,6 +231,7 @@ class PreviewHolder(QWidget):
         self.preview.info.setVisible(on)
 
     def is_open(self) -> bool:
+        """True if the preview is shown in the column (not hidden, not popped out)."""
         return self._open
 
     def set_open(self, open_: bool) -> None:
@@ -237,6 +246,7 @@ class PreviewHolder(QWidget):
         self.open_changed.emit(open_)
 
     def toggle_pop_out(self) -> None:
+        """Move the preview to a window of its own, or close that window to dock it back."""
         if self._window is not None:
             self._window.close()
             return

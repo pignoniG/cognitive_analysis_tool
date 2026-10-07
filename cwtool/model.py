@@ -48,6 +48,7 @@ def delay(signal, fs: float, seconds: float) -> np.ndarray:
     f = d - k if d - k > 1e-9 else 0.0
 
     def shifted(n: int) -> np.ndarray:
+        """The signal delayed by n samples, padded at the start with its first value."""
         n = min(n, len(x))
         return np.concatenate([np.full(n, x[0]), x[:len(x) - n]])
 

@@ -459,6 +459,9 @@ def clipped_fraction(video: VideoResult) -> float:
 
 @dataclass
 class CameraCalibration:
+    """Result of calibrating a fixed-exposure camera against the lux sensor: the full-scale luminance and how steady it
+    was.
+    """
     white: float          # cd/m² at full scale for the recording's exposure
     spread: float         # 90th / 10th percentile of the per-sample estimates (1 = perfectly constant)
     samples: int

@@ -43,6 +43,7 @@ class DeviceProfile:
 
 @dataclass
 class Event:
+    """A labelled time span of the recording (an experiment phase), in seconds on the relative clock."""
     label: str
     start: float  # seconds, on the recording's relative clock
     end: float
@@ -82,14 +83,17 @@ class Recording:
 
     @property
     def device(self) -> str:
+        """Name of the device that made the recording."""
         return self.profile.name
 
     @property
     def luminance_source(self) -> LuminanceSource:
+        """Where the luminance comes from for this device: the display, a lux sensor or the camera."""
         return self.profile.luminance_source
 
     @property
     def circular_scene(self) -> bool:
+        """True if the scene camera's image is a circle (fisheye), so the corners are not scene."""
         return self.profile.circular_scene
 
     @property

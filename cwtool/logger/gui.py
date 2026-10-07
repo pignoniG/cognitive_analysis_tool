@@ -54,13 +54,18 @@ class StallWatchdog(threading.Thread):
         self._stop = threading.Event()
 
     def beat(self) -> None:
+        """Called by the window's timer: it is still responding."""
         self._beat = time.monotonic()
         self._reported = False
 
     def stop(self) -> None:
+        """Stop watching."""
         self._stop.set()
 
     def run(self) -> None:
+        """If the window has not beaten for longer than the limit, write the stack of every thread to the log file
+        (once).
+        """
         while not self._stop.wait(0.5):
             if not self._reported and time.monotonic() - self._beat > self.limit:
                 self._reported = True
@@ -134,6 +139,7 @@ class AddSourceDialog(QDialog):
         form.addRow(buttons)
 
     def source(self):
+        """The sensor source the dialog's choices describe."""
         from cwtool.logger import sources
 
         name = self.name.text().strip() or self.kind
@@ -183,6 +189,7 @@ class SourcePlot(pg.PlotWidget):
         self._signals = []
 
     def refresh(self) -> None:
+        """Update the signal list and the plotted curve from the sensor's live buffer."""
         signals = self.logger.sources[self.name].signals() if self.name in self.logger.sources else []
         if signals != self._signals:
             current = self.signal.currentText()
@@ -202,6 +209,7 @@ class SourcePlot(pg.PlotWidget):
 
 
 class LoggerWindow(QMainWindow):
+    """The logger's window: sensors with live plots, recording, events and protocols."""
     def __init__(self, logger: Logger | None = None):
         super().__init__()
         self.setWindowTitle("Cognitive Workload Tool: sensor logger")
@@ -321,6 +329,7 @@ class LoggerWindow(QMainWindow):
     # sources
 
     def add_source(self, kind: str) -> None:
+        """Add a sensor of this kind: look for devices in the background (Shimmer, EmotiBit), then ask which one."""
         if kind in ("shimmer", "emotibit"):  # looking for devices takes seconds: not in the window's thread
             self.statusBar().showMessage("Looking for devices…")
             task = Task(lambda progress, cancelled: find_devices(kind), self)
@@ -361,6 +370,7 @@ class LoggerWindow(QMainWindow):
         self.statusBar().showMessage(f"{name} connected")
 
     def remove_selected(self) -> None:
+        """Remove the sensor selected in the table, with its plot."""
         item = self.table.currentItem()
         if item is None:
             return
@@ -378,6 +388,7 @@ class LoggerWindow(QMainWindow):
             self.folder.setText(d)
 
     def toggle_recording(self) -> None:
+        """Start recording into the chosen folder, or stop and report where it was saved."""
         if self.logger.recording:
             session = self.logger.stop_recording()
             self._stop_protocol()
@@ -402,11 +413,13 @@ class LoggerWindow(QMainWindow):
     # events
 
     def begin_event(self) -> None:
+        """Begin the event named in the box (ending the running one); only while recording."""
         label = self.event_label.text().strip()
         if label and self.logger.recording:
             self.logger.mark(label)
 
     def load_protocol(self) -> None:
+        """Choose and read a protocol file."""
         path, _ = QFileDialog.getOpenFileName(self, "Protocol", "", "CSV (*.csv)")
         if not path:
             return
@@ -419,6 +432,7 @@ class LoggerWindow(QMainWindow):
         self.phase_label.setText(f"{len(self._protocol)} phases loaded from {Path(path).name}")
 
     def start_protocol(self) -> None:
+        """Begin the protocol's first phase; needs a protocol and a running recording."""
         if not self._protocol or not self.logger.recording:
             self.statusBar().showMessage("Load a protocol and start recording first.")
             return
@@ -426,6 +440,7 @@ class LoggerWindow(QMainWindow):
         self.advance_protocol()
 
     def advance_protocol(self) -> None:
+        """Go to the protocol's next phase, and schedule the one after it if the phase has a duration."""
         if not self.logger.recording or not self._protocol:
             return
         self._phase += 1
@@ -477,6 +492,7 @@ class LoggerWindow(QMainWindow):
             self.phase_label.setText(f"Phase {self._phase + 1}/{len(self._protocol)}: {name}{left}")
 
     def closeEvent(self, event) -> None:
+        """Ask before quitting during a recording; stop the sensors and the watchdog."""
         if self.logger.recording and QMessageBox.question(
                 self, "Recording", "Stop recording and quit?") != QMessageBox.Yes:
             event.ignore()
@@ -488,6 +504,7 @@ class LoggerWindow(QMainWindow):
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Start the logger application."""
     from cwtool.gui import apply_palette
 
     app = QApplication(sys.argv if argv is None else argv)

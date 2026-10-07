@@ -31,6 +31,7 @@ def trace(*args) -> None:
 
 
 def is_address(text: str | None) -> bool:
+    """True if the text is a Bluetooth address (six hex pairs)."""
     return bool(text and ADDRESS.match(text))
 
 
@@ -73,6 +74,7 @@ class BufferedLink:
         self._cancelled = False
 
     def feed(self, data: bytes) -> None:
+        """Add bytes received from the helper to the read buffer and wake the reader."""
         with self._cond:
             self._buf += data
             self._cond.notify_all()
@@ -87,11 +89,13 @@ class BufferedLink:
             return out
 
     def cancel_read(self) -> None:
+        """Make blocked and later reads return at once (the link is closing)."""
         with self._cond:
             self._cancelled = True
             self._cond.notify_all()
 
     def reset_input_buffer(self) -> None:
+        """Discard what has been received and not read."""
         with self._cond:
             self._buf.clear()
 
@@ -136,6 +140,7 @@ class RfcommSerial(BufferedLink):
                 trace(line[6:])
 
     def write(self, data: bytes) -> int:
+        """Send bytes to the device through the helper; a broken pipe ends the reads and is raised."""
         try:
             self._proc.stdin.write(bytes(data))
         except (BrokenPipeError, OSError):
@@ -144,6 +149,7 @@ class RfcommSerial(BufferedLink):
         return len(data)
 
     def close(self) -> None:
+        """Close the channel: end the helper's input, wait for it to exit, kill it if it does not."""
         self.cancel_read()
         try:
             self._proc.stdin.close()  # EOF: the helper closes the channel and exits

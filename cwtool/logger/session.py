@@ -39,6 +39,7 @@ class EventLog:
         self.current = (label, now)
 
     def end(self, now: float | None = None) -> None:
+        """End the running event now (or at ``now``) and write its row; nothing if none is running."""
         if self.current is None:
             return
         now = time.time() if now is None else now
@@ -49,6 +50,7 @@ class EventLog:
         self._f.flush()
 
     def close(self) -> None:
+        """End the running event and close the file."""
         self.end()
         self._f.close()
 
@@ -121,6 +123,7 @@ class Logger:
         t.start()
 
     def remove(self, name: str) -> None:
+        """Stop a sensor's thread, close the sensor and take it out of the logger."""
         stop = self._stops.pop(name, None)
         if stop:
             stop.set()
@@ -173,9 +176,13 @@ class Logger:
 
     @property
     def recording(self) -> bool:
+        """True while a recording is running."""
         return self.session_folder is not None
 
     def start_recording(self, folder: Path, label: str = "") -> Path:
+        """Start saving: make the session folder (named by the time, plus ``label``) and open a file for each sensor.
+        Returns the folder.
+        """
         if self.recording:
             raise RuntimeError("Already recording")
         now = time.time()
@@ -194,6 +201,9 @@ class Logger:
         return session
 
     def stop_recording(self) -> Path | None:
+        """Stop saving: close the files, end the running event and write session.json. Returns the folder, or None if
+        not recording.
+        """
         if not self.recording:
             return None
         with self._lock:  # no row is queued for these sinks after this
@@ -217,6 +227,7 @@ class Logger:
             self.events.begin(label)
 
     def end_mark(self) -> None:
+        """End the running event, if any."""
         if self.events:
             self.events.end()
 
@@ -239,6 +250,7 @@ class Logger:
         (folder / "session.json").write_text(json.dumps(info, indent=2))
 
     def shutdown(self) -> None:
+        """Stop recording, close every sensor and stop the writer thread."""
         self.stop_recording()
         for name in list(self.sources):
             self.remove(name)

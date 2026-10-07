@@ -41,6 +41,7 @@ class SegmentDialog(QDialog):
         form.addRow(buttons)
 
     def segment(self) -> tuple[float, float]:
+        """The segment typed in, as (start, end) in order."""
         a, b = self.start.value(), self.end.value()
         return (a, b) if a <= b else (b, a)
 
@@ -124,6 +125,7 @@ class TrimPanel(QGroupBox):
     # state
 
     def trim(self) -> Trim:
+        """The trim being edited."""
         return self._trim
 
     def set_bounds(self, lo: float, hi: float) -> None:
@@ -137,6 +139,7 @@ class TrimPanel(QGroupBox):
         self._refresh()
 
     def set_trim(self, trim: Trim, quiet: bool = False) -> None:
+        """Show a trim; tell listeners unless ``quiet`` (used when the plots made the change)."""
         self._trim = trim
         self._refresh()
         if not quiet:

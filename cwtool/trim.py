@@ -35,6 +35,9 @@ def _merged(segments) -> list[tuple[float, float]]:
 
 @dataclass
 class Trim:
+    """What an export keeps of a recording: from ``start`` to ``end`` (seconds, relative clock), minus the ``exclude``
+    segments.
+    """
     start: Optional[float] = None      # keep from here (None: from the start of the recording)
     end: Optional[float] = None        # keep up to here (None: to the end)
     exclude: list = field(default_factory=list)   # (start, end) segments left out, in seconds
@@ -44,6 +47,7 @@ class Trim:
 
     @property
     def active(self) -> bool:
+        """True if the trim removes anything."""
         return self.start is not None or self.end is not None or bool(self.exclude)
 
     def keep_mask(self, t, lo: Optional[float] = None, hi: Optional[float] = None) -> np.ndarray:
@@ -85,16 +89,20 @@ class Trim:
         return out
 
     def to_dict(self) -> dict:
+        """The trim as a JSON-ready dictionary."""
         return {"start": self.start, "end": self.end, "exclude": [list(s) for s in self.exclude]}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Trim":
+        """A trim from a dictionary written by :meth:`to_dict`; missing or non-finite values mean no limit."""
         def number(v):
+            """The value as a float, or None if it is missing or not finite."""
             return float(v) if v is not None and math.isfinite(float(v)) else None
         return cls(number(d.get("start")), number(d.get("end")),
                    [(s[0], s[1]) for s in d.get("exclude", []) if len(s) == 2])
 
     def save(self, path: Path) -> None:
+        """Write the trim to a JSON file."""
         Path(path).write_text(json.dumps({"version": 1, **self.to_dict()}, indent=2))
 
     @classmethod

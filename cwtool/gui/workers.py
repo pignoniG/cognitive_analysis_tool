@@ -21,12 +21,15 @@ class Task(QThread):
         self._cancel = False
 
     def cancel(self) -> None:
+        """Ask the task to stop; it checks with the ``cancelled`` function it was given."""
         self._cancel = True
 
     def is_cancelled(self) -> bool:
+        """True once cancel() was called."""
         return self._cancel
 
     def run(self) -> None:
+        """Run the function in the thread; report its result, or the error with its traceback."""
         try:
             result = self._fn(self.progressed.emit, self.is_cancelled)
         except Exception as e:  # reported to the user, not raised in the thread

@@ -46,9 +46,11 @@ class Source:
 
     @property
     def filename(self) -> str:
+        """Name of the sensor's data file: the sensor's name with .csv."""
         return f"{self.name}.csv"
 
     def sink(self, folder: Path):
+        """A CSV writer for this sensor's file in ``folder``."""
         from cwtool.logger.sinks import CsvSink
 
         return CsvSink(Path(folder) / self.filename, self.columns)

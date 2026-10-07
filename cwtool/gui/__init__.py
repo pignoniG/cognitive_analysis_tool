@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Start the analysis application."""
     from PySide6.QtWidgets import QApplication
 
     from cwtool.gui.main_window import MainWindow

@@ -14,6 +14,7 @@ STEP_SECONDS = 6.0
 
 @dataclass(frozen=True)
 class Step:
+    """One step of a calibration sequence: when it starts and ends (s), the colour shown and its label."""
     start: float        # s from sequence start
     end: float
     rgb: tuple[int, int, int]
@@ -23,11 +24,13 @@ class Step:
 
 @dataclass(frozen=True)
 class Sequence:
+    """An ordered list of steps with a name; the colours the display shows during a calibration."""
     steps: tuple[Step, ...]
     name: str
 
     @property
     def duration(self) -> float:
+        """Length of the sequence (s): the end of its last step."""
         return self.steps[-1].end if self.steps else 0.0
 
 
@@ -67,6 +70,7 @@ def _xmur3(text: str):
         h = ((h << 13) & _M32) | (h >> 19)
 
     def next_hash() -> int:
+        """Next 32-bit value of the xmur3 string hash (as in the presenter's JavaScript)."""
         nonlocal h
         h = _imul(h ^ (h >> 16), 2246822507)
         h = _imul(h ^ (h >> 13), 3266489909)
@@ -77,6 +81,7 @@ def _xmur3(text: str):
 
 def _mulberry32(a: int):
     def rng() -> float:
+        """Next number in [0, 1) of the mulberry32 generator (as in the presenter's JavaScript)."""
         nonlocal a
         a = (a + 0x6D2B79F5) & _M32
         t = _imul(a ^ (a >> 15), 1 | a)
@@ -92,6 +97,7 @@ def _rng(seed) -> callable:
 def _srgb_luminance(rgb) -> float:
     """Y of an sRGB colour (Eckert et al. 2022, eq. 1), as the presenter orders brightness."""
     def lin(c):
+        """sRGB code value (0-255) to linear light (0-1)."""
         c = c / 255
         return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
     r, g, b = rgb
@@ -199,6 +205,7 @@ def load_sequence(path: str | Path) -> Sequence:
         raise ValueError(f"{path.name} has no rows")
 
     def numeric(row):
+        """True if the first four fields of the row are numbers (tells a header from data)."""
         try:
             [float(x) for x in row[:4]]
             return True
@@ -273,6 +280,7 @@ def scaled(sequence: Sequence, factor: float) -> Sequence:
 
 @dataclass(frozen=True)
 class Location:
+    """Where a sequence was found in a recording, and how well its colours matched the video."""
     start: float          # s, recording time of the sequence start
     sequence: Sequence    # possibly rescaled to the recording's step length
     error: float          # relative RMS error of the colour match (0 = perfect)
@@ -316,6 +324,7 @@ def locate(time: np.ndarray, rgb: np.ndarray, sequence: Sequence, gamma: float =
         factors.add(round(float(typical / lengths[0]), 3))
 
     def analysed(times):
+        """True for the times that lie inside the analysed video, within MAX_VIDEO_GAP of a sample."""
         i = np.clip(np.searchsorted(t, times), 1, len(t) - 1)
         nearest = np.minimum(np.abs(times - t[i - 1]), np.abs(t[i] - times))
         return (times >= t[0]) & (times <= t[-1]) & (nearest <= MAX_VIDEO_GAP)

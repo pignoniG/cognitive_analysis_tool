@@ -27,6 +27,7 @@ class VideoSettings:
     analysis_width: int = 500            # frames are downscaled to this width
 
     def for_recording(self, rec) -> "VideoSettings":
+        """These settings with the recording's scene shape (circular or not) and vertical field of view."""
         return replace(self, circular_mask=rec.circular_scene, vertical_fov=rec.profile.field_of_view[1])
 
 
@@ -123,6 +124,7 @@ class Parameters:
 
     @property
     def gains(self) -> tuple[float, float, float]:
+        """The camera gains for red, green and blue."""
         return (self.gain_r, self.gain_g, self.gain_b)
 
     @property
@@ -144,6 +146,7 @@ class Parameters:
 
     @classmethod
     def load(cls, path: str | Path, profile=None, base: "Parameters | None" = None) -> "Parameters":
+        """Read parameters from a JSON file; values missing from it keep those of ``base``."""
         return cls.from_dict(json.loads(Path(path).read_text()), profile, base)
 
     @classmethod
@@ -198,16 +201,20 @@ class DisplayPhotometry:
 
     @classmethod
     def from_params(cls, p: Parameters, device: str = "", source: str = "") -> "DisplayPhotometry":
+        """The display photometry (black, white, gamma) held by these parameters."""
         return cls(device, p.l_min, p.l_max, p.gamma, source)
 
     def apply(self, p: Parameters) -> Parameters:
+        """These parameters with the photometry's black, white and gamma."""
         return replace(p, l_min=self.l_min, l_max=self.l_max, gamma=self.gamma)
 
     def save(self, path: str | Path) -> None:
+        """Write the photometry to a JSON file."""
         Path(path).write_text(json.dumps({"kind": self.KIND, **asdict(self)}, indent=2))
 
     @classmethod
     def load(cls, path: str | Path) -> "DisplayPhotometry":
+        """Read a photometry JSON file; raises ValueError for another kind of file."""
         data = json.loads(Path(path).read_text())
         if data.get("kind") != cls.KIND:
             raise ValueError(f"{Path(path).name} is not a display photometry file")

@@ -76,6 +76,9 @@ def at_gamma(values: np.ndarray, gamma: float) -> np.ndarray:
 
 @dataclass
 class VideoResult:
+    """The scene video analysed at each gaze sample: mean colours of the fixation area, the background and the whole
+    scene.
+    """
     time: np.ndarray            # s, relative clock, one row per analysed gaze sample
     fixation_rgb: np.ndarray    # (N, 3) mean 8-bit R, G, B (for display)
     background_rgb: np.ndarray  # (N, 3)
@@ -104,6 +107,7 @@ class VideoResult:
 
     @classmethod
     def empty(cls) -> "VideoResult":
+        """A result with no samples."""
         g = len(GAMMA_GRID)
         return cls(np.empty(0), np.empty((0, 3)), np.empty((0, 3)), np.empty((0, g, 3)), np.empty((0, g, 3)),
                    np.empty((0, g, 3)))
@@ -176,6 +180,9 @@ class FrameClock:
         self.times = None if times is None else np.asarray(times, dtype=float)
 
     def index(self, t):
+        """Frame number shown at each time (-1 outside the recorded frames), from the frame times if known, else from
+        the frame rate.
+        """
         if self.times is None:
             return frame_index(t, self.fps)
         t = np.asarray(t, dtype=float)
@@ -343,6 +350,7 @@ def decoder_backend() -> str:
 
 
 def default_workers() -> int:
+    """The number of worker threads to decode with: one per CPU core."""
     return max(os.cpu_count() or 1, 1)
 
 
@@ -392,6 +400,7 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
     lock = threading.Lock()
 
     def run_chunk(a: int, b: int):
+        """Decode frames a to b, analyse those with a gaze sample and return their colours."""
         source = (_frames_pyav(video, samples_of, a, b, settings.analysis_width, decode_threads, pts_list)
                   if backend == "pyav" else _frames_opencv(video, samples_of, a, b, settings))
         out, mask, counted = [], None, 0

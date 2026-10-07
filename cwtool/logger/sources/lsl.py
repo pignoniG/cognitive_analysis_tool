@@ -41,6 +41,7 @@ def matches(info, text: str) -> bool:
 
 
 def channel_labels(info) -> list[str]:
+    """The channel names of an LSL stream from its description, or numbered names if it has none."""
     labels = []
     try:
         ch = info.desc().child("channels").child("channel")
@@ -61,6 +62,9 @@ def signal_names(info) -> list[str]:
 
 
 class LslSource(Source):
+    """Reads Lab Streaming Layer streams (the EmotiBit Oscilloscope's output) whose source matches, one row per sample
+    with the signal's name.
+    """
     kind = "lsl"
 
     def __init__(self, match: str = "", name: str = "emotibit", wait: float = 3.0):
@@ -70,6 +74,7 @@ class LslSource(Source):
         self._inlets = []  # (inlet, [signal names])
 
     def open(self) -> None:
+        """Find the matching streams and open an inlet on each, with LSL's clock synchronisation and de-jittering."""
         import pylsl
 
         infos = [i for i in pylsl.resolve_streams(self.wait) if matches(i, self.match)]
@@ -84,12 +89,15 @@ class LslSource(Source):
                          "streams": {i.name(): i.nominal_srate() for i in infos}}
 
     def signals(self) -> list[str]:
+        """Names of the signals being read."""
         return [s for _, sigs in self._inlets for s in sigs]
 
     def signal_values(self, row):
+        """The (signal, value) pair of a row, for the live plot."""
         yield row[1], row[2]
 
     def run(self, emit, stopped) -> None:
+        """Pull samples from every inlet and emit them with their timestamps converted to Unix time."""
         import pylsl
 
         # LSL's clock is arbitrary (seconds since boot); this offset makes it Unix time.
@@ -106,6 +114,7 @@ class LslSource(Source):
                 stopped.wait(0.02)
 
     def close(self) -> None:
+        """Close all the inlets."""
         for inlet, _ in self._inlets:
             inlet.close_stream()
         self._inlets = []

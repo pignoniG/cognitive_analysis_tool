@@ -21,12 +21,14 @@ class LogAxis(pg.AxisItem):
     pyqtgraph's own log ticks (every multiple, 1 to 9) print overlapping labels on a short plot."""
 
     def tickValues(self, minVal, maxVal, size):   # the range is in log10 units
+        """Ticks at every power of ten and at 2 and 5 times it (the axis is in log10 units)."""
         first, last = int(np.floor(minVal)) - 1, int(np.ceil(maxVal)) + 1
         decades = [float(n) for n in range(first, last + 1) if minVal <= n <= maxVal]
         halves = [n + np.log10(k) for n in range(first, last + 1) for k in (2, 5) if minVal <= n + np.log10(k) <= maxVal]
         return [(1.0, decades), (0.5, halves)]
 
     def tickStrings(self, values, scale, spacing):
+        """Tick labels as luminances (the axis holds their logarithm)."""
         return [f"{10 ** v:.3g}" for v in values]
 
 
@@ -151,6 +153,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.scene().sigMouseClicked.connect(self._clicked)
 
     def resizeEvent(self, event) -> None:
+        """Keep the reset-view button in the top right corner."""
         super().resizeEvent(event)
         if not hasattr(self, "reset_button"):     # resized while the base class is being built
             return
@@ -158,6 +161,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.reset_button.move(self.width() - self.reset_button.width() - 12, 8)
 
     def cursor_time(self) -> float:
+        """Time (s) of the red cursor."""
         return self._cursor_time
 
     def set_cursor(self, t: float) -> None:
@@ -191,6 +195,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
                 return
 
     def clear_result(self) -> None:
+        """Empty the curves; the next result is fitted to the view."""
         for c in (self.raw_curve, self.measured_curve, self.expected_curve, self.cw_curve, self.lum_curve,
                   self.sensor_curve, self.ratio_curve):
             c.setData([], [])
@@ -225,6 +230,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             self.ratio.setYRange(lo, hi, padding=0.1)
 
     def show_result(self, r: Result) -> None:
+        """Draw the pupil, ΔPD and luminance curves of a result."""
         self.raw_curve.setData(r.time, r.measured_raw)
         self.measured_curve.setData(r.time, r.measured)
         self.expected_curve.setData(r.time, r.expected)
@@ -259,6 +265,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.ci.layout.setRowMaximumHeight(2, 16777215 if ratio else 0)
 
     def show_events(self, events) -> None:
+        """Shade the events (phases of the experiment) on every plot."""
         self._events = list(events)
         for plot, item in self._event_items:
             plot.removeItem(item)
@@ -413,6 +420,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     # Calibration sequence overlay
 
     def set_sequence(self, visible: bool, start: float, sequence: calibration.Sequence | None = None) -> None:
+        """Show or hide the calibration sequence's overlay, with its start time and (optionally) a new sequence."""
         self._sequence_visible = visible
         self._sequence_start = start
         if sequence is not None:

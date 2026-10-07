@@ -40,6 +40,9 @@ class TimestampUnwrapper:
 
 
 class ShimmerSource(Source):
+    """A Shimmer3 (LogAndStream firmware) over Bluetooth, through pyshimmer: raw values with the device's clock mapped
+    onto the computer's.
+    """
     kind = "shimmer"
 
     def __init__(self, port: str, name: str = "shimmer", sampling_rate: float | None = None, sensors=None,
@@ -56,6 +59,9 @@ class ShimmerSource(Source):
         self._t0_host = None
 
     def open(self) -> None:
+        """Connect and initialise the device (with a time limit), set its clock, read its channels and set the sampling
+        rate.
+        """
         from pyshimmer import ShimmerBluetooth
 
         ser = self._link()
@@ -93,6 +99,7 @@ class ShimmerSource(Source):
         for ``session.json``: the offset (device minus computer, s) after setting, which includes the Bluetooth
         round trip, or why it failed. Each call has a timeout, as pyshimmer waits for an answer forever."""
         def call(fn, *args):
+            """Call a device function in a thread and give up with TimeoutError if it does not answer in time."""
             out = {}
             t = threading.Thread(target=lambda: out.update(v=fn(*args)), daemon=True)
             t.start()
@@ -128,16 +135,20 @@ class ShimmerSource(Source):
         return Serial(self.port, DEFAULT_BAUDRATE)
 
     def signals(self) -> list[str]:
+        """Names of the channels being logged."""
         return self.columns[2:]
 
     def signal_values(self, row):
+        """The (channel, value) pairs of a row, for the live plot."""
         for name, v in zip(self.columns[2:], row[2:]):
             yield name, v
 
     def run(self, emit, stopped: threading.Event) -> None:
+        """Start streaming and emit each packet with its device time mapped onto Unix time, until stopped."""
         from pyshimmer import EChannelType
 
         def on_packet(pkt):
+            """Callback for each packet: unwrap the device's clock, update the clock mapping and emit the row."""
             host = time.time()
             dev_t = self._unwrap(pkt[EChannelType.TIMESTAMP])
             offset = self._clock.update(dev_t, host)
@@ -152,5 +163,6 @@ class ShimmerSource(Source):
             self._dev.remove_stream_callback(on_packet)
 
     def close(self) -> None:
+        """Shut the device's connection down."""
         if self._dev is not None:
             self._dev.shutdown()

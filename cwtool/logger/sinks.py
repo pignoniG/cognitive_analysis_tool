@@ -19,6 +19,7 @@ class CsvSink:
         self.count = 0
 
     def write(self, rows) -> None:
+        """Append rows (the time in the first column) and flush the file if a second has passed."""
         for row in rows:
             self._w.writerow([f"{row[0]:.6f}"] + [_fmt(v) for v in row[1:]])
         self.count += len(rows)
@@ -30,6 +31,7 @@ class CsvSink:
             self._last_flush = now
 
     def close(self) -> None:
+        """Close the file."""
         if not self._f.closed:
             self._f.close()
 

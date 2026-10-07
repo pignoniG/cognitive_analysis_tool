@@ -47,6 +47,7 @@ PRE_ROLL = 30.0                # s of signal before the window, so the filter st
 
 @dataclass
 class FitResult:
+    """Result of a parameter fit: the parameters with the fitted values applied, and the residual before and after."""
     params: Parameters          # input parameters with the fitted values applied
     delay: float
     attack: float
@@ -90,6 +91,7 @@ class _Problem:
 
     def expected(self, delay: float, attack: Optional[float], release: Optional[float],
                  transient: float = 0.0, escape: float = 2.0) -> np.ndarray:
+        """The expected pupil in the fit window for these dynamics parameters."""
         pd = dynamic_pupil(self.base, self.luminance, self.fs, delay, attack, release, transient, escape,
                            self.stages)
         return pd[self.offset_in:][self.use]
@@ -229,6 +231,9 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     current = dict(delay=delay, attack=attack, release=release, transient=transient, escape=escape)
 
     def unpack(x):
+        """Map the optimiser's vector to parameter values: undo the log scale, clip to the range, tie the delay to the
+        onset if fixed.
+        """
         values = dict(current)
         for (name, (lo, hi), log), v in zip(free, x):
             values[name] = float(np.clip(np.exp(v) if log else v, lo, hi))
@@ -237,6 +242,7 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         return values
 
     def cost(x):
+        """Residual RMS of the model for the optimiser's vector; stops the search when the task is cancelled."""
         if cancelled and cancelled():
             raise InterruptedError("fit cancelled")
         return problem.solve(**unpack(x))[0]
@@ -303,6 +309,7 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         fitted = replace(fitted, transient=transient, escape=escape)
 
     def window_rms(p: Parameters) -> float:
+        """RMS of ΔPD inside the fit window for these parameters, from a full pipeline run."""
         r = run(rec, video, p)
         sel = (r.cw_time >= start) & (r.cw_time <= end)
         return residual_rms(r.cw[sel])

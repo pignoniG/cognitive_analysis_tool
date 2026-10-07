@@ -50,6 +50,9 @@ BLACK_RANGE = (1e-4, 10.0)     # cd/m², Lmin when it is fitted
 
 @dataclass
 class StepLevel:
+    """One calibration step as the photometry fit sees it: the pupil measured at its end, whether it had settled, and
+    the colour the video showed.
+    """
     label: str
     rgb: tuple               # nominal colour
     start: float             # s, recording time
@@ -62,6 +65,9 @@ class StepLevel:
 
 @dataclass
 class PhotometryFit:
+    """Result of fitting the display photometry (sensitivity, gains, gamma, black level) on a calibration sequence,
+    with the fit before and after.
+    """
     params: Parameters                   # input parameters with the fitted values applied
     sensitivity: float
     sensitivity_range: tuple             # approximate 95 % interval
@@ -175,6 +181,8 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     # The model is mapped onto the measurement (measured ≈ expected + d), so residuals are in measured
     # millimetres, at the scale set by hand.
     def residuals(x):
+        """Residuals of the steps' pupils (in units of their uncertainty), plus the priors on the gains and the gamma.
+        """
         sens, gains, l_min, d, gamma = unpack(x)
         r = [(m - (_expected(levels, params, area, sens, gains, gamma, l_min) + d)) / sigma]
         if fit_gains:
@@ -279,6 +287,9 @@ WEIGHT_FLAT = 0.02           # relative change of the cost across the weights be
 
 @dataclass
 class LuxFit:
+    """Result of fitting the sensitivity and pupil offset of a glasses recording with a lux sensor on a calibration
+    sequence.
+    """
     params: Parameters              # input parameters with the fitted values applied, alignment 'fixed'
     sensitivity: float
     sensitivity_range: tuple        # approximate 95 % interval
@@ -302,6 +313,7 @@ def _search_sensitivity(expected, m: np.ndarray, points: int = 49):
     expected − measured): a grid over the sensitivity range, then a bounded refinement. Returns
     (log s, cost function, cost)."""
     def sse(log_s: float) -> float:
+        """Sum of squared residuals for a sensitivity (log scale), each with its best offset."""
         e = expected(float(np.exp(log_s)))
         return float(np.sum((m + np.mean(e - m) - e) ** 2))
 
@@ -341,6 +353,9 @@ def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, sta
     state = {}
 
     def setup(weight: float):
+        """Prepare the analysis at one fixation weight: the measured pupil in the sequence window and a function giving
+        the expected one.
+        """
         p = replace(params, fixation_weight=weight)
         prep = prepare(rec, video, p)
         if prep.scale is None:
@@ -352,6 +367,7 @@ def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, sta
         m = measured[window]
 
         def expected(sensitivity: float) -> np.ndarray:
+            """The expected pupil in the sequence window for a sensitivity."""
             return expected_pupil(prep.luminance, prep.fs, replace(p, sensitivity=sensitivity), area)[window]
         return p, prep, window, m, expected
 
@@ -359,6 +375,7 @@ def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, sta
     weight = params.fixation_weight
     if fit_fixation:
         def cost_at(w: float) -> float:
+            """Residual of the best sensitivity at a fixation weight."""
             _, _, _, m_w, exp_w = setup(w)
             return _search_sensitivity(exp_w, m_w)[2]
 
