@@ -320,3 +320,73 @@ def test_shimmer_clock_failure_does_not_stop_the_connection():
     t = time.time()
     r = ShimmerSource.sync_clock(_FakeShimmer(hang=True), timeout=0.3)  # a device that never answers
     assert not r["set"] and "no answer" in r["error"] and time.time() - t < 2
+
+
+class _FakeExg:
+    """The ExG register calls of pyshimmer's ShimmerBluetooth: two ADS1292R chips with their ten configuration bytes."""
+
+    RATES = (125, 250, 500, 1000, 2000, 4000, 8000)
+
+    def __init__(self, fail=False):
+        self.regs = [bytearray(b"\x00\xa8\x10\x40\x40\x2d\x00\x00\x02\x03"),
+                     bytearray(b"\x00\xa0\x10\x40\x47\x00\x00\x00\x02\x01")]
+        self.fail = fail
+
+    def get_exg_register(self, chip):
+        import types
+
+        if self.fail:
+            raise OSError("link lost")
+        b = self.regs[chip]
+        return types.SimpleNamespace(binary=bytes(b), data_rate=self.RATES[b[0] & 7], ch1_gain=4, ch2_gain=4)
+
+    def set_exg_register(self, chip, offset, data):
+        self.regs[chip][offset:offset + len(data)] = data
+
+
+def test_the_ecg_chips_follow_the_stream_rate_and_their_settings_are_reported():
+    from cwtool.logger.sources.shimmer import EXG_REFERENCE_V, ShimmerSource, exg_rate_code
+
+    assert [exg_rate_code(r) for r in (51.2, 125, 128, 256, 512, 600)] == [0, 0, 1, 2, 3, 3]
+    dev = _FakeExg()
+    before = [bytes(r) for r in dev.regs]
+    info = ShimmerSource.configure_exg(dev, None)                       # no rate asked for: read only
+    assert [bytes(r) for r in dev.regs] == before
+    assert info["chip 1"] == {"data rate (Hz)": 125, "gain ch1": 4, "gain ch2": 4}
+    assert info["reference voltage (V)"] == EXG_REFERENCE_V
+    info = ShimmerSource.configure_exg(dev, 256.0)
+    assert info["chip 1"]["data rate (Hz)"] == 500 and info["chip 2"]["data rate (Hz)"] == 500
+    for new, old in zip(dev.regs, before):                              # only the data-rate bits changed
+        assert new[0] & 0b111 == 2 and new[0] & ~0b111 == old[0] & ~0b111 and bytes(new[1:]) == old[1:]
+
+
+def test_an_ecg_unit_that_does_not_answer_does_not_stop_the_connection():
+    from cwtool.logger.sources.shimmer import ShimmerSource
+
+    info = ShimmerSource.configure_exg(_FakeExg(fail=True), 256.0)
+    assert "link lost" in info["error"]
+
+
+def test_the_shimmer_dialog_offers_a_sampling_rate():
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6.QtWidgets")
+    pytest.importorskip("pyqtgraph")
+    from PySide6.QtWidgets import QApplication
+
+    from cwtool.logger.gui import AddSourceDialog
+
+    app = QApplication.instance() or QApplication([])
+    d = AddSourceDialog("shimmer", set(), found=[("Shimmer3-873A", "00-06-66-b9-87-3a")])
+    assert d.source().sampling_rate is None                           # the default leaves the device as it is
+    index = d.rate.findText("256 Hz", Qt_MatchStartsWith())
+    d.rate.setCurrentIndex(index)
+    source = d.source()
+    assert source.sampling_rate == 256.0 and source.port == "00-06-66-b9-87-3a"
+
+
+def Qt_MatchStartsWith():
+    from PySide6.QtCore import Qt
+
+    return Qt.MatchStartsWith

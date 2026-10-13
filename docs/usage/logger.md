@@ -46,7 +46,8 @@ CH340 "USB2.0-Serial"); choose the port by hand if several are connected. About 
 
 A Shimmer3 running the LogAndStream firmware (the one Consensys uses), streaming over Bluetooth. The sensors enabled
 on the device in Consensys are the ones logged, as the **raw values the device sends** (ADC counts); converting to
-mV or µS is done in the analysis. Typical sampling rate 51.2 Hz.
+mV or µS is done in the analysis. The usual sampling rate is 51.2 Hz, which suits movement and skin conductance but
+**not the ECG**: see [Recording the ECG](#recording-the-ecg).
 
 - **Windows and Linux:** pair the Shimmer in the system's Bluetooth settings, then choose its serial port in the add
   dialog (`COM5`, `/dev/rfcomm0`, ...).
@@ -61,6 +62,30 @@ off to skip it), as Consensys does, and saves the offset it measured in `session
 the computer's time as described under [Clocks](#clocks)). It makes the unit's own SD card recordings agree with the
 computer, and clears the blue/green "clock not set" light. The clock is lost when the unit is switched off, and it does
 not correct the drift of the unit's oscillator.
+
+#### Recording the ECG
+
+For the ECG (and the [heart rate variability](../processing/hrv.md) computed from it) choose **256 Hz** (or 512 Hz) in
+the *Sampling rate* box of the add dialog. The logger sets the Shimmer's stream rate and, for the ECG unit, the data
+rate of its two ExG chips to the lowest of 125, 250, 500, 1000 ... samples/s that is not below it, so that every
+streamed sample is a new ECG sample. The default, *As set on the device*, changes nothing. The setting stays on the unit
+until it is switched off (the unit kept it between connections in a test; a power cycle was not tried), and
+Consensys can change it again.
+
+The ExG gains and data rates and the reference voltage are saved in `session.json` (`exg` under the Shimmer's
+settings): the conversion of the raw counts to millivolts needs the gain. Bluetooth loses a few packets: in a test with all 20 channels
+on, a 58 s recording at 256 Hz had 13 gaps of 23 ms (6 samples each, 0.4 % of the samples) and a 10 s stream at 512 Hz
+4 gaps of up to 12 ms. The device clock is kept across them, and the HRV analysis bridges gaps of up to 0.5 s. Both
+were tried on one unit only.
+
+Electrodes (Shimmer's [ECG User Guide](https://shimmersensing.com/wp-content/docs/support/documentation/ECG_User_Guide_Rev1.12.pdf),
+Fig. 3-2), on the torso: **RA** (white) upper right chest below the collarbone, **LA** (black) upper left chest at the
+same height, **LL** (red) lower left of the torso, **RL** (green, the reference) lower right of the torso; **Vx**
+(brown, a chest lead) is not needed for HRV. Each limb electrode may be anywhere on the torso as long as it is away
+from the heart towards its limb; RL must be outside the triangle of the other three. The channels:
+`exg_ads1292r_1_ch1_24bit` is lead II (LL − RA, used for HRV) and `exg_ads1292r_1_ch2_24bit` lead I (LA − RA). Shave
+and clean the skin with alcohol, keep the wires short and tape them down: movement artefact is the main source of
+untrusted beats.
 
 Switch the Shimmer on and wait for its slow blue blink (standby) before connecting; only one computer can be
 connected to it at a time, so close Consensys first. Its status lights:
@@ -128,7 +153,7 @@ flushed every second, so a crash loses little. Every data file starts with a hea
 | `shimmer.csv` | `unix time (s)`, `device time (s)`, then one column per enabled channel (`accel_ln_x`, `gyro_mpu9150_x`, `exg_ads1292r_1_ch1_24bit`, ...), raw values |
 | `emotibit.csv` | `unix time (s)`, `signal`, `value`: one row per sample, with the stream name (`EDA`, `PPG_RED`, ...) as the signal, so signals of different rates share the file |
 | `event_log.csv` | `Event`, `Start Time`, `End Time`, `Duration (s)`, `Start (unix s)`, `End (unix s)`, as written by `tools/event_logger.py` |
-| `session.json` | start and end, the computer's UTC offset, and for each sensor its file, kind, columns, settings (port, sampling rate, ...) and row count |
+| `session.json` | start and end, the computer's UTC offset, and for each sensor its file, kind, columns, settings (port, sampling rate, for the Shimmer's ECG the ExG gains and data rates, ...) and row count |
 
 The main app can show the Shimmer and EmotiBit files under ΔPD and export them with the results, trimmed to what
 you choose ([Sensor data](gui.md#sensor-data-optional)).

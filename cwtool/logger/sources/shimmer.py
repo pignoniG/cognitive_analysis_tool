@@ -8,6 +8,12 @@ On connecting, the device's real-time clock is set to the computer's time (``set
 streamed samples are stamped by a different clock (ticks since power-on, mapped onto Unix time by
 :class:`ClockMapper`), so this does not change the logger's files; it makes the device's own SD card recordings
 and its "RTC not set" light agree with the computer. The clock is lost when the unit is switched off.
+
+The sampling rate (``sampling_rate``) is set on the device if given. For the ECG unit the two ExG chips sample
+at a rate of their own (125, 250, 500 ... per second); when the rate is set here they are set to the lowest of those
+that is not below it, so every streamed sample is a new ECG sample. At the default 51.2 Hz the ECG is too coarse for
+heart rate variability (see :mod:`cwtool.hrv`): 256 Hz or more is needed. The ExG gains and data rates are saved in
+the session's ``session.json``, which the conversion to millivolts needs.
 """
 
 from __future__ import annotations
@@ -19,6 +25,37 @@ from cwtool.logger.base import ClockMapper, Source
 
 TICKS_PER_SECOND = 32768.0
 WRAP = 2**24  # the timestamp is 24 bits: it wraps every 512 s
+EXG_RATES = (125, 250, 500, 1000, 2000)   # samples/s of the ADS1292R chips; the code is the index (CONFIG1 bits DR2..DR0)
+EXG_REFERENCE_V = 2.42                    # V, the chips' internal reference: counts × this / (2^23 − 1) / gain = volts
+
+
+def exg_rate_code(stream_rate: float) -> int:
+    """Index in :data:`EXG_RATES` of the lowest ExG rate that is not below ``stream_rate`` (the highest if none)."""
+    for code, rate in enumerate(EXG_RATES):
+        if rate >= stream_rate - 1e-6:
+            return code
+    return len(EXG_RATES) - 1
+
+
+def call_with_timeout(fn, *args, timeout: float = 5.0):
+    """Call a device function in a thread and give up with TimeoutError if it does not answer in time (pyshimmer
+    waits for an answer forever). An error of the call is raised in the caller."""
+    out = {}
+
+    def run():
+        try:
+            out["value"] = fn(*args)
+        except Exception as e:      # raised again in the caller's thread
+            out["error"] = e
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        raise TimeoutError(f"no answer within {timeout:.0f} s")
+    if "error" in out:
+        raise out["error"]
+    return out.get("value")
 
 
 class TimestampUnwrapper:
@@ -83,7 +120,8 @@ class ShimmerSource(Source):
             self.settings["real-time clock"] = self.sync_clock(self._dev)
         if self.sensors:
             self._dev.set_sensors(self.sensors)
-        if self.sampling_rate:
+        set_rate = bool(self.sampling_rate)
+        if set_rate:
             self._dev.set_sampling_rate(self.sampling_rate)
         self.sampling_rate = self._dev.get_sampling_rate()
         from pyshimmer import EChannelType
@@ -92,6 +130,30 @@ class ShimmerSource(Source):
         self.columns = (["unix time (s)", "device time (s)"] + [c.name.lower() for c in self._channels])
         self.settings.update({"port": self.port, "sampling rate (Hz)": self.sampling_rate,
                               "device": self._dev.get_device_name(), "values": "raw ADC counts"})
+        if any(name.startswith("exg_") for name in self.columns):
+            self.settings["exg"] = self.configure_exg(self._dev, self.sampling_rate if set_rate else None)
+
+    @staticmethod
+    def configure_exg(dev, stream_rate: float | None, timeout: float = 5.0) -> dict:
+        """Read the ExG chips' gains and data rates for ``session.json`` and, given ``stream_rate``, set their data
+        rate to the lowest one not below it (only those bits of CONFIG1 change). A failure is reported in the result;
+        the stream still works."""
+        info: dict = {"reference voltage (V)": EXG_REFERENCE_V}
+        try:
+            for chip in (0, 1):
+                reg = call_with_timeout(dev.get_exg_register, chip, timeout=timeout)
+                if stream_rate is not None:
+                    code = exg_rate_code(stream_rate)
+                    config1 = bytearray(reg.binary)[0]
+                    if config1 & 0b111 != code:
+                        call_with_timeout(dev.set_exg_register, chip, 0, bytes([(config1 & ~0b111) | code]),
+                                          timeout=timeout)
+                        reg = call_with_timeout(dev.get_exg_register, chip, timeout=timeout)
+                info[f"chip {chip + 1}"] = {"data rate (Hz)": reg.data_rate, "gain ch1": reg.ch1_gain,
+                                            "gain ch2": reg.ch2_gain}
+        except Exception as e:
+            info["error"] = f"{type(e).__name__}: {e}"
+        return info
 
     @staticmethod
     def sync_clock(dev, timeout: float = 5.0) -> dict:
@@ -99,14 +161,8 @@ class ShimmerSource(Source):
         for ``session.json``: the offset (device minus computer, s) after setting, which includes the Bluetooth
         round trip, or why it failed. Each call has a timeout, as pyshimmer waits for an answer forever."""
         def call(fn, *args):
-            """Call a device function in a thread and give up with TimeoutError if it does not answer in time."""
-            out = {}
-            t = threading.Thread(target=lambda: out.update(v=fn(*args)), daemon=True)
-            t.start()
-            t.join(timeout)
-            if t.is_alive():
-                raise TimeoutError(f"no answer within {timeout:.0f} s")
-            return out.get("v")
+            """Call a device function, giving up after ``timeout`` s."""
+            return call_with_timeout(fn, *args, timeout=timeout)
 
         try:
             before = call(dev.get_rtc)

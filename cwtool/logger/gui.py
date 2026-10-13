@@ -100,6 +100,14 @@ def find_devices(kind: str):
 class AddSourceDialog(QDialog):
     """Settings of a new source: ``kind`` is lux, shimmer, emotibit or simulated."""
 
+# (text, Hz) of the Shimmer's sampling rate choice in the add dialog; None leaves the device as it is
+SHIMMER_RATES = (("As set on the device", None),
+                 ("51.2 Hz (movement and skin conductance; too coarse for ECG)", 51.2),
+                 ("128 Hz", 128.0),
+                 ("256 Hz (ECG and heart rate variability)", 256.0),
+                 ("512 Hz (ECG, clinical grade)", 512.0))
+
+
     def __init__(self, kind: str, taken: set[str], found=None, parent=None):
         super().__init__(parent)
         self.kind = kind
@@ -115,6 +123,12 @@ class AddSourceDialog(QDialog):
         if kind in ("lux", "shimmer"):
             if kind == "lux":
                 self.port.addItem("Automatic", None)
+        self.rate = QComboBox()
+        for text, hz in SHIMMER_RATES:
+            self.rate.addItem(text, hz)
+        self.rate.setToolTip("Sets the Shimmer's sampling rate when connecting; its ECG chips are set to match. "
+                             "Heart rate variability needs 256 Hz or more. The setting stays on the device "
+                             "until it is switched off.")
             if kind == "shimmer":  # paired over Bluetooth (macOS): connected directly, not through a serial port
                 for name, address in found or []:
                     self.port.addItem(f"{name}  (Bluetooth {address})", address)
@@ -130,6 +144,7 @@ class AddSourceDialog(QDialog):
                 form.addRow(self.set_clock)
         if kind == "emotibit":
             for device, streams in (found or {}).items():  # the devices streaming over LSL right now
+                form.addRow("Sampling rate", self.rate)
                 self.match.addItem(f"{device}  ({len(streams)} streams)", device)
             form.addRow("Device ID (LSL source)", self.match)
             form.addRow(QLabel("Start the EmotiBit Oscilloscope and enable its LSL output first."))
@@ -148,7 +163,8 @@ class AddSourceDialog(QDialog):
         if self.kind == "lux":
             return sources.LuxSerialSource(port, name=name)
         if self.kind == "shimmer":
-            return sources.ShimmerSource(port, name=name, set_clock=self.set_clock.isChecked())
+            return sources.ShimmerSource(port, name=name, sampling_rate=self.rate.currentData(),
+                                         set_clock=self.set_clock.isChecked())
         if self.kind == "emotibit":
             device = self.match.currentData() or self.match.currentText().split()[0:1] and self.match.currentText().split()[0]
             return sources.LslSource(device or "", name=name)
