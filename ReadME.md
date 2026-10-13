@@ -68,7 +68,7 @@ Python 3.10 or newer, on Windows, macOS or Linux.
 ```bash
 git clone -b master_v2.0 https://github.com/pignoniG/cognitive_analysis_tool.git
 cd cognitive_analysis_tool
-pip install -e ".[gui,logger]"       # "gui" alone if you do not need the sensor logger
+pip install -e ".[gui,logger,hrv]"   # "gui" alone if you need neither the sensor logger nor heart rate variability
 
 cwtool-gui [path/to/recording]                                   # analysis app
 cwtool path/to/recording --params participant.json --plot        # command line, batch processing

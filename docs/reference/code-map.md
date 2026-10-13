@@ -14,7 +14,7 @@ cwtool/
 │   └── tobii_g3.py     Tobii Pro Glasses 3 (SD card recording folder), experimental
 ├── lux.py              lux log files (hourly 1.x files and the logger's lux.csv): find, read, smooth, lux → average luminance
 ├── sensors.py          the sensor logger's Shimmer and EmotiBit files (with their saved settings): find, read, cut, write
-├── hrv.py              heart rate variability from a Shimmer's ECG: R peaks, trusted intervals, measures per window
+├── hrv.py              heart rate variability from a Shimmer's ECG: R peaks (NeuroKit2), trusted intervals, measures per window
 ├── trim.py             Trim: the part of a recording an export keeps (start, end, left-out segments)
 ├── video.py            scene video pass: frame clock, decoding (PyAV/OpenCV), parallel chunks, two-area
 │                       measurement, gamma grid, gaze weighting (VideoResult.weighted), cache

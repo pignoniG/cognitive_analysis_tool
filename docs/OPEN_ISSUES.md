@@ -1110,16 +1110,24 @@ is revised; they remain in the git history of this file.
   pupil still gives R² above 0.8. The 0.1 limit is unchanged.
 - **Status:** fixed in 2.0.
 
-### 51. HRV from the Shimmer's ECG has not been checked against a reference
+### 51. HRV from the Shimmer's ECG has been compared with NeuroKit2 on one recording, not with a clinical reference
 
 - **Where:** `cwtool/hrv.py`, `docs/processing/hrv.md`.
-- **Problem:** the module was tested on synthetic ECGs with known beat times (R peaks within 6 ms, RMSSD within 10 %,
-  missed and extra beats, gaps, an inverted ECG) and on recordings of one person at rest (October 2026, torso
-  electrodes, 256 Hz, 40 s and 60 s). It has not been compared with a reference: a clinical ECG with annotated beats,
-  or a second tool (Kubios, NeuroKit2) on the same recording. Known limits: one lead (II); untrusted intervals are
-  left out, not repaired; the detector thresholds (35 % of the energy peak, 30 % tolerance of the intervals) are
-  plausible values, not tuned on data; movement artefacts of a participant doing a task are untested.
-- **Proposal:** record 5 minutes at rest at 256 Hz and compare RMSSD, SDNN and LF/HF with NeuroKit2 or Kubios on the
-  same file; run it on a recording with a task and look at the beats with the movement; add the ECG and the detected
-  beats as a plot in the app so the detection can be checked by eye.
+- **Compared (13 October 2026):** a 5-minute recording at rest (one person, torso electrodes, 256 Hz, lead II, 56 lost
+  Bluetooth packets bridged) analysed by `cwtool.hrv` and by NeuroKit2 0.2.13 (`ecg_peaks`, `hrv_time`,
+  `hrv_frequency`, `hrv_nonlinear`). The first version of `cwtool.hrv` had its own detector with a threshold on the
+  squared slope; it missed 9 of 297 beats, the ones half as tall as the tallest (breathing changes the height of the
+  R wave), and gave SDNN 82 ms and RMSSD 52 ms where NeuroKit2's beats gave 95 and 74. The detection now uses
+  NeuroKit2's `neurokit` method (with an amplitude check against T waves) and finds 296 of its 297 beats, within
+  1.1 ± 1.2 ms. The remaining differences: NeuroKit2's list has the movement artefact of the first seconds (an interval
+  swing of 900 ms), which `cwtool.hrv` marks as untrusted; leaving the first 8 s out of NeuroKit2's beats gives SDNN
+  83.4 and RMSSD 52.1 ms, against 83.8 and 51.7 for `cwtool.hrv`. On the same beats the measures agree (SDNN, RMSSD,
+  pNN50, SD1 to the rounding), except SD2 (116 against 124 ms, other definition) and LF and HF (5 to 12 %, other
+  Welch settings and detrending). NeuroKit2's Kubios correction (`signal_fixpeaks`) did not remove the artefact.
+- **Not done:** a clinical ECG with annotated beats or Kubios as a second reference; a recording with a task and
+  movement (the artefact handling beyond the first seconds is untested); one lead only; untrusted intervals are left
+  out, not repaired; the thresholds of the trust rule (30 % of the local median) are plausible values, not tuned.
+- **Proposal:** compare against annotated beats (a public database such as MIT-BIH, resampled to 256 Hz) and run a
+  recording with a task; add the ECG and the detected beats as a plot in the app so the detection can be checked by
+  eye.
 - **Status:** open (needs data).

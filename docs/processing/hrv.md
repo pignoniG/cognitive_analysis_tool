@@ -21,11 +21,11 @@ phase can be compared. The code is `cwtool/hrv.py` (no Qt).
    of Bluetooth bursts. Beats are found on the device clock and mapped onto the Unix clock by the straight line
    through (device time, Unix time) of the whole file. Short gaps in the stream (lost packets, up to 0.5 s) are bridged
    by interpolation; a longer gap ends the stretch, and no interval is measured across it.
-3. **R peaks.** The ECG is band-passed (0.5–40 Hz); a Pan–Tompkins-style detector looks for the QRS energy (slope of the
-   5–15 Hz band, squared and averaged over 0.12 s, above 35 % of its 99th percentile, at least 0.3 s apart); the R peak
-   is the maximum of the filtered ECG within ±0.1 s (a stretch where the larger deflection points down is flipped
-   first), refined below one sample by a parabola through the peak and its neighbours. Peaks under 35 % of the median
-   amplitude are dropped, and of two peaks closer than 0.25 s the larger is kept.
+3. **R peaks.** [NeuroKit2](https://neuropsychology.github.io/NeuroKit/) finds them (`ecg_clean`, then the `neurokit`
+   method of `ecg_peaks`), on each gap-free stretch, after flipping a stretch whose larger deflection points down.
+   Each peak is moved to the maximum of the band-passed ECG (0.5–40 Hz) nearby and refined below one sample by a
+   parabola. NeuroKit2 is sensitive, so a detection below 35 % of the median R amplitude (a T wave, noise) is dropped.
+   NeuroKit2 is the `hrv` extra; without it the export skips the HRV and says so.
 4. **Which intervals to trust.** An interval (time since the previous beat) is **not trusted** if it spans a gap, lies
    outside 0.25–2.5 s, or is more than 30 % away from the median of the 11 intervals around it. That catches a missed
    beat (an interval twice as long) and an extra one (a short interval and a long one). Untrusted intervals are left
@@ -57,9 +57,11 @@ intervals were not trusted.
 
 - It does not interpret the numbers. Heart rate and HRV follow movement, posture, speech, breathing rate (HF moves
   with it), caffeine and the task itself; this is why a baseline phase in the event log matters.
-- It is **not validated against a reference**: it was checked on synthetic ECGs with known beat times (peaks within
-  6 ms, RMSSD within 10 %, missed and extra beats, gaps, inverted ECG) and on recordings of one person at rest, not on
-  a clinical reference or a second tool such as Kubios ([open issue 51](../OPEN_ISSUES.md)).
+- It is **not validated against a clinical reference**. It was checked on synthetic ECGs with known beat times and on
+  recordings of one person at rest, and compared with NeuroKit2 on a 5-minute recording: the beats agree (296 of the
+  297 NeuroKit2 finds, to within 1.1 ± 1.2 ms), and SDNN, RMSSD, pNN50 and SD1 computed from the same beats are the same
+  as NeuroKit2's; LF and HF differ by 5 to 12 % (other Welch settings) and SD2 by 7 %
+  ([open issue 51](../OPEN_ISSUES.md)).
 - It does not correct untrusted intervals by interpolation or by inserting a missed beat: it leaves them out.
 - It uses one lead. An ECG that is too noisy to find the beats gives a note (`weak ECG`) or too few beats, not a number.
 

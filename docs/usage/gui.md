@@ -89,7 +89,8 @@ decides what is written by **Export results…**, for every file at once (result
 
 With a Shimmer ECG among the sensor files, the Export tab also has **Heart rate variability from the Shimmer's ECG**
 (on by default): the package then holds the beat times and the HRV measures of the whole recording and of each event,
-computed on what the range keeps ([method](../processing/hrv.md)).
+computed on what the range keeps ([method](../processing/hrv.md)). The beats are found by NeuroKit2 (the `hrv` extra,
+`pip install "cwtool[hrv]"`); without it the export is written without the HRV and a warning says why.
 
 ΔPD in SD units (`delta_pd_sd`) is normalised with the SD of what is kept, so a calibration with large swings does not
 shrink the other values; see [Output files](../reference/outputs.md).

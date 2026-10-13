@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-pip install -e ".[gui,plot,logger,dev]"
+pip install -e ".[gui,plot,logger,hrv,dev]"
 pytest
 ```
 

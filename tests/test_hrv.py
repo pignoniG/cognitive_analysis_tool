@@ -76,6 +76,25 @@ def test_r_peaks_are_found_within_a_few_ms_and_the_intervals_are_recovered():
     assert np.allclose(beats.unix - beats.device, EPOCH + 0.3, atol=1e-5)
 
 
+def test_beats_that_are_half_as_tall_as_the_largest_are_still_found():
+    """Breathing and posture change the height of the R wave by a factor of two within a minute. The detector must not
+    depend on the squared slope of the tallest beats (a beat of half the height has a quarter of its energy)."""
+    rr = rr_series(200)
+    t, mv, truth = synthetic_ecg(rr, noise=0.015)
+    beat_index = np.round((truth * 256)).astype(int)
+    gain = np.ones(len(t))
+    height = 0.85 + 0.35 * np.sin(2 * np.pi * 0.07 * truth)           # R amplitude 0.5 .. 1.2 times the normal
+    # scale each beat's QRS by its own height (the P and T waves stay: the baseline keeps its look)
+    qrs = np.zeros_like(t)
+    for b, h in zip(truth, height):
+        qrs += (h - 1.0) * (np.exp(-0.5 * ((t - b + 0.025) / 0.010) ** 2) * -0.10 + np.exp(-0.5 * ((t - b) / 0.010) ** 2)
+                            + np.exp(-0.5 * ((t - b - 0.025) / 0.012) ** 2) * -0.20)
+    beats = hrv.beats_of(to_sensor(t, mv + qrs))
+    found = np.array([np.min(np.abs(beats.device - b)) < 0.02 for b in truth])
+    assert found.mean() > 0.99, f"{(~found).sum()} of {len(truth)} beats missed"
+    assert len(beats.device) <= len(truth) + 1                          # and no T waves taken for beats
+
+
 def test_an_inverted_ecg_gives_the_same_beats():
     t, mv, truth = synthetic_ecg(rr_series(60), flip=True)
     beats = hrv.beats_of(to_sensor(t, mv))
@@ -101,7 +120,8 @@ def test_a_missed_beat_and_an_extra_one_are_not_trusted():
     t, mv, truth = synthetic_ecg(rr)
     mv = mv.copy()
     miss = int(np.argmin(np.abs(t - truth[40])))
-    mv[miss - 40:miss + 60] = 0.0                                              # the QRS of one beat is gone
+    a, b = miss - 40, miss + 40
+    mv[a:b] = np.linspace(mv[a], mv[b], b - a)                                 # the QRS of one beat is gone, smoothly
     beats = hrv.beats_of(to_sensor(t, mv))
     assert len(beats.device) == len(truth) - 1
     long_one = np.flatnonzero(np.nan_to_num(beats.rr) > 1.7)
@@ -207,3 +227,34 @@ def test_export_adds_the_hrv_files_for_a_shimmer_with_an_ecg(tmp_path, monkeypat
     # and it can be left out
     none = pipeline.export(result, rec, Parameters(), tmp_path / "out2", sensors=[sensor], hrv=False)
     assert not any("hrv" in p.name or "beats" in p.name for p in none)
+
+
+def test_without_neurokit2_the_export_skips_the_hrv_and_says_why(tmp_path, monkeypatch):
+    import builtins
+
+    from conftest import write_varjo_recording
+    from test_export_package import _load
+
+    real_import = builtins.__import__
+
+    def refuse(name, *args, **kwargs):
+        if name.startswith("neurokit2"):
+            raise ImportError("No module named 'neurokit2'")
+        return real_import(name, *args, **kwargs)
+
+    folder = write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0)
+    rec, video = _load(folder)
+    result = pipeline.run(rec, video, Parameters())
+    t, mv, _ = synthetic_ecg(rr_series(30))
+    sensor = to_sensor(t, mv)
+    sensor.unix = sensor.unix - 0.3 + rec.epoch_start + float(rec.time[0])
+    monkeypatch.setattr(builtins, "__import__", refuse)
+    with pytest.warns(UserWarning, match="NeuroKit2"):
+        paths = pipeline.export(result, rec, Parameters(), tmp_path / "out", sensors=[sensor])
+    monkeypatch.setattr(builtins, "__import__", real_import)
+    assert "rec_shimmer.csv" in {p.name for p in paths} and not any("hrv" in p.name for p in paths)
+    manifest = json.loads((tmp_path / "out/rec_export.json").read_text())
+    assert "NeuroKit2" in manifest["sensors"][0]["hrv"]["skipped"]
+    with pytest.raises(ImportError, match="cwtool\\[hrv\\]"):
+        monkeypatch.setattr(builtins, "__import__", refuse)
+        hrv.detect_r_peaks(np.zeros(2000), np.arange(2000) / 256.0)

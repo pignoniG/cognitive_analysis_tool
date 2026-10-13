@@ -23,7 +23,8 @@ plot = ["matplotlib>=3.7"]
 gui = ["PySide6>=6.5", "pyqtgraph>=0.13", "matplotlib>=3.7"]
 logger = ["pyserial>=3.5", "pyshimmer>=0.6", "pylsl>=1.16", "PySide6>=6.5", "pyqtgraph>=0.13",
           "pyobjc-framework-IOBluetooth>=10; sys_platform == 'darwin'"]
-dev = ["pytest>=7"]
+hrv = ["neurokit2>=0.2.7"]
+dev = ["pytest>=7", "neurokit2>=0.2.7"]
 
 [project.scripts]
 cwtool = "cwtool.cli:main"

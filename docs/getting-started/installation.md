@@ -22,7 +22,8 @@ This installs two commands: `cwtool-gui` (desktop app) and `cwtool` (command lin
 | `gui` | PySide6, pyqtgraph, matplotlib | the desktop app |
 | `plot` | matplotlib | `cwtool --plot` (PDF plots from the command line) |
 | `logger` | pyserial, pyshimmer, pylsl, PySide6, pyqtgraph (and the macOS Bluetooth bindings on a Mac) | the [sensor logger](../usage/logger.md) and `tools/lux_logger.py` |
-| `dev` | pytest | running the tests |
+| `hrv` | NeuroKit2 (and pandas) | [heart rate variability](../processing/hrv.md) from a Shimmer's ECG in the export; without it the export skips it with a warning |
+| `dev` | pytest, NeuroKit2 | running the tests |
 
 Combine them as needed, e.g. `pip install -e ".[gui,logger,dev]"`.
 

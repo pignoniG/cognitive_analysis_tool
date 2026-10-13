@@ -706,7 +706,12 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         if hrv and hrv_module.has_ecg(sensor):
             windows = [("recording", first, last)] + [(e.label, max(e.start, first), min(e.end, last))
                                                       for e in rec.events if e.end > first and e.start < last]
-            found = hrv_module.analyse(sensor, rec.epoch_start, windows, trim)
+            try:
+                found = hrv_module.analyse(sensor, rec.epoch_start, windows, trim)
+            except ImportError as e:                    # NeuroKit2 is not installed: the rest of the package is written
+                warnings.warn(str(e))
+                info["hrv"] = {"skipped": str(e)}
+                found = None
             if found is not None:
                 results, beats = found
                 files = hrv_module.write_files(results, beats, out_dir, f"{rec.name}_{sensor.name}", rec.epoch_start,
