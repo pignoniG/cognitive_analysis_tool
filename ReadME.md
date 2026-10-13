@@ -15,9 +15,9 @@ The luminance is estimated from the eye tracker's scene video and gaze: a circle
 against the rest of the view. On a headset it comes from the display's photometry; with glasses trackers, the
 absolute level comes from a lux sensor worn on the tracker.
 
-![The analysis app on a synthetic recording: measured and expected pupil, luminance, ΔPD with two task phases, and the ECG and EDA from the sensor logger](docs/images/analysis-app.png)
+![The analysis app on a synthetic recording: measured and expected pupil, ΔPD with two task phases, the ECG with its heartbeats, the EDA and the moving RMSSD from the sensor logger, and the heart rate variability table](docs/images/analysis-app.png)
 
-*The analysis app on synthetic data: a task that dilates the pupil twice, the light that changes every few seconds, and the ΔPD that is left once the light is accounted for, with the Shimmer's ECG and the EmotiBit's EDA on the same time axis.*
+*The analysis app on synthetic data: a task that dilates the pupil twice while the light changes every few seconds, the ΔPD that is left once the light is accounted for, and the sensor logger's data on the same time axis: the Shimmer's ECG with the heartbeats found in it, the EmotiBit's EDA and the moving RMSSD, with the heart rate variability of the recording and of each task in the table on the left.*
 
 **Documentation:** https://pignonig.github.io/cognitive_analysis_tool/ covers installation, usage, the device
 formats and every processing step ([Processing at a glance](https://pignonig.github.io/cognitive_analysis_tool/processing/pipeline/)).
@@ -41,8 +41,10 @@ recording; every result from them carries a warning.
 
 **Analysis app** (`cwtool-gui`). Open a recording folder: the scene video is analysed in the background (or loaded
 from its cache), and every parameter change updates the measured and expected pupil and ΔPD plots at once. A video
-preview shows the analysed areas on the scene frame at the cursor. Sensor files from the logger can be shown under
-ΔPD. **Export** writes one package for the participant: pupil, ΔPD, per-event means, lux and sensor files, the
+preview shows the analysed areas on the scene frame at the cursor. The logger's files (the lux log, the Shimmer, the
+EmotiBit) are found in its recordings folder by their time and can be shown under ΔPD; the Shimmer's ECG gives a heart
+rate variability preview (beats, table, heart rate and moving RMSSD). A **Set-up** checklist says what is still missing
+(display photometry, calibration, fits). **Export** writes one package for the participant: pupil, ΔPD, per-event means, lux and sensor files, the
 parameters used and a manifest, all cut to an *export range* that leaves out a calibration, a break or a test run.
 
 **Sensor logger** (`cwtool-logger`). Records the lux sensor, a Shimmer (ECG and more) and an EmotiBit side by side

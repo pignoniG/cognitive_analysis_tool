@@ -71,7 +71,8 @@ not correct the drift of the unit's oscillator.
 For the ECG (and the [heart rate variability](../processing/hrv.md) computed from it) choose **256 Hz** (or 512 Hz) in
 the *Sampling rate* box of the add dialog. The logger sets the Shimmer's stream rate and, for the ECG unit, the data
 rate of its two ExG chips to the lowest of 125, 250, 500, 1000 ... samples/s that is not below it, so that every
-streamed sample is a new ECG sample. The default, *As set on the device*, changes nothing. The setting stays on the unit
+streamed sample is a new ECG sample. The box defaults to **256 Hz**, and warns ("too coarse for heart rate variability") when you choose a lower rate;
+*As set on the device* changes nothing. The setting stays on the unit
 until it is switched off (the unit kept it between connections in a test; a power cycle was not tried), and
 Consensys can change it again.
 

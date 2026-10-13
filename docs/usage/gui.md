@@ -39,9 +39,9 @@ of the tab are the participant's parameter file.
   so one folder serves both: the session that overlaps the recording is found by its time, the lux log is read from it
   (glasses recordings) and the sensor files are imported (see [Sensor data](#sensor-data-optional)). Give the
   recordings folder once: it is remembered between sessions and used for every recording, so nothing is copied into the
-  recordings; one session folder is used for the open recording only. It is shown in the Recording box. If it holds
-  nothing for a recording, a warning says so (check the folder and the clocks). The same button is in the *Sensor data*
-  and *Lux sensor log* boxes of the Data tab.
+  recordings; one session folder is used for the open recording only. It is shown in the Sensor data box. If it holds
+  nothing for a recording, a warning says so there (check the folder and the clocks). The same button is in the
+  *Sensor data* box of the Data tab, which holds the lux log as one of its inputs.
 - **Forget the logger folder**: go back to the recording's own folder and its `lux` subfolder for the lux logs and
   the sensor files.
 - **Load parameters… / Save parameters / Save parameters as…**: the participant's parameter file (JSON), without
@@ -183,7 +183,7 @@ The **Calibrate** tab depends on the device. A display device (Varjo) has three 
 sensitivity** and **Fit latency and offset**. Glasses with a lux log have the sequence and one fit, **Fit sensitivity
 and offset**, with a note that they have no display photometry (see below). Glasses without a lux log have no steps,
 only a note saying what the sequence would need; their dynamics are set by hand in Params → Participant. Once a fit
-is applied, its step shows the result under its title. The lux sensor group starts with a line saying which route the luminance takes (sensor ×
+is applied, its step shows the result under its title. The lux sensor group starts with a line saying how the luminance is made (sensor ×
 video ratio, or sensor only); the video preview shows the same product for the frame at the cursor, and the weights
 of the gaze circle and the background.
 
@@ -192,18 +192,18 @@ of the gaze circle and the background.
 - **Which plots are shown**: three drop-downs under the plots. **Plots**: **Pupil diameter**, **Luminance**, **Video
   ratio**, **ΔPD**. **Heart rate variability** (once computed): **Heart rate** and **RMSSD**, with the window of the RMSSD. At first the pupil diameter, ΔPD and RMSSD are on. The
   video ratio can only be ticked with a lux sensor and the scene video. **Sensor signals** is the third, with the same
-  choice as the list in the Data tab. The plots that remain share the height, and the time axis is on the last one.
+  choice as the list in the Data tab. The plots that remain share the height; the time axis is on the last one and repeated above the first.
 - **Time axis**: the view fits the whole recording when it opens and follows it while you change parameters. Drag with
   the left mouse button (or the middle one) to **pan** in time, or swipe sideways; **right-click** to zoom out; the
   wheel zooms around the pointer. The time axis stays inside the recording.
-- **Zoom button** (the magnifier, top right of the plots, left of Reset view): while it is pressed, the left button draws a rectangle
+- **Zoom button** (the magnifier, in the bar above the plots, left of Reset view): while it is pressed, the left button draws a rectangle
   and the plots zoom to it (the rectangle is gray), in time and, for the plot you drew on, in value. That plot keeps its value range as you
   move along the time axis; a right click (or Reset view) fits it to the data again. Press the button again to go back
   to panning.
 - **Value axes** cannot be dragged. Unless you zoomed one, each fits the data of the time span in view, so zooming in on
   a part shows that part at full height.
 - All the left axes are of the same width, so the plots line up whatever the numbers beside them.
-- **Reset view** (the four-arrows button in the top right corner of the plots, **View** menu, Ctrl+0, or a double-click on the
+- **Reset view** (the four-arrows button in the bar above the plots, next to the Zoom button, **View** menu, Ctrl+0, or a double-click on the
   plots) shows the whole recording again. The calibration overlay, events and reference lines never stretch the
   value axes.
 - **Handles**: the bars you can move in time (the current video frame, the export start and end, the edges and middle of

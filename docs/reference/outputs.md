@@ -69,7 +69,9 @@ gives the reason.
 `kept_seconds`, `beats`, `trusted_intervals`, `untrusted_percent`, `mean_hr_bpm`, `mean_nn_ms`, `sdnn_ms`, `cvnn`,
 `madnn_ms`, `rmssd_ms`, `pnn50_percent`, `pnn20_percent`, `sd1_ms`, `sd2_ms`, `sd1_sd2`, `lf_ms2`, `hf_ms2`, `lf_hf`, `lfn`,
 `hfn`, `lnhf` and `notes` (empty cells where a measure cannot be given, for example the spectrum in a window under
-1 minute). `_beats.csv` lists every beat kept by the export range:
+1 minute). With an export range the HRV is cut at its markers on the data beyond them (a beat kept after a cut keeps its
+interval from the beat before it); `--hrv-inside-only` (or the box in the app) makes the cut strict, see
+[Heart rate variability](../processing/hrv.md#cutting-at-the-export-range). `_beats.csv` lists every beat kept by the export range:
 `timestamp_unix`, `timestamp_relative`, `rr_ms` (the interval from the previous beat), `rr_trusted` (1 or 0) and
 `r_amplitude_mv`. The method and its limits are in [Heart rate variability](../processing/hrv.md).
 
