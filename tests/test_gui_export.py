@@ -145,3 +145,26 @@ def test_the_window_exports_one_package(app, window, monkeypatch):
     t = np.array([float(r["timestamp_relative"]) for r in rows(out / "rec_shimmer.csv")])
     assert t.min() >= 1.0 and t.max() <= 7.0 and not ((t >= 3.0) & (t < 5.0)).any()
     assert "trimmed" in w.statusBar().currentMessage() and "sensor file" in w.statusBar().currentMessage()
+
+
+def test_the_hrv_option_and_the_low_rate_warning_follow_the_shimmer_ecg(app, window, monkeypatch):
+    w, folder, tmp = window
+    rec = w.recording
+    assert w.hrv_check.isHidden()                                           # no sensors: nothing to compute from
+    session = write_session(tmp / "session", rec.epoch_start + float(rec.time[0]))
+    w.import_sensors(session)
+    assert wait_for(app, lambda: len(w.sensors) == 2)
+    # the test session's Shimmer is sampled at 50 Hz: too coarse for HRV, and the window says so
+    assert not w.hrv_check.isHidden() and "shimmer + HRV" in w.export_summary.text()
+    assert "too coarse" in w.sensors_label.text() and "50 Hz" in w.sensors_label.text()
+    w.hrv_check.setChecked(False)
+    assert "shimmer + HRV" not in w.export_summary.text() and "shimmer" in w.export_summary.text()
+    # the choice reaches the export
+    got = {}
+    from cwtool import pipeline
+
+    real = pipeline.export
+    monkeypatch.setattr(pipeline, "export", lambda *a, **k: got.update(k) or real(*a, **k))
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", staticmethod(lambda *a, **k: str(tmp / "out")))
+    w.export()
+    assert got["hrv"] is False and not (tmp / "out/rec_shimmer_hrv.csv").exists()

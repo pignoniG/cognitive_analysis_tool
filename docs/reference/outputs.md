@@ -60,6 +60,16 @@ export range. The first two columns are `timestamp_unix` and `timestamp_relative
 the rest are the logger file's own columns, raw as logged: the Shimmer's channels in ADC counts plus its
 `device time (s)`, or the EmotiBit's `signal` and `value`. See [Sensor logger](../usage/logger.md#what-is-saved).
 
+### `<name>_<sensor>_hrv.csv` and `<name>_<sensor>_beats.csv`
+
+For a Shimmer file with an ECG (unless HRV is turned off: *Heart rate variability* in the Export tab, `--no-hrv`).
+`_hrv.csv` has one row per window, the whole recording and each event: `window`, `start_relative`, `end_relative`,
+`kept_seconds`, `beats`, `trusted_intervals`, `untrusted_percent`, `mean_hr_bpm`, `mean_nn_ms`, `sdnn_ms`, `rmssd_ms`,
+`pnn50_percent`, `sd1_ms`, `sd2_ms`, `lf_ms2`, `hf_ms2`, `lf_hf` and `notes` (empty cells where a measure cannot be
+given, for example LF and HF in a window under 2 minutes). `_beats.csv` lists every beat kept by the export range:
+`timestamp_unix`, `timestamp_relative`, `rr_ms` (the interval from the previous beat), `rr_trusted` (1 or 0) and
+`r_amplitude_mv`. The method and its limits are in [Heart rate variability](../processing/hrv.md).
+
 ### `<name>_params.json`
 
 The parameters used, loadable as a participant file.
@@ -68,7 +78,7 @@ The parameters used, loadable as a participant file.
 
 What the package holds, for whoever receives it: the recording and device, the meaning of the time columns and the
 Unix time of time zero, the trim (or `null`), the seconds kept, which SD was used for `delta_pd_sd` and its value, each
-sensor file with its source, columns and row count, the list of files and the version of `cwtool`.
+sensor file with its source, columns and row count (and, for an ECG, its HRV files, the sampling rate, the gain and the notes), the list of files and the version of `cwtool`.
 
 ### `<name>_plot.pdf`
 

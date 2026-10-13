@@ -77,6 +77,7 @@ nav:
       - Expected pupil model: processing/model.md
       - ΔPD and alignment: processing/delta-pd.md
       - Calibration fit: processing/calibration-fit.md
+      - Heart rate variability: processing/hrv.md
   - Reference:
       - Parameters: reference/parameters.md
       - Output files: reference/outputs.md

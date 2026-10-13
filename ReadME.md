@@ -47,7 +47,8 @@ parameters used and a manifest, all cut to an *export range* that leaves out a c
 
 **Sensor logger** (`cwtool-logger`). Records the lux sensor, a Shimmer (ECG and more) and an EmotiBit side by side
 on the computer's clock, with the phases of the experiment, one folder per recording. Live plots let you check
-the signals before recording.
+the signals before recording. The Shimmer's ECG can be set to a rate fit for heart rate variability, which the
+analysis computes and exports with the other results.
 
 ![The sensor logger recording a lux sensor, a Shimmer and an EmotiBit, with a protocol running](docs/images/sensor-logger.png)
 

@@ -27,6 +27,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--sensors", type=Path, metavar="FOLDER",
                     help="sensor logger session folder (Shimmer, EmotiBit) to add to the export, trimmed like the "
                          "rest (default: any in the recording folder)")
+    ap.add_argument("--no-hrv", action="store_true",
+                    help="do not compute heart rate variability from a Shimmer's ECG when exporting sensor data")
     ap.add_argument("--start", type=float, metavar="S", help="leave out everything before S seconds (export only)")
     ap.add_argument("--end", type=float, metavar="S", help="leave out everything after S seconds (export only)")
     ap.add_argument("--exclude", type=float, nargs=2, action="append", default=[], metavar=("FROM", "TO"),
@@ -78,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         found = sensors.load_sensors(args.sensors or rec.folder, rec.epoch_start + float(rec.time[0]), span)
     elif args.sensors:
         print("The recording has no absolute time: sensor data cannot be aligned", file=sys.stderr)
-    for p in pipeline.export(result, rec, params, out, trim=trim, sensors=found):
+    for p in pipeline.export(result, rec, params, out, trim=trim, sensors=found, hrv=not args.no_hrv):
         print(f"wrote {p}")
     if args.plot:
         from cwtool.plot import plot_result

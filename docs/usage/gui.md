@@ -67,6 +67,8 @@ export everything for one participant as a single package.
   ticked ones are drawn, one plot each, under ΔPD on the same time axis, cursor and events; at first the ECG channel
   of the Shimmer and the EmotiBit's EDA and PPG. At most six at a time.
 - Values are shown as the logger saved them: the Shimmer's are raw ADC counts, not millivolts.
+- A Shimmer file whose ECG was sampled below 200 Hz gets a warning under the list (too coarse for
+  [heart rate variability](../processing/hrv.md)).
 - **Remove** forgets the sensor data. All the signals, not only the ticked ones, go into the export.
 
 ## Export range
@@ -84,6 +86,10 @@ decides what is written by **Export results…**, for every file at once (result
 - Times are those of the plots' axis (`timestamp_relative` in the exports).
 - The range is saved next to the recording (`cwtool_trim.json`) and comes back when it is opened again; clearing it
   removes the file. It is separate from the participant's parameter file, since it belongs to one recording.
+
+With a Shimmer ECG among the sensor files, the Export tab also has **Heart rate variability from the Shimmer's ECG**
+(on by default): the package then holds the beat times and the HRV measures of the whole recording and of each event,
+computed on what the range keeps ([method](../processing/hrv.md)).
 
 ΔPD in SD units (`delta_pd_sd`) is normalised with the SD of what is kept, so a calibration with large swings does not
 shrink the other values; see [Output files](../reference/outputs.md).

@@ -1109,3 +1109,17 @@ is revised; they remain in the git history of this file.
   3 s steps so that windows remain between the steps; with 1 s steps there are too few and the figures are NaN. A flat
   pupil still gives R² above 0.8. The 0.1 limit is unchanged.
 - **Status:** fixed in 2.0.
+
+### 51. HRV from the Shimmer's ECG has not been checked against a reference
+
+- **Where:** `cwtool/hrv.py`, `docs/processing/hrv.md`.
+- **Problem:** the module was tested on synthetic ECGs with known beat times (R peaks within 6 ms, RMSSD within 10 %,
+  missed and extra beats, gaps, an inverted ECG) and on recordings of one person at rest (October 2026, torso
+  electrodes, 256 Hz, 40 s and 60 s). It has not been compared with a reference: a clinical ECG with annotated beats,
+  or a second tool (Kubios, NeuroKit2) on the same recording. Known limits: one lead (II); untrusted intervals are
+  left out, not repaired; the detector thresholds (35 % of the energy peak, 30 % tolerance of the intervals) are
+  plausible values, not tuned on data; movement artefacts of a participant doing a task are untested.
+- **Proposal:** record 5 minutes at rest at 256 Hz and compare RMSSD, SDNN and LF/HF with NeuroKit2 or Kubios on the
+  same file; run it on a recording with a task and look at the beats with the movement; add the ECG and the detected
+  beats as a plot in the app so the detection can be checked by eye.
+- **Status:** open (needs data).

@@ -13,7 +13,7 @@ from __future__ import annotations
 import csv
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +33,7 @@ class Sensor:
     header: list
     unix: np.ndarray                   # s, one per row
     data: dict                         # wide: column -> values; long: "signal" (strings) and "value"
+    settings: dict = field(default_factory=dict)   # what the logger saved for the sensor in session.json
 
     @property
     def long(self) -> bool:
@@ -56,7 +57,7 @@ class Sensor:
         """The sensor with only the rows where ``mask`` is True."""
         mask = np.asarray(mask, dtype=bool)
         return Sensor(self.name, self.kind, self.path, self.header, self.unix[mask],
-                      {k: v[mask] for k, v in self.data.items()})
+                      {k: v[mask] for k, v in self.data.items()}, self.settings)
 
     def __len__(self) -> int:
         return len(self.unix)
@@ -151,10 +152,21 @@ def find_sensor_files(folder: Path) -> list[tuple[Path, str]]:
     return found
 
 
+def sensor_settings(folder: Path) -> dict:
+    """The settings the logger saved for each sensor in the session's ``session.json`` (sampling rate, the ECG's gain
+    ...), by the sensor's file name stem; empty without a manifest."""
+    try:
+        sources = json.loads((Path(folder) / "session.json").read_text()).get("sources", {})
+        return {Path(info.get("file", f"{name}.csv")).stem: info.get("settings", {}) for name, info in sources.items()}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
 def load_sensors(folder: Path, epoch_start: float, duration: float, margin: float = 30.0) -> list[Sensor]:
     """The sensors of a session folder, cut to a recording that starts at Unix time ``epoch_start`` and lasts
     ``duration`` seconds (with ``margin`` on both sides). Sensors with no rows in that span are left out."""
     t0, t1 = epoch_start - margin, epoch_start + duration + margin
+    settings = sensor_settings(folder)
     out = []
     for path, kind in find_sensor_files(folder):
         try:
@@ -162,5 +174,6 @@ def load_sensors(folder: Path, epoch_start: float, duration: float, margin: floa
         except ValueError:
             continue
         if len(sensor):
+            sensor.settings = settings.get(sensor.name, {})
             out.append(sensor)
     return out

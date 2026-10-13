@@ -13,6 +13,7 @@ import numpy as np
 from scipy.signal import savgol_filter
 
 from cwtool import __version__, luminance, model
+from cwtool import hrv as hrv_module
 from cwtool import lux as lux_module
 from cwtool.params import Parameters
 from cwtool.recording import Recording
@@ -632,11 +633,13 @@ def event_means(result: Result, events, trim: Optional[Trim] = None) -> list[tup
 
 
 def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, trim: Optional[Trim] = None,
-           sensors=()) -> list[Path]:
+           sensors=(), hrv: bool = True) -> list[Path]:
     """Write the results of a recording as one package in ``out_dir``: ``<name>_pupil.csv``, ``<name>_cw.csv``,
     ``<name>_events.csv`` (with events), ``<name>_lux.csv`` (with a lux log), one ``<name>_<sensor>.csv`` for each
-    of ``sensors`` (:class:`cwtool.sensors.Sensor`), ``<name>_params.json`` and ``<name>_export.json`` (what the
-    package holds); returns their paths.
+    of ``sensors`` (:class:`cwtool.sensors.Sensor`), for a sensor with an ECG (a Shimmer) also its heart rate
+    variability (``<name>_<sensor>_hrv.csv`` per window: the recording and each event, and
+    ``<name>_<sensor>_beats.csv``, unless ``hrv`` is False), ``<name>_params.json`` and ``<name>_export.json`` (what
+    the package holds); returns their paths.
 
     ``trim`` (:class:`cwtool.trim.Trim`) leaves out the parts of the recording that are not wanted, from every
     file; ΔPD in SD units is then normalised with the SD of what is kept. See docs/reference/outputs.md."""
@@ -698,8 +701,21 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         p = out_dir / f"{rec.name}_{sensor.name}.csv"
         kept_rows.write_csv(p, rec.epoch_start)
         paths.append(p)
-        sensor_info.append({"file": p.name, "kind": sensor.kind, "source": str(sensor.path), "rows": len(kept_rows),
-                            "columns": ["timestamp_unix", "timestamp_relative"] + sensor.header[1:]})
+        info = {"file": p.name, "kind": sensor.kind, "source": str(sensor.path), "rows": len(kept_rows),
+                "columns": ["timestamp_unix", "timestamp_relative"] + sensor.header[1:]}
+        if hrv and hrv_module.has_ecg(sensor):
+            windows = [("recording", first, last)] + [(e.label, max(e.start, first), min(e.end, last))
+                                                      for e in rec.events if e.end > first and e.start < last]
+            found = hrv_module.analyse(sensor, rec.epoch_start, windows, trim)
+            if found is not None:
+                results, beats = found
+                files = hrv_module.write_files(results, beats, out_dir, f"{rec.name}_{sensor.name}", rec.epoch_start,
+                                               trim, first, last)
+                paths += files
+                info["hrv"] = {"files": [q.name for q in files], "lead": "II (LL-RA), ExG chip 1 channel 1",
+                               "sampling rate (Hz)": round(beats.rate, 2), "ecg gain": beats.gain,
+                               "notes": beats.notes}
+        sensor_info.append(info)
 
     p = out_dir / f"{rec.name}_params.json"
     params.save(p)

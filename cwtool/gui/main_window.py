@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayo
                                QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget, QToolButton,
                                QVBoxLayout, QWidget)
 
-from cwtool import __version__, calibration, devices, palette, pipeline, sensors
+from cwtool import __version__, calibration, devices, hrv, palette, pipeline, sensors
 from cwtool.fit import fit_calibration
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.icons import icon, tinted
@@ -335,6 +335,11 @@ class MainWindow(QMainWindow):
         self.trim_panel.changed.connect(self._trim_changed)
         self.export_summary = QLabel()
         self.export_summary.setWordWrap(True)
+        self.hrv_check = QCheckBox("Heart rate variability from the Shimmer's ECG")
+        self.hrv_check.setChecked(True)
+        self.hrv_check.setToolTip("Adds the beat times and the HRV measures of the whole recording and of each event "
+                                  "to the package (lead II; needs an ECG sampled at 256 Hz or more)")
+        self.hrv_check.toggled.connect(self._update_export_summary)
         self.export_button = QPushButton("Export results…")
         self.export_button.setMinimumHeight(40)
         self.export_button.setToolTip("One package: the results, the lux and sensor files, the parameters, a manifest "
@@ -343,6 +348,7 @@ class MainWindow(QMainWindow):
         export_page = QWidget()
         export_layout = QVBoxLayout(export_page)
         export_layout.addWidget(self.trim_panel)
+        export_layout.addWidget(self.hrv_check)
         export_layout.addWidget(self.export_summary)
         export_layout.addWidget(self.export_button)
         export_layout.addStretch(1)
@@ -971,7 +977,9 @@ class MainWindow(QMainWindow):
             parts.append(f"{len(rec.events)} event{'s' if len(rec.events) != 1 else ''}")
         if rec.lux_values is not None:
             parts.append("lux")
-        parts += [s.name for s in self.sensors]
+        ecg = [s for s in self.sensors if hrv.has_ecg(s)]
+        self.hrv_check.setVisible(bool(ecg))
+        parts += [f"{s.name} + HRV" if s in ecg and self.hrv_check.isChecked() else s.name for s in self.sensors]
         parts += ["parameters", "manifest", "PDF plot"]
         self.export_summary.setText("The package holds: " + ", ".join(parts) + ".")
 
@@ -1093,9 +1101,23 @@ class MainWindow(QMainWindow):
                                        "and exported with it, as one package.")
         else:
             parts = ", ".join(f"{s.name} ({len(s):,} rows)" for s in self.sensors)
-            self.sensors_label.setText(f"{parts}" + (f"<br>from {folder.name}" if folder else ""))
+            warn = "".join(f"<br><span style='color:{palette.WARNING}'>{s.name}: {note}</span>"
+                           for s in self.sensors if hrv.has_ecg(s) for note in self._ecg_notes(s))
+            self.sensors_label.setText(f"{parts}" + (f"<br>from {folder.name}" if folder else "") + warn)
             self.sensors_label.setToolTip(str(folder) if folder else "")
         self.remove_sensors_button.setEnabled(bool(self.sensors))
+        self._update_export_summary()
+
+    @staticmethod
+    def _ecg_notes(sensor) -> list[str]:
+        """What is wrong with a Shimmer's ECG for HRV, from its sampling rate (the cheap check, no beat detection)."""
+        device = sensor.data[hrv.DEVICE_TIME]
+        if len(device) < 3 or device[-1] <= device[0]:
+            return []
+        rate = (len(device) - 1) / (device[-1] - device[0])
+        if rate < hrv.MIN_RATE:
+            return [f"ECG sampled at {rate:.0f} Hz: too coarse for heart rate variability (256 Hz or more is needed)"]
+        return []
 
     def _show_sensors(self, *_) -> None:
         rec = self.recording
@@ -1161,7 +1183,7 @@ class MainWindow(QMainWindow):
         trim = self.trim_panel.trim()
         try:
             paths = pipeline.export(self.result, self.recording, self.params_panel.params(), Path(folder),
-                                    trim=trim, sensors=self.sensors)
+                                    trim=trim, sensors=self.sensors, hrv=self.hrv_check.isChecked())
         except OSError as e:
             self._error("Cannot export", str(e))
             return

@@ -14,6 +14,7 @@ cwtool RECORDING [--device {pupil_core,pupil_neon,tobii_g3,varjo}] [--params FIL
 | `--display` | display photometry file (JSON) saved by the app (Varjo); participant files do not hold Lmin, Lmax and gamma, so without it the defaults are used |
 | `--lux` | folder with lux sensor logs (glasses), searched with its subfolders; default: the recording folder or its `lux` subfolder |
 | `--sensors` | [sensor logger](logger.md) session folder (Shimmer, EmotiBit) to add to the export, trimmed like the rest; default: any logger files in the recording folder |
+| `--no-hrv` | do not compute [heart rate variability](../processing/hrv.md) from a Shimmer's ECG when packing sensor data |
 | `--start`, `--end` | leave out everything before or after this time, in seconds on the exports' `timestamp_relative` axis |
 | `--exclude FROM TO` | leave out FROM to TO seconds, for example a calibration; repeat for several segments |
 | `--out` | export folder; default `RECORDING/cwtool_export` |
