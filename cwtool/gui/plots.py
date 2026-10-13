@@ -187,6 +187,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     that it stays put until :meth:`fit_to_data` is called again (double-click, or the
     Reset view button in the top right corner). Overlays never enter the fitted range."""
 
+    BUTTON_BAR = 38      # pixels over the plots for the Zoom and Reset view buttons
+
     sequence_start_changed = Signal(float)
     cursor_changed = Signal(float)
     trim_dragged = Signal(object)    # the export range (cwtool.trim.Trim) after the user dragged a line or segment
@@ -250,7 +252,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.cw.setLabel("bottom", "Time (s)")
         for p in (self.pupil, self.lum, self.ratio):
             p.getAxis("bottom").setStyle(showValues=False)     # the time axis is at the bottom of the stack
-        self.pupil.addLegend(offset=(-10, 44), brush=pg.mkBrush(255, 255, 255, 210))   # below Reset view
+        self.pupil.addLegend(offset=(-10, 10), brush=pg.mkBrush(255, 255, 255, 210))
 
         button_style = ("QToolButton { padding: 0; border: 1px solid #999; border-radius: 5px;"
                         " background: rgba(255, 255, 255, 230); }"
@@ -323,6 +325,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             plot.addItem(line, ignoreBounds=True)
             line.sigPositionChanged.connect(self._cursor_dragged)
         self.scene().sigMouseClicked.connect(self._clicked)
+        left, top, right, bottom = self.ci.layout.getContentsMargins()
+        self.ci.layout.setContentsMargins(left, top + self.BUTTON_BAR, right, bottom)     # a bar for the buttons, out of the plots
         self.handles = HandleStrip(self)
 
     def resizeEvent(self, event) -> None:
@@ -779,10 +783,9 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.handles.show()
         self.handles.setGeometry(0, int(bottom) - HandleStrip.HEIGHT, self.width(), HandleStrip.HEIGHT)
         self.handles.raise_()
-        # the buttons sit in the top right corner of the first plot, under its time axis
-        corner = self.mapFromScene(shown[0].vb.sceneBoundingRect().topRight())
-        self.reset_button.move(corner.x() - self.reset_button.width() - 8, corner.y() + 6)
-        self.zoom_button.move(self.reset_button.x() - self.zoom_button.width() - 6, corner.y() + 6)
+        # the buttons sit in a bar above the plots, at its right end: never over a curve, a legend or an axis
+        self.reset_button.move(self.width() - self.reset_button.width() - 10, (self.BUTTON_BAR - self.reset_button.height()) // 2)
+        self.zoom_button.move(self.reset_button.x() - self.zoom_button.width() - 6, self.reset_button.y())
         self.reset_button.raise_()
         self.zoom_button.raise_()
 

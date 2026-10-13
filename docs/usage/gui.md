@@ -9,9 +9,9 @@ The window has the controls on the left, the plots on the right, and the video p
 | Area | Contents |
 |---|---|
 | Rail (far left) | Four tabs: **Data**, **Params**, **Calibrate**, **Export** (Ctrl+1 to Ctrl+4). A red dot under a tab's name says it needs attention, for example **Data** when a glasses recording has no lux readings |
-| Tab page | **Data**: the recording, the scene video and its analysis settings, and the sensor data (the lux log of glasses, the Shimmer, the EmotiBit). **Params**: the parameters, in pills (below). **Calibrate**: numbered steps. **Export**: the export range and the Export button |
+| Tab page | **Data**: the recording, the **Set-up** checklist, the scene video and its analysis settings, and the sensor data (the lux log of glasses, the Shimmer, the EmotiBit). **Params**: the parameters, in pills (below). **Calibrate**: numbered steps. **Export**: the export range and the Export button |
 | Video preview | Under the page, 16:9, following the cursor. **Values** shows the colours and luminance measured at the cursor, **Pop out** moves it to a window of its own, **Hide** (or **P**) gives its room back to the page. Drag the divider above it to resize |
-| Status strip | One line over the plots: ΔPD RMS and SD, the light left in ΔPD, the expected pupil at the display's black and white points (display devices) or where the luminance comes from (with the lux sensor: its median luminance × the median video ratio and its 10th–90th percentile range), the pupil scale and offset applied, sampling rates and the share of the recording in gaps. A red **⚠ N warnings** button on its right opens the list |
+| Status strip | One short line over the plots: ΔPD RMS and SD, and the light left in ΔPD. **Details** (on its right) opens the expected pupil at the display's black and white points (display devices) or where the luminance comes from (with the lux sensor: its median luminance × the median video ratio and its 10th–90th percentile range), the pupil scale and offset applied, the sampling rates and the share of the recording in gaps. A red **⚠ N warnings** button opens the list of warnings. Hover the line for what each number means |
 | Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis, with the imported sensor signals under them. They use the whole width of the window; the drop-downs under them switch each plot on and off (pupil diameter and ΔPD, and the RMSSD once computed, are on at first) |
 
 The last tab, pill, preview state and sizes are remembered between sessions.
@@ -25,7 +25,7 @@ The last tab, pill, preview state and sizes are remembered between sessions.
 | **Signal** | the pupil signal (scale, alignment, offset, time lag, gaps, artefacts) and ΔPD (window, smoothing) |
 
 A dot after a pill's name means something in it differs from the defaults. **Restore this group's defaults** (under
-the last block of the pill, with a confirmation) puts the open pill's settings back. **Load…**, **Save** and **Save as…** at the top
+the last block of the pill, with a confirmation) puts the open pill's settings back. **Load…**, **Save**, **Save as…** and **Revert** at the top
 of the tab are the participant's parameter file.
 
 ## Menus
@@ -70,6 +70,22 @@ of the tab are the participant's parameter file.
 missing package, file or permission, an unreadable video, no memory or disk space, a damaged parameter file), and the
 technical details under **Show Details…**. An analysis error appears once per cause, not at every edit of the parameters.
 
+## Set-up checklist and unsaved parameters
+
+- **Set-up** (top of the Data tab, for a display device and for glasses with a lux sensor) lists what is still needed
+  before the ΔPD can be trusted, with ✓ for what is done and ✗ for what is not. A display device: the display photometry
+  (loaded, or the nominal defaults in use), the calibration sequence (its overlay shown and its start set), the light
+  sensitivity and the latency and offset (each fitted in this session, or from the participant's parameter file). Glasses
+  with a lux sensor: the lux readings, the sequence, and the sensitivity and offset. A ✗ line is a link to where it is
+  done (the logger folder, the display photometry file, or the Calibrate tab).
+- **Revert** (Params tab, next to Load and Save) puts the parameters back to what they were when last loaded or saved
+  (or at the start), after asking; it is on only while they differ. The window title says "changed" meanwhile. The display
+  photometry is not part of it (it has its own file).
+- **Closing the window or opening another recording** with changed parameters asks: **Save** (to the open parameter
+  file, or a file you choose), **Discard** (back to the saved state) or **Cancel**. The parameters you tune for one
+  participant are kept when you open that participant's next recording; the question is only asked when they have
+  changed since they were saved.
+
 ## Sensor data (optional)
 
 The Sensor data box holds everything the [sensor logger](logger.md) recorded: the lux log (for a glasses recording, where
@@ -97,6 +113,9 @@ export everything for one participant as a single package.
   select the row to read it. The table follows the [export range](#export-range) as you edit it, since only the windows
   are worked out again, not the beats. The button then reads *Recompute HRV*; importing other sensor data or opening
   another recording forgets the result. The beats are found by NeuroKit2 (`pip install "cwtool[hrv]"`).
+- **Use the data beyond the export range at its edges** (a box under the HRV button, on by default): the heartbeats are
+  found on all the data and the export range only cuts which beats count, so the first beat after a cut keeps its
+  interval. Off: a strict cut that loses it. See [how the HRV is cut](../processing/hrv.md#cutting-at-the-export-range).
 - **Heart rate variability plots**: two plots join the others under ΔPD, on the same time axis and cursor, switched in the
   **Heart rate variability** drop-down under the plots (**Heart rate**, off at first, and **RMSSD**, on): the heart rate (bpm) from the trusted intervals, and the
   RMSSD (ms) of a moving window (30 s, changed in the box next to them; the first point is one window after the first
@@ -133,7 +152,7 @@ shrink the other values; see [Output files](../reference/outputs.md).
 
 The video is analysed automatically when a recording is opened, unless a cached analysis made with the same
 video, settings, frame timestamps and gaze exists. **Reanalyse video** (**Analyse video** before any analysis) runs
-it again, for example after changing the video analysis settings; **Cancel**, shown while it runs, stops it.
+it again, for example after changing the video analysis settings; **Cancel**, shown while it runs, stops it (it is shown for the video analysis and the calibration fit, the two that can stop; the others take seconds).
 
 **Video analysis settings** (drop-down under the buttons: gaze circle radius, scene circle, background, analysis
 width) change what is measured in the video: after editing them, click **Reanalyse video**. The video preview

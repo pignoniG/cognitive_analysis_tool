@@ -268,3 +268,16 @@ def isolated_qsettings(tmp_path_factory, monkeypatch):
 
     path = str(tmp_path_factory.mktemp("qsettings") / "settings.ini")
     monkeypatch.setattr(main_window, "QSettings", lambda *a, **k: QSettings(path, QSettings.IniFormat))
+
+
+@pytest.fixture(autouse=True)
+def no_unsaved_prompt(monkeypatch):
+    """A window closed or switched to another recording with changed parameters asks what to do with them: in a test, a
+    modal box would wait for ever, so the answer is Discard (the tests of the prompt itself set their own)."""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+
+        from cwtool.gui.main_window import MainWindow
+    except ImportError:
+        return
+    monkeypatch.setattr(MainWindow, "_ask_unsaved", lambda self, what: QMessageBox.Discard)

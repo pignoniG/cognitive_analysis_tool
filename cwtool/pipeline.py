@@ -641,7 +641,8 @@ def hrv_windows(rec: Recording) -> list[tuple[str, float, float]]:
 
 
 def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, trim: Optional[Trim] = None,
-           sensors=(), hrv: bool = True, hrv_beats: Optional[dict] = None, progress=None) -> list[Path]:
+           sensors=(), hrv: bool = True, hrv_beats: Optional[dict] = None, progress=None,
+           hrv_edges: str = "beyond") -> list[Path]:
     """Write the results of a recording as one package in ``out_dir``: ``<name>_pupil.csv``, ``<name>_cw.csv``,
     ``<name>_events.csv`` (with events), ``<name>_lux.csv`` (with a lux log), one ``<name>_<sensor>.csv`` for each
     of ``sensors`` (:class:`cwtool.sensors.Sensor`), for a sensor with an ECG (a Shimmer) also its heart rate
@@ -652,7 +653,8 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
 
     ``trim`` (:class:`cwtool.trim.Trim`) leaves out the parts of the recording that are not wanted, from every
     file; ΔPD in SD units is then normalised with the SD of what is kept. ``progress``, if given, is called with the share
-    of the package written (0 to 1). See docs/reference/outputs.md."""
+    of the package written (0 to 1). ``hrv_edges`` ("beyond" or "inside") says how the HRV is cut at the export range's
+    markers: see :func:`cwtool.hrv.analyse`. See docs/reference/outputs.md."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     trim = trim or Trim()
@@ -725,7 +727,7 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         if hrv and hrv_module.has_ecg(sensor):
             try:
                 found = hrv_module.analyse(sensor, rec.epoch_start, hrv_windows(rec), trim,
-                                           beats=(hrv_beats or {}).get(sensor.name))
+                                           beats=(hrv_beats or {}).get(sensor.name), edges=hrv_edges)
             except ImportError as e:                    # NeuroKit2 is not installed: the rest of the package is written
                 warnings.warn(str(e))
                 info["hrv"] = {"skipped": str(e)}

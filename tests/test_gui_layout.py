@@ -163,3 +163,49 @@ def test_a_missing_lux_log_flags_the_data_tab(app, tmp_path):
     assert w.rail._buttons[0].property("alert") is True and "●" in w.rail._buttons[0].text()
     assert "no readings found" in w.sensors_label.text()                       # the lux log is one of the sensor inputs
     w.close()
+
+
+def test_the_setup_checklist_says_what_is_missing_for_a_display_device_and_for_glasses(app, tmp_path):
+    from conftest import write_neon_recording, write_varjo_recording
+    from test_neon import FRAME_TIMES, GRAYS
+
+    w = MainWindow()
+    assert w.setup_box.isHidden()                                              # nothing open
+    w.open_recording(write_varjo_recording(tmp_path / "v", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None)
+    text = w.setup_label.text()
+    assert not w.setup_box.isHidden()
+    assert "Display photometry not loaded" in text and "Calibration sequence not placed" in text
+    assert "Light sensitivity not fitted" in text and "Latency and offset not fitted" in text
+    assert "tab:2" in text and "action:display" in text                        # each missing line leads to its step
+    w.sequence_check.setChecked(True)
+    w.fits_done["light"] = True
+    w._update_state()
+    text = w.setup_label.text()
+    assert "Calibration sequence placed" in text and "Light sensitivity fitted" in text
+    assert "Latency and offset not fitted" in text
+    w.rail.set_current(0)
+    w._setup_link("tab:2")
+    assert w.rail.current() == 2
+    # glasses without lux readings: the lux log is the first thing missing
+    w.open_recording(write_neon_recording(tmp_path / "n", GRAYS, FRAME_TIMES))
+    assert wait_for(app, lambda: w.recording is not None and w.recording.device != "varjo" and w.result is not None)
+    text = w.setup_label.text()
+    assert "Lux readings not found" in text and "Sensitivity and offset not fitted" in text
+    assert "action:logs" in text
+    w.close()
+
+
+def test_the_status_strip_keeps_the_key_numbers_and_the_rest_is_in_the_details_popover(app, tmp_path):
+    from conftest import write_varjo_recording
+
+    w = MainWindow()
+    assert w.details_button.isHidden()
+    w.open_recording(write_varjo_recording(tmp_path / "v", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None)
+    strip = w.summary_label.text()
+    assert "ΔPD RMS" in strip and "SD" in strip and "expected PD" not in strip and "Hz" not in strip
+    assert not w.details_button.isHidden()
+    details = w.details_label.text()
+    assert "expected PD at black" in details and "offset" in details and "Hz → " in details
+    w.close()

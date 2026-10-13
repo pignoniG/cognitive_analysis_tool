@@ -333,35 +333,52 @@ def window_metrics(label: str, start: float, end: float, seconds: float, times_r
     return result
 
 
+EDGES = ("beyond", "inside")
+
+
 def analyse(sensor: Sensor, epoch_start: float, windows, trim: Optional[Trim] = None,
-            lead: str = LEAD_II, beats: Optional[Beats] = None) -> Optional[tuple[list[HrvResult], Beats]]:
+            lead: str = LEAD_II, beats: Optional[Beats] = None,
+            edges: str = "beyond") -> Optional[tuple[list[HrvResult], Beats]]:
     """HRV of a Shimmer sensor for each window. ``windows`` is a list of ``(label, start, end)`` in seconds on the
     recording's relative clock (``epoch_start`` is the Unix time of its zero); ``trim`` (:class:`Trim`) leaves out the
-    parts the export leaves out: their beats are dropped and no interval counts across them. Returns the results and
-    the :class:`Beats` (all of them, with trusted flags changed for the trim), or None if the sensor has no ECG.
+    parts the export leaves out. With ``edges`` ``"beyond"`` (the default) the heartbeats are found on all the data and
+    the cut is made at the markers: a beat that is kept has its interval from the beat before it even if that lies in
+    a left-out part, so the edges lose nothing; only the beats and intervals that end in a left-out part are dropped (and
+    a successive difference needs two kept intervals in a row). With ``"inside"`` the beats in the left-out parts are
+    dropped and no interval counts that reaches into them (the first interval after a cut is lost). Returns the results
+    and the :class:`Beats` (all of them, with trusted flags changed for the trim), or None if the sensor has no ECG.
     ``beats`` are the beats found earlier by :func:`beats_of` for this sensor: the detection, which is the slow part,
     is then not repeated, and the windows and the trim can be changed at no cost (the window of an app)."""
     beats = beats if beats is not None else beats_of(sensor, lead)
     if beats is None:
         return None
+    if edges not in EDGES:
+        raise ValueError(f"edges must be one of {EDGES}, not {edges!r}")
     rel = beats.unix - epoch_start
     ok = beats.ok.copy()
     rr = beats.rr.copy()
     keep = np.ones(len(rel), dtype=bool)
     span = np.zeros(len(rel), dtype=int)
+    beyond = edges == "beyond" and trim is not None and trim.active
     if trim is not None and trim.active and len(rel):
         keep = trim.keep_mask(rel)
-        for index, (a, b) in enumerate(trim.kept_spans(float(rel.min()) - 1, float(rel.max()) + 1)):
-            span[(rel >= a) & (rel < b)] = index
-        # an interval counts only if both beats are kept and in the same kept stretch
-        both = np.zeros(len(rel), dtype=bool)
-        both[1:] = keep[1:] & keep[:-1] & (span[1:] == span[:-1])
+        if beyond:
+            # an interval counts if the beat that ends it is kept, whatever the beat before it
+            both = keep.copy()
+        else:
+            for index, (a, b) in enumerate(trim.kept_spans(float(rel.min()) - 1, float(rel.max()) + 1)):
+                span[(rel >= a) & (rel < b)] = index
+            # an interval counts only if both beats are kept and in the same kept stretch
+            both = np.zeros(len(rel), dtype=bool)
+            both[1:] = keep[1:] & keep[:-1] & (span[1:] == span[:-1])
         ok &= both
         rr = np.where(both | ~np.isfinite(rr), rr, np.nan)
     beats = Beats(beats.device, beats.unix, beats.amplitude, beats.block, rr, ok, beats.rate, beats.gain, beats.notes)
     results = []
     for label, start, end in windows:
-        sel = (rel >= start) & (rel < end) & keep
+        # "beyond": the left-out beats stay in the arrays (their intervals are masked) so that two intervals are a
+        # successive pair only if they really follow each other; "inside": they are dropped
+        sel = (rel >= start) & (rel < end) & (np.ones(len(rel), dtype=bool) if beyond else keep)
         if trim is not None and trim.active:
             seconds = sum(max(0.0, min(b, end) - max(a, start)) for a, b in trim.kept_spans(start, end))
         else:
@@ -374,6 +391,8 @@ def analyse(sensor: Sensor, epoch_start: float, windows, trim: Optional[Trim] = 
             if first > 0 and rel[first - 1] < start:
                 in_rr[0], in_ok[0] = np.nan, False
         result = window_metrics(label, float(start), float(end), float(seconds), rel[sel], in_rr, in_ok)
+        if beyond:
+            result.beats = int(keep[sel].sum())
         result.notes = beats.notes + result.notes
         results.append(result)
     return results, beats

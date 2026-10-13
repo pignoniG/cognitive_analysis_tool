@@ -16,6 +16,7 @@ cwtool RECORDING [--device {pupil_core,pupil_neon,tobii_g3,varjo}] [--params FIL
 | `--lux` | folder with lux sensor logs (glasses), if not the one of `--logs`, searched with its subfolders; default: the recording folder or its `lux` subfolder |
 | `--sensors` | [sensor logger](logger.md) session folder or recordings folder (Shimmer, EmotiBit) to add to the export, trimmed like the rest, if not the one of `--logs`; default: any logger files in the recording folder |
 | `--no-hrv` | do not compute [heart rate variability](../processing/hrv.md) from a Shimmer's ECG when packing sensor data (the command line computes it by default; it needs NeuroKit2, the `hrv` extra, and without it the HRV is skipped with a warning) |
+| `--hrv-inside-only` | cut the HRV strictly inside the export range (the interval after a cut is lost); by default the beats at its edges use the data beyond the cut, see [HRV](../processing/hrv.md#cutting-at-the-export-range) |
 | `--start`, `--end` | leave out everything before or after this time, in seconds on the exports' `timestamp_relative` axis |
 | `--exclude FROM TO` | leave out FROM to TO seconds, for example a calibration; repeat for several segments |
 | `--out` | export folder; default `RECORDING/cwtool_export` |

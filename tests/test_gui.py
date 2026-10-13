@@ -16,6 +16,7 @@ pytest.importorskip("pyqtgraph")
 pytestmark = pytest.mark.usefixtures("isolated_qsettings")
 
 from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtGui import QCloseEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from cwtool.gui.main_window import MainWindow  # noqa: E402
@@ -247,7 +248,7 @@ def test_analyse_button_becomes_reanalyse_and_reset_view_is_on_the_plots(app, va
     w.show()
     app.processEvents()
     b = w.plots.reset_button
-    assert b.isVisible() and b.x() + b.width() > w.plots.width() - 40 and b.y() < 80      # top right, under the time axis
+    assert b.isVisible() and b.x() + b.width() > w.plots.width() - 40 and b.y() + b.height() <= w.plots.BUTTON_BAR + 2      # top right, in the bar above the plots
     w.close()
 
 
@@ -301,10 +302,8 @@ def test_a_frame_requested_while_scrubbing_does_not_override_later_actions(app, 
     assert w.plots.cursors[0].value() == pytest.approx(1.65)
     preview.request_time(3.5)
     w.open_recording(varjo_folder)           # a new recording starts at its beginning, not at the old request
-    assert wait_for(app, lambda: w.result is not None)
-    for _ in range(5):
-        app.processEvents()
-    assert "frame 0" in preview.time_label.text()
+    assert wait_for(app, lambda: w.result is not None)       # (the old result is there until the new one replaces it)
+    assert wait_for(app, lambda: "frame 0" in preview.time_label.text())
     w.close()
 
 
@@ -679,3 +678,75 @@ def test_the_restore_button_sits_right_under_the_last_block_of_its_pill(app):
         last = max(b.geometry().bottom() for b in blocks)
         assert 0 <= button.geometry().top() - last <= 24, (index, button.geometry().top() - last)   # not pushed to the bottom
     panel.close()
+
+
+def test_changed_parameters_are_flagged_reverted_and_asked_about(app, tmp_path, monkeypatch):
+    from conftest import write_varjo_recording
+    from PySide6.QtWidgets import QMessageBox
+
+    folder = write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0)
+    other = write_varjo_recording(tmp_path / "rec2", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0)
+    w = MainWindow()
+    w.open_recording(folder)
+    assert wait_for(app, lambda: w.result is not None)
+    assert not w.params_dirty() and not w.revert_button.isEnabled() and "changed" not in w.windowTitle()
+    start = w.params_panel.params()
+    w.params_panel.set_params(replace(start, age=start.age + 10))
+    w._update_state()
+    assert w.params_dirty() and w.revert_button.isEnabled() and "changed" in w.windowTitle()
+    # Revert asks, and puts the starting values back
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.No))
+    w.revert_params()
+    assert w.params_dirty()
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+    w.revert_params()
+    assert not w.params_dirty() and w.params_panel.params().age == start.age
+    # opening another recording with changed parameters asks; Cancel stays on this recording
+    w.params_panel.set_params(replace(start, age=start.age + 5))
+    asked = []
+    monkeypatch.setattr(type(w), "_ask_unsaved", lambda self, what: asked.append(what) or QMessageBox.Cancel)
+    w.open_recording(other)
+    assert asked == ["opening another recording"] and w.recording.folder == folder
+    # Save writes the file and the changes are then the saved state; the other recording opens
+    saved = tmp_path / "p.json"
+    w._params_path = saved
+    monkeypatch.setattr(type(w), "_ask_unsaved", lambda self, what: QMessageBox.Save)
+    w.open_recording(other)
+    assert saved.exists() and not w.params_dirty()
+    assert wait_for(app, lambda: w.recording is not None and w.recording.folder == other)
+    # closing with changes and Cancel keeps the window open
+    w.params_panel.set_params(replace(w.params_panel.params(), age=start.age + 1))
+    monkeypatch.setattr(type(w), "_ask_unsaved", lambda self, what: QMessageBox.Cancel)
+    event = QCloseEvent()
+    w.closeEvent(event)
+    assert not event.isAccepted()
+    monkeypatch.setattr(type(w), "_ask_unsaved", lambda self, what: QMessageBox.Discard)
+    w.close()
+
+
+def test_cancel_stops_a_long_task_quietly_and_is_offered_only_when_it_can_work(app, tmp_path, monkeypatch):
+    from conftest import write_varjo_recording
+
+    w = MainWindow()
+    w.open_recording(write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None)
+    errors = []
+    monkeypatch.setattr(w, "_error", lambda *a, **k: errors.append(a))
+
+    def slow(progress, cancelled):
+        while not cancelled():
+            time.sleep(0.01)
+        raise InterruptedError("fit cancelled")           # what the fit does when it is stopped
+
+    w._start_task(slow, lambda r: None, "Fitting…", cancellable=True)
+    app.processEvents()
+    assert not w.cancel_button.isHidden()                  # the fit can be cancelled
+    w.cancel_button.click()
+    assert wait_for(app, lambda: not w._task.isRunning())
+    assert wait_for(app, lambda: "Cancelled" in w.statusBar().currentMessage())
+    assert errors == []                                      # no error box for a cancelled task
+    w._start_task(lambda p, c: time.sleep(0.2), lambda r: None, "Exporting…")      # not cancellable
+    app.processEvents()
+    assert w.cancel_button.isHidden()
+    assert wait_for(app, lambda: not w._task.isRunning())
+    w.close()

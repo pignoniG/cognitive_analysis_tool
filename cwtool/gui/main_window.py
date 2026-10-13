@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import traceback
-from dataclasses import replace
+from dataclasses import asdict, replace
 from functools import partial
 from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QSettings, QSize, Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QKeySequence, QPalette
+from PySide6.QtWidgets import QWidgetAction
 from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox,
                                QHBoxLayout, QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu,
                                QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget,
@@ -26,7 +27,7 @@ from cwtool.gui.trim_panel import TrimPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
-from cwtool.params import DisplayPhotometry, Parameters
+from cwtool.params import DISPLAY_FIELDS, DisplayPhotometry, Parameters
 from cwtool.photometry import fit_light_response, fit_lux_response
 from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video
@@ -36,6 +37,7 @@ RECOMPUTE_DELAY_MS = 150
 # channel of a sensor with none of these; at most MAX_SHOWN at once, as each is a plot.
 PREFERRED_SIGNALS = ("exg_ads1292r_1_ch1_24bit", "EDA", "PPG_IR")
 MAX_SHOWN = 6
+DROP_DOWN_STYLE = "QPushButton::menu-indicator { image: none; width: 0px; }"      # no separate arrow: "▾" is in the text
 # the columns of the HRV table: header, the field of the result, the format (the full set is in the exported file)
 HRV_COLUMNS = (("Window", "label", "{}"), ("s", "seconds", "{:.0f}"), ("HR", "mean_hr", "{:.0f}"),
                ("RMSSD", "rmssd", "{:.0f}"), ("SDNN", "sdnn", "{:.0f}"), ("LF/HF", "lf_hf", "{:.1f}"))
@@ -160,6 +162,19 @@ class MainWindow(QMainWindow):
         self.recording_label.setWordWrap(True)
         self.recording_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         rec_layout.addWidget(self.recording_label)
+        self.setup_box = QGroupBox("Set-up: what is still missing")
+        setup_layout = QVBoxLayout(self.setup_box)
+        self.setup_label = QLabel()
+        self.setup_label.setWordWrap(True)
+        self.setup_label.setTextFormat(Qt.RichText)
+        self.setup_label.linkActivated.connect(self._setup_link)
+        link_palette = self.setup_label.palette()
+        link_palette.setColor(QPalette.Link, QColor(palette.WARNING))      # a missing item is red, as its mark
+        self.setup_label.setPalette(link_palette)
+        setup_layout.addWidget(self.setup_label)
+        self.setup_box.hide()
+        self.fits_done = {"light": False, "timing": False, "lux": False}     # fits applied in this session
+
         self.own_folder_button = QPushButton("Use the recording's own folder")
         self.own_folder_button.setToolTip(self.forget_logs_action.toolTip())
         self.own_folder_button.clicked.connect(self.forget_logger_folder)
@@ -219,6 +234,13 @@ class MainWindow(QMainWindow):
         self.signal_list.setMaximumHeight(150)
         self.signal_list.setToolTip(f"The signals to show under ΔPD (at most {MAX_SHOWN}). All of them are exported")
         self.signal_list.itemChanged.connect(self._show_sensors)
+        self.hrv_edges_check = QCheckBox("Use the data beyond the export range at its edges")
+        self.hrv_edges_check.setChecked(True)
+        self.hrv_edges_check.setToolTip(
+            "The heartbeats are found on all the data and the export range only cuts which beats count: the first beat "
+            "kept after a cut keeps its interval from the beat before it, in the part that is left out. Off: the cut is "
+            "strict, and the interval that reaches across a cut is lost")
+        self.hrv_edges_check.toggled.connect(lambda _: self._hrv_timer.start() if self.hrv_beats else None)
         self.hrv_status = QLabel()
         self.hrv_status.setWordWrap(True)
         self.hrv_status.hide()
@@ -245,6 +267,7 @@ class MainWindow(QMainWindow):
         folder_row.addWidget(self.own_folder_button)
         folder_row.addStretch(1)
         sensor_layout.addLayout(folder_row)
+        sensor_layout.addWidget(self.hrv_edges_check)
         sensor_layout.addWidget(self.hrv_status)         # the HRV result sits right under its button
         sensor_layout.addWidget(self.hrv_table)
         sensor_layout.addWidget(self.hrv_notes)
@@ -252,7 +275,7 @@ class MainWindow(QMainWindow):
 
         data_page = QWidget()
         data_layout = QVBoxLayout(data_page)
-        for box in (rec_box, video_box, sensor_box):
+        for box in (rec_box, self.setup_box, video_box, sensor_box):
             data_layout.addWidget(box)
         data_layout.addStretch(1)
 
@@ -266,6 +289,11 @@ class MainWindow(QMainWindow):
             button.setToolTip(action.text().replace("&", ""))
             button.clicked.connect(action.trigger)
             file_row.addWidget(button)
+        self.revert_button = QPushButton("Revert")
+        self.revert_button.setToolTip("Put the parameters back to what they were when they were last loaded or saved")
+        self.revert_button.clicked.connect(self.revert_params)
+        self.revert_button.setEnabled(False)
+        file_row.addWidget(self.revert_button)
         params_layout.addLayout(file_row)
         params_layout.addWidget(self.params_panel, 1)
 
@@ -462,7 +490,20 @@ class MainWindow(QMainWindow):
         self.warnings_button.setStyleSheet(f"QToolButton {{ color: {palette.WARNING}; font-weight: bold; }}")
         self.warnings_button.toggled.connect(lambda on: self.warnings_label.setVisible(on))
         self.warnings_button.hide()
+        self.details_label = QLabel()          # the rest of what the strip used to say, in a popover
+        self.details_label.setContentsMargins(10, 8, 10, 8)
+        self.details_label.setTextFormat(Qt.RichText)
+        self.details_button = QPushButton("Details ▾")
+        self.details_button.setStyleSheet(DROP_DOWN_STYLE)
+        self.details_button.setToolTip("The expected pupil at the display's black and white (or where the luminance comes "
+                                       "from), the scale and offset applied, the sampling rates and the gaps")
+        self.details_button.setMenu(QMenu(self.details_button))
+        holder = QWidgetAction(self.details_button)
+        holder.setDefaultWidget(self.details_label)
+        self.details_button.menu().addAction(holder)
+        self.details_button.hide()
         strip.addWidget(self.summary_label, 1)
+        strip.addWidget(self.details_button, 0, Qt.AlignTop)
         strip.addWidget(self.warnings_button, 0, Qt.AlignTop)
         self.warnings_label = QLabel()
         self.warnings_label.setWordWrap(True)
@@ -480,7 +521,8 @@ class MainWindow(QMainWindow):
         bar.setContentsMargins(0, 0, 0, 0)
 
         def drop_down(text: str, tip: str) -> QPushButton:
-            button = QPushButton(text)
+            button = QPushButton(f"{text} ▾")          # the arrow is part of the text: centred with it
+            button.setStyleSheet(DROP_DOWN_STYLE)
             button.setToolTip(tip)
             button.setMenu(QMenu(button))
             return button
@@ -607,7 +649,7 @@ class MainWindow(QMainWindow):
         self.analyse_button.setText("Reanalyse video" if self.video is not None else "Analyse video")
         self.analyse_button.setToolTip("Analyse the scene video again, ignoring the saved analysis"
                                        if self.video is not None else "Analyse the scene video")
-        self.cancel_button.setVisible(busy)   # only while an analysis or fit runs
+        self.cancel_button.setVisible(busy and getattr(self, "_task_cancellable", False))   # the video analysis and the fit
         self.open_action.setEnabled(not busy)
         self.forget_logs_action.setEnabled(self._logs_for_recording() is not None and not busy)
         self.export_action.setEnabled(self.result is not None)
@@ -628,17 +670,19 @@ class MainWindow(QMainWindow):
             self.warnings_button.setChecked(False)
         if self.result is None:
             self.summary_label.setText("Open a recording to start." if not has_rec else "")
+            self.details_label.setText("")
         else:
             r = self.result
-            gaps = f" &nbsp;&nbsp; gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
+            gaps = f", gaps {r.gap_fraction:.0%}" if r.gap_fraction >= 0.005 else ""
             leak = (f" &nbsp;&nbsp; <b>light left</b> R² {r.leak_r2:.2f} ({r.leak_slope:+.2f} mm/decade)"
                     if np.isfinite(r.leak_r2) else "")
             ends = (f"expected PD at black {r.expected_black:.2f} mm, white {r.expected_white:.2f} mm &nbsp;&nbsp; "
                     if np.isfinite(r.expected_black) else self._route_text(r) + " &nbsp;&nbsp; ")
-            self.summary_label.setText(
-                f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm{leak} &nbsp;&nbsp; {ends}"
-                f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
+            self.summary_label.setText(f"<b>ΔPD RMS</b> {r.cw_rms:.3f} mm &nbsp; <b>SD</b> {r.cw_sd:.3f} mm{leak}")
+            self.details_label.setText(
+                f"{ends.replace(' &nbsp;&nbsp; ', '')}<br>pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm<br>"
                 f"{r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}")
+        self.details_button.setVisible(self.result is not None)
         self.own_folder_button.setEnabled(self._logs_for_recording() is not None and not busy)
         missing_lux = has_rec and self.recording.luminance_source == "lux_sensor" and self.recording.lux_values is None
         self.rail.mark(0, bool(missing_lux), "No lux sensor readings found for this recording")
@@ -648,7 +692,10 @@ class MainWindow(QMainWindow):
         if has_rec and self.recording.luminance_source == "display":
             name += ", display " + (self._display_path.name if self._display_path else "defaults")
         rec = f": {self.recording.name}" if has_rec else ""
-        self.setWindowTitle(f"Cognitive Workload Tool {__version__}{rec} ({name})")
+        changed = self.params_dirty()
+        self._update_setup()
+        self.revert_button.setEnabled(changed and not busy)
+        self.setWindowTitle(f"Cognitive Workload Tool {__version__}{rec} ({name}{', changed' if changed else ''})")
 
     @staticmethod
     def _route_text(r) -> str:
@@ -763,6 +810,9 @@ class MainWindow(QMainWindow):
 
     def open_recording(self, folder: Path) -> None:
         """Load a recording in the background, then set up the plots, the preview and the controls for its device."""
+        same = self.recording is not None and Path(folder) == self.recording.folder     # a reload of the open one
+        if not same and not self._confirm_params("opening another recording"):
+            return
         lux_folder = self._logs_for_recording()
 
         def load(progress, cancelled):
@@ -800,6 +850,8 @@ class MainWindow(QMainWindow):
         with_lux = rec.luminance_source == "lux_sensor" and rec.lux_values is not None
         self._show_sequence_controls("display" if on_display else ("lux" if with_lux else "none"))
         self.preview.set_recording(rec, self.params_panel.video_settings())
+        if getattr(self, "_params_baseline", None) is None:
+            self._mark_params_saved()              # the starting parameters: changes are measured from them
         if len(rec.time):
             self.plots.set_cursor(float(rec.time[0]))
         self._update_state()
@@ -831,7 +883,7 @@ class MainWindow(QMainWindow):
             return res
 
         self._start_task(work, lambda res: res and self._video_ready(res, "analysed"),
-                         f"Analysing {rec.scene_video.name}…", show_progress=True)
+                         f"Analysing {rec.scene_video.name}…", show_progress=True, cancellable=True)
 
     def _video_ready(self, video: VideoResult, how: str) -> None:
         self.video = video
@@ -847,25 +899,37 @@ class MainWindow(QMainWindow):
 
     # Tasks
 
-    def _start_task(self, fn, on_success, message: str, show_progress: bool = False, bar=None) -> None:
+    def _start_task(self, fn, on_success, message: str, show_progress: bool = False, bar=None,
+                    cancellable: bool = False) -> None:
         """Run ``fn(progress, cancelled)`` in the background; ``bar`` is the progress bar to drive (default: the video
-        analysis' one in the Data tab)."""
+        analysis' one in the Data tab). The Cancel button is offered only for a task that checks ``cancelled``."""
         if self._task is not None and self._task.isRunning():
             return
         self.statusBar().showMessage(message)
         self._task_message = message
+        self._task_cancellable = cancellable
+        self.cancel_button.setEnabled(True)
         self._task = Task(fn, self)
         self._bar = bar or self.progress
         self._task.progressed.connect(lambda p: self._bar.setValue(int(p * 1000)))
         self._task.succeeded.connect(on_success)
-        self._task.failed.connect(lambda msg: self._error("Error", msg))
+        self._task.failed.connect(self._task_failed)
         self._task.finished.connect(self._task_finished)
         self._bar.setValue(0)
         self._bar.setVisible(show_progress)
         self._task.start()
         self._update_state()
 
+    def _task_failed(self, message: str) -> None:
+        """A background task raised: tell the user, except when it only stopped because they cancelled it."""
+        if self._task is not None and self._task.is_cancelled():
+            return
+        self._error("Error", message)
+
     def _task_finished(self) -> None:
+        if self._task is not None and self._task.is_cancelled():
+            self.statusBar().showMessage("Cancelled.", 4000)
+            self._task_message = None
         self.progress.hide()
         self.export_progress.hide()
         if self.statusBar().currentMessage() == getattr(self, "_task_message", None):
@@ -876,6 +940,9 @@ class MainWindow(QMainWindow):
         """Stop the running background task."""
         if self._task is not None:
             self._task.cancel()
+            self.cancel_button.setEnabled(False)
+            self.statusBar().showMessage("Cancelling…")
+            self._task_message = "Cancelling…"
 
     # Parameters and results
 
@@ -926,7 +993,9 @@ class MainWindow(QMainWindow):
     def _light_done(self, fit) -> None:
         if PhotometryDialog(fit, self).exec():
             self.params_panel.set_params(fit.params)
+            self.fits_done["light"] = True
             self.step_light.set_summary(f"Applied: light sensitivity ×{fit.params.sensitivity:.3g}")
+            self._update_state()
 
     def fit_lux(self) -> None:
         """Fit the sensitivity and pupil offset of a glasses recording on the calibration sequence, in the background.
@@ -956,6 +1025,7 @@ class MainWindow(QMainWindow):
                           f"participant's other recordings.", QMessageBox.Apply | QMessageBox.Cancel, self)
         if box.exec() == QMessageBox.Apply:
             self.params_panel.set_params(fit.params)
+            self.fits_done["lux"] = True
             self.step_lux.set_summary(f"Applied: sensitivity ×{fit.sensitivity:.3g}, offset {fit.offset:+.3f} mm, "
                                       f"ΔPD RMS in sequence {fit.rms_after:.3f} mm")
 
@@ -971,7 +1041,7 @@ class MainWindow(QMainWindow):
             return fit_calibration(rec, video, params, start, end, fit_dynamics=dynamics, cancelled=cancelled,
                                    sequence=sequence, fit_transient=dynamics)
 
-        self._start_task(work, self._fit_done, "Fitting on the calibration sequence…")
+        self._start_task(work, self._fit_done, "Fitting on the calibration sequence…", cancellable=True)
 
     def _fit_done(self, fit) -> None:
         dyn = (f"<br>dilation τ {fit.attack:.2f} s, constriction τ {fit.release:.2f} s"
@@ -992,6 +1062,7 @@ class MainWindow(QMainWindow):
                           QMessageBox.Apply | QMessageBox.Cancel, self)
         if box.exec() == QMessageBox.Apply:
             self.params_panel.set_params(fit.params)
+            self.fits_done["timing"] = True
             self.step_timing.set_summary(f"Applied: latency {fit.delay:.2f} s, ΔPD RMS in sequence "
                                          f"{fit.rms_after:.3f} mm")
 
@@ -1086,6 +1157,120 @@ class MainWindow(QMainWindow):
         self.sequence_label.setText(f"{sequence.name}: {len(sequence.steps)} steps, {sequence.duration:.0f} s")
         self._sequence_changed()
 
+    # The set-up checklist at the top of the Data tab
+
+    OK_COLOUR = "#4b9a2a"
+
+    def _setup_items(self) -> list:
+        """``(done, text, link)`` of what the open recording needs before its ΔPD can be trusted: for a display device the
+        display photometry, the calibration sequence and the participant's two fits; for glasses with a lux sensor the lux
+        readings, the sequence and the fit of the sensitivity and offset. Empty for a device that needs none of it."""
+        rec = self.recording
+        if rec is None:
+            return []
+
+        def fit(name: str, key: str) -> tuple:
+            """A fit counts as done when it was applied in this session or the participant's file was loaded."""
+            if self.fits_done[key]:
+                return True, f"{name} fitted", "tab:2"
+            if self._params_path is not None:
+                return True, f"{name} fitted (from {self._params_path.name})", "tab:2"
+            return False, f"{name} not fitted", "tab:2"
+
+        placed = self.sequence_check.isChecked()
+        sequence = (placed, "Calibration sequence placed" if placed
+                    else "Calibration sequence not placed: show its overlay and set its start", "tab:2")
+        if rec.luminance_source == "display":
+            if self._display_path is not None:
+                photometry = (True, f"Display photometry loaded ({self._display_path.name})", "action:display")
+            else:
+                photometry = (False, "Display photometry not loaded: the nominal defaults are used", "action:display")
+            return [photometry, sequence, fit("Light sensitivity", "light"), fit("Latency and offset", "timing")]
+        if rec.luminance_source == "lux_sensor":
+            if rec.lux_values is not None:
+                lux = (True, f"Lux readings found ({len(rec.lux_values):,})", "action:logs")
+            else:
+                lux = (False, "Lux readings not found: choose the logger folder", "action:logs")
+            return [lux, sequence, fit("Sensitivity and offset", "lux")]
+        return []
+
+    def _update_setup(self) -> None:
+        items = self._setup_items()
+        self.setup_box.setVisible(bool(items))
+        lines = []
+        for done, text, link in items:
+            mark = f"<span style='color:{self.OK_COLOUR}'>✓</span>" if done else f"<span style='color:{palette.WARNING}'>✗</span>"
+            lines.append(f"{mark} " + (text if done else f"<a href='{link}' style='color:{palette.WARNING}'>{text}</a>"))
+        self.setup_label.setText("<br>".join(lines))
+
+    def _setup_link(self, link: str) -> None:
+        """A line of the checklist was clicked: go to where it is done."""
+        kind, _, value = link.partition(":")
+        if kind == "tab":
+            self.rail.set_current(int(value))
+        elif value == "display":
+            self.choose_display()
+        elif value == "logs":
+            self.choose_sensors()
+
+    def _participant_dict(self) -> dict:
+        """The parameters as the participant's file holds them (without the display photometry)."""
+        data = asdict(self.params_panel.params())
+        for key in DISPLAY_FIELDS:
+            data.pop(key, None)
+        return data
+
+    def _mark_params_saved(self) -> None:
+        """The parameters now are the ones on disk (just loaded or saved), or the starting ones: changes are measured
+        from here."""
+        self._params_baseline = self.params_panel.params()
+
+    def params_dirty(self) -> bool:
+        """True if the participant's parameters differ from the last loaded or saved state."""
+        base = getattr(self, "_params_baseline", None)
+        if base is None:
+            return False
+        saved = asdict(base)
+        for key in DISPLAY_FIELDS:
+            saved.pop(key, None)
+        return saved != self._participant_dict()
+
+    def revert_params(self) -> None:
+        """Put the parameters back to the last loaded or saved state, after asking (the display photometry stays)."""
+        if not self.params_dirty():
+            return
+        name = self._params_path.name if self._params_path else "the starting values"
+        if QMessageBox.question(self, "Revert parameters", f"Discard the changes and go back to {name}?") \
+                != QMessageBox.Yes:
+            return
+        self._restore_baseline()
+
+    def _restore_baseline(self) -> None:
+        current = self.params_panel.params()
+        self.params_panel.set_params(replace(self._params_baseline, **{k: getattr(current, k) for k in DISPLAY_FIELDS}))
+        self._update_state()
+
+    def _ask_unsaved(self, what: str):
+        """Ask what to do with changed parameters before ``what`` ("opening another recording", "closing")."""
+        saved = f"since {self._params_path.name} was saved or loaded" if self._params_path else "since the start"
+        return QMessageBox.question(
+            self, "Parameters changed", f"The parameters have changed {saved}. Save them before {what}?",
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
+
+    def _confirm_params(self, what: str) -> bool:
+        """True if it is fine to go on (``what``): the parameters are unchanged, or were saved or discarded; False if the
+        user cancelled."""
+        if not self.params_dirty():
+            return True
+        choice = self._ask_unsaved(what)
+        if choice == QMessageBox.Save:
+            self.save_params()
+            return not self.params_dirty()          # the file dialog may have been cancelled
+        if choice == QMessageBox.Discard:
+            self._restore_baseline()
+            return True
+        return False
+
     def choose_params(self) -> None:
         """Ask for a participant parameter file and load it (the display photometry is kept)."""
         path, _ = QFileDialog.getOpenFileName(self, "Load parameters", self._params_dir(), "Parameters (*.json)")
@@ -1098,6 +1283,7 @@ class MainWindow(QMainWindow):
                 self._error("Cannot load parameters", str(e))
                 return
             self._params_path = Path(path)
+            self._mark_params_saved()
             self._update_state()
 
     def save_params(self) -> None:
@@ -1106,6 +1292,8 @@ class MainWindow(QMainWindow):
             self.save_params_as()
         else:
             self.params_panel.params().save(self._params_path, participant_only=True)
+            self._mark_params_saved()
+            self._update_state()
             self.statusBar().showMessage(f"Saved {self._params_path} (display photometry is saved separately)", 4000)
 
     def save_params_as(self) -> None:
@@ -1399,6 +1587,10 @@ class MainWindow(QMainWindow):
         self.plots.clear_beats()
         self._update_hrv_controls()
 
+    def _hrv_edges(self) -> str:
+        """How the HRV is cut at the export range: on the data beyond the markers (default) or strictly inside."""
+        return "beyond" if self.hrv_edges_check.isChecked() else "inside"
+
     def _refresh_hrv(self) -> None:
         """The table and the beat markers from the beats found, for the current export range: only the windows and the
         trusted intervals are worked out again, not the detection, so this follows the range as it is edited."""
@@ -1412,7 +1604,7 @@ class MainWindow(QMainWindow):
             beats = self.hrv_beats.get(s.name)
             if beats is None:
                 continue
-            results, adjusted = hrv.analyse(s, rec.epoch_start, windows, trim, beats=beats)
+            results, adjusted = hrv.analyse(s, rec.epoch_start, windows, trim, beats=beats, edges=self._hrv_edges())
             if series is None:                       # the plots show the first ECG
                 series = hrv.time_series(adjusted, rec.epoch_start, self.rmssd_window.value())
             t, v = s.series(hrv.LEAD_II)
@@ -1572,11 +1764,12 @@ class MainWindow(QMainWindow):
         trim = self.trim_panel.trim()
         result, rec, params = self.result, self.recording, self.params_panel.params()
         sensors_, use_hrv, beats = list(self.sensors), bool(self.hrv_beats), dict(self.hrv_beats)
+        edges = self._hrv_edges()
         self.export_result.hide()
 
         def work(progress, cancelled):
             return pipeline.export(result, rec, params, Path(folder), trim=trim, sensors=sensors_, hrv=use_hrv,
-                                   hrv_beats=beats, progress=progress)
+                                   hrv_beats=beats, progress=progress, hrv_edges=edges)
 
         self._export_trim = trim
         self._start_task(work, lambda paths: self._exported(paths, Path(folder), trim), "Exporting…",
@@ -1603,7 +1796,10 @@ class MainWindow(QMainWindow):
         self.export_result.show()
 
     def closeEvent(self, event) -> None:
-        """Stop the running task and save the layout before closing."""
+        """Offer to save changed parameters, stop the running task and save the layout before closing."""
+        if not self._confirm_params("closing"):
+            event.ignore()
+            return
         if self._task is not None and self._task.isRunning():
             self._task.cancel()
             self._task.wait(5000)

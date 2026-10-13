@@ -55,9 +55,23 @@ turns it off). The logger computes nothing: it records the raw ECG and its setti
 ## Windows
 
 The export holds one row per window: the **whole recording** and **each event** of the event log, clipped to the
-recording. With an [export range](../usage/gui.md#export-range) the beats in the left-out parts are dropped, and no
-interval counts that spans one; `kept_seconds` says how much of the window is left. The first beat of a window has no
-interval (its predecessor is before the window).
+recording. `kept_seconds` says how much of the window is left after an [export range](../usage/gui.md#export-range).
+The first beat of a window has no interval (its predecessor is before the window).
+
+### Cutting at the export range
+
+By default the cut is made **at the markers, on the data beyond them**: the heartbeats are found on the whole ECG, and
+the export range only decides which beats count. A beat kept after a cut keeps its interval from the beat before it,
+even when that beat is in the part that is left out, so the edges lose nothing. What is dropped is every beat and
+interval that ends in a left-out part, and a successive difference (RMSSD, pNN50, SD1) is only taken between two kept
+intervals that really follow each other, never across a cut. The intervals around a cut are trusted by the same rule
+as everywhere (they are judged against their neighbours in the whole recording).
+
+The alternative is a strict cut (the box *Use the data beyond the export range at its edges* off in the app,
+`--hrv-inside-only` on the command line, `hrv_edges="inside"` in Python): the beats in the left-out parts are
+dropped and no interval counts that reaches into one, so the first interval after each cut is lost. The spectrum (LF,
+HF) of a window with a left-out part in the middle is estimated from the kept beats only and bridges the cut, so it is
+best read for windows without one.
 
 ### How long a window must be
 
