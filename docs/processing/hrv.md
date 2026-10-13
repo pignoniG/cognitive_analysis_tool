@@ -56,22 +56,24 @@ turns it off). The logger computes nothing: it records the raw ECG and its setti
 
 The export holds one row per window: the **whole recording** and **each event** of the event log, clipped to the
 recording. `kept_seconds` says how much of the window is left after an [export range](../usage/gui.md#export-range).
-The first beat of a window has no interval (its predecessor is before the window).
+A beat belongs to the window it is in, with its interval from the beat before it, wherever that beat is; only the very
+first beat of the recording has no interval.
 
 ### Cutting at the export range
 
-By default the cut is made **at the markers, on the data beyond them**: the heartbeats are found on the whole ECG, and
-the export range only decides which beats count. A beat kept after a cut keeps its interval from the beat before it,
-even when that beat is in the part that is left out, so the edges lose nothing. What is dropped is every beat and
-interval that ends in a left-out part, and a successive difference (RMSSD, pNN50, SD1) is only taken between two kept
-intervals that really follow each other, never across a cut. The intervals around a cut are trusted by the same rule
-as everywhere (they are judged against their neighbours in the whole recording).
+The HRV is **always worked out on the whole recording first and cut afterwards**, so the export range loses nothing at
+its edges and there is no option to do it the other way:
 
-The alternative is a strict cut (the box *Use the data beyond the export range at its edges* off in the app,
-`--hrv-inside-only` on the command line, `hrv_edges="inside"` in Python): the beats in the left-out parts are
-dropped and no interval counts that reaches into one, so the first interval after each cut is lost. The spectrum (LF,
-HF) of a window with a left-out part in the middle is estimated from the kept beats only and bridges the cut, so it is
-best read for windows without one.
+1. the beats are found on all the ECG, and every interval is judged (trusted or not) against its neighbours wherever
+   they are;
+2. a window then counts the beats that are in it and not in a left-out part, each with its interval from the beat
+   before it, even if that beat lies in a left-out part;
+3. a successive difference (RMSSD, pNN50, SD1) is taken between two trusted intervals in a row, the later one counted,
+   so one at the edge of a cut uses the interval before it, and none is ever taken across a cut;
+4. the spectrum is read from the interval series of the whole recording (resampled once), cut at the markers: each kept
+   stretch of the window is detrended and cut into half-overlapping Welch segments of 64 s that lie inside it, and the
+   segments of all the stretches are averaged. A cut is never bridged. If no stretch is as long as a segment, the longest
+   one is used whole, and below one minute of kept data in all there is no spectrum.
 
 ### How long a window must be
 
@@ -128,6 +130,19 @@ shimmer = next(s for s in loaded if hrv.has_ecg(s))
 results, beats = hrv.analyse(shimmer, epoch_start, [("recording", 0.0, duration)])
 print(results[0].rmssd, results[0].notes)
 ```
+
+## Check against the literature
+
+The procedure was checked against Shaffer & Ginsberg (2017), Laborde et al. (2017), Pham et al. (2021) and the descriptions
+of Brennan et al. (2001) and Kubios found in other papers (the 1996 Task Force text could not be opened, so what is
+attributed to it is as these papers quote it). The bands, the minimum of 1 minute for HF and 2 for LF, RMSSD as the
+preferred short-term vagal measure, the HF and breathing link, LF and LF/HF not being sympathetic or balance measures, the
+Poincaré relations, the 4 Hz resampled interval series with Welch's method and the use of a baseline phase agree with them.
+The differences are that the Welch segments are 64 s (Kubios used 256 s, so LF is coarse and absolute values are not
+comparable with other software), that Laborde et al. prefer an autoregressive estimate for HF, that untrusted intervals are
+left out rather than interpolated (except in the spectrum), and that the thresholds of the trust rule are chosen on test
+recordings, not taken from a standard. They also advise looking at the ECG, which the beats drawn on the plot are for.
+Details and what is still open are in [open issue 51](../OPEN_ISSUES.md).
 
 ## Reference
 

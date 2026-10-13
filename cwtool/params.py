@@ -135,19 +135,33 @@ class Parameters:
             return self.camera_white * self.camera_reference_ms / self.camera_exposure_ms
         return self.camera_white
 
-    def save(self, path: str | Path, participant_only: bool = False) -> None:
+    def save(self, path: str | Path, participant_only: bool = False, device: str = "") -> None:
         """Write the parameters as JSON. ``participant_only`` leaves out the display photometry,
-        which is saved separately (:class:`DisplayPhotometry`); exports keep everything used."""
+        which is saved separately (:class:`DisplayPhotometry`); exports keep everything used. ``device`` is the
+        device the parameters were set for: a file that names one can only be loaded for that device."""
         data = asdict(self)
         if participant_only:
             for key in DISPLAY_FIELDS:
                 data.pop(key)
+        if device:
+            data = {"device": device, **data}
         Path(path).write_text(json.dumps(data, indent=2))
 
     @classmethod
-    def load(cls, path: str | Path, profile=None, base: "Parameters | None" = None) -> "Parameters":
-        """Read parameters from a JSON file; values missing from it keep those of ``base``."""
-        return cls.from_dict(json.loads(Path(path).read_text()), profile, base)
+    def load(cls, path: str | Path, profile=None, base: "Parameters | None" = None,
+             device: str | None = None) -> "Parameters":
+        """Read parameters from a JSON file; values missing from it keep those of ``base``. With ``device`` (the device
+        of the recording they are for), a file written for another device is refused with :class:`DeviceMismatch`: the
+        calibration and the parameters depend on the hardware (optics, camera, light sensor, pupil estimate), so they are
+        not carried from one device to another. A file that does not name a device (written before this) is accepted."""
+        data = json.loads(Path(path).read_text())
+        written_for = data.get("device")
+        if device and written_for and written_for != device:
+            raise DeviceMismatch(
+                f"{Path(path).name} was set for a {written_for} recording and this is a {device} recording. The "
+                "calibration and the parameters depend on the hardware, so they cannot be used with another device: "
+                "fit them again for this one.")
+        return cls.from_dict(data, profile, base)
 
     @classmethod
     def from_dict(cls, data: dict, profile=None, base: "Parameters | None" = None) -> "Parameters":
@@ -179,6 +193,10 @@ class Parameters:
         values = asdict(base) if base is not None else {}
         values.update({k: v for k, v in data.items() if k in known})
         return cls(**values)
+
+
+class DeviceMismatch(ValueError):
+    """A parameter file was written for another device than the recording's."""
 
 
 # Parameters that describe the display rather than the participant.

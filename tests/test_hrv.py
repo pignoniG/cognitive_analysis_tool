@@ -196,14 +196,14 @@ def test_windows_and_the_trim_decide_which_intervals_count():
     results, _ = hrv.analyse(sensor, EPOCH + 0.3, windows)
     assert results[1].beats + results[2].beats == results[0].beats and results[0].intervals > 190
     trim = Trim(exclude=[(50.0, 150.0)])
-    cut, beats = hrv.analyse(sensor, EPOCH + 0.3, windows, trim, edges="inside")
+    cut, beats = hrv.analyse(sensor, EPOCH + 0.3, windows, trim)
     assert cut[0].seconds == pytest.approx(100.0) and cut[1].seconds == pytest.approx(50.0)
-    # strictly inside: no beat or interval inside the left-out part, and none that spans it
+    # no beat inside the left-out part is kept; the first beat after it keeps its interval from the beat before it
     rel = beats.unix - (EPOCH + 0.3)
     inside = (rel >= 50.0) & (rel < 150.0)
     assert not beats.ok[inside].any()
     after = np.flatnonzero(rel >= 150.0)[0]
-    assert not beats.ok[after] and np.isnan(beats.rr[after])
+    assert beats.ok[after] and np.isfinite(beats.rr[after])
 
 
 def test_the_files_have_the_measures_and_the_beats(tmp_path):
@@ -300,38 +300,53 @@ def test_the_heart_rate_and_the_moving_rmssd_of_known_intervals():
     assert len(hrv.time_series(_beats_of_intervals([1000.0, 1000.0]), EPOCH).hr) == 0
 
 
-def test_the_cut_is_made_at_the_markers_on_the_data_beyond_them():
-    """By default the first beat kept after a cut keeps its interval from the beat in the left-out part."""
+def test_the_hrv_is_worked_out_on_everything_and_then_cut_at_the_markers():
     rr = [0.8] * 40 + [1.0] * 70                          # a step in the heart rate, inside the part that is left out
     t, mv, truth = synthetic_ecg(rr)
     sensor = to_sensor(t, mv)
     windows = [("all", 0.0, 100.0)]
+    whole, _ = hrv.analyse(sensor, EPOCH + 0.3, windows)
     trim = Trim(exclude=[(30.0, 50.0)])
-    beyond, kept = hrv.analyse(sensor, EPOCH + 0.3, windows, trim)                     # the default
-    inside, _ = hrv.analyse(sensor, EPOCH + 0.3, windows, trim, edges="inside")
-    assert beyond[0].intervals == inside[0].intervals + 1 and beyond[0].beats == inside[0].beats
+    cut, kept = hrv.analyse(sensor, EPOCH + 0.3, windows, trim)
     rel = kept.unix - (EPOCH + 0.3)
+    n_kept = int(((rel >= 0) & (rel < 100.0) & ~((rel >= 30.0) & (rel < 50.0))).sum())
+    assert cut[0].beats == n_kept and cut[0].intervals == n_kept - 1                    # every kept beat but the first has one
     first_after = np.flatnonzero(rel >= 50.0)[0]
     assert kept.ok[first_after] and np.isfinite(kept.rr[first_after])                   # it keeps its interval
     assert not kept.ok[(rel >= 30.0) & (rel < 50.0)].any()                              # none ends inside the cut
-    # two intervals on the two sides of the cut are not a successive pair: the step does not make RMSSD jump
-    assert beyond[0].rmssd < 10.0 and inside[0].rmssd < 10.0
+    # the step is inside the cut: the kept intervals are two steady stretches, and no difference is taken across the cut
+    assert cut[0].rmssd < 10.0 and cut[0].sdnn > 50.0
     # the start marker: the first kept beat has its interval from the beat before the cut
     start_cut, _ = hrv.analyse(sensor, EPOCH + 0.3, windows, Trim(start=20.0))
-    start_inside, _ = hrv.analyse(sensor, EPOCH + 0.3, windows, Trim(start=20.0), edges="inside")
-    assert start_cut[0].intervals == start_inside[0].intervals + 1
-    with pytest.raises(ValueError):
-        hrv.analyse(sensor, EPOCH + 0.3, windows, trim, edges="sideways")
+    assert start_cut[0].intervals == start_cut[0].beats
+    # the spectrum of a window with a cut is read from the kept stretches of the interval series, not bridged
+    long_t, long_mv, _ = synthetic_ecg(rr_series(260, freq=0.25))
+    long_sensor = to_sensor(long_t, long_mv)
+    full, _ = hrv.analyse(long_sensor, EPOCH + 0.3, [("w", 0.0, 250.0)])
+    with_cut, _ = hrv.analyse(long_sensor, EPOCH + 0.3, [("w", 0.0, 250.0)], Trim(exclude=[(100.0, 130.0)]))
+    assert np.isfinite(with_cut[0].hf) and with_cut[0].hf == pytest.approx(full[0].hf, rel=0.35)
+    assert with_cut[0].hfn == pytest.approx(full[0].hfn, abs=0.12)
 
 
-def test_the_export_and_the_command_line_can_cut_the_hrv_strictly(tmp_path):
-    import csv
+def test_a_difference_at_the_edge_of_a_window_uses_the_interval_before_it():
+    rr = np.array([1.1, 1.0, 1.1, 1.0])
+    times = np.cumsum(rr)
+    ok = np.ones(4, bool)
+    alone = hrv.window_metrics("w", 0, 10, 10, times, rr, ok)
+    with_before = hrv.window_metrics("w", 0, 10, 10, times, rr, ok, rr_prev=1.1, ok_prev=True)
+    assert alone.rmssd == pytest.approx(100.0)                                        # three differences of 100 ms
+    assert with_before.rmssd == pytest.approx(np.sqrt(3 * 100.0 ** 2 / 4))            # a fourth one, 1.1 -> 1.1, of 0
+    # beats that are not counted stand between the counted ones: no difference across them
+    counted = np.array([True, True, False, True])
+    gap = hrv.window_metrics("w", 0, 10, 10, times, rr, ok, counted=counted)
+    assert gap.beats == 3 and gap.intervals == 3 and gap.rmssd == pytest.approx(100.0)   # (1.1,1.0) only; 1.1 -> 1.0 is skipped
 
-    from cwtool import pipeline
-    from test_export_package import write_session  # noqa: F401  (the helpers used below are in test_export_package)
 
-    assert "hrv_edges" in pipeline.export.__code__.co_varnames
-    from cwtool import cli
+def test_the_hrv_has_no_option_to_cut_before_working_out():
+    import inspect
 
-    parser_help = " ".join(open(cli.__file__).read().split())
-    assert "--hrv-inside-only" in parser_help
+    from cwtool import cli, pipeline
+
+    assert "edges" not in inspect.signature(hrv.analyse).parameters
+    assert "hrv_edges" not in inspect.signature(pipeline.export).parameters
+    assert "hrv-inside" not in open(cli.__file__).read()

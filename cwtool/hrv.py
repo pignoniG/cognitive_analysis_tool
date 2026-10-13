@@ -286,15 +286,70 @@ def spectrum(times: np.ndarray, nn: np.ndarray) -> tuple[float, float]:
     return band(*LF_BAND), band(*HF_BAND)
 
 
+def tachogram(times: np.ndarray, nn: np.ndarray) -> Optional[tuple[np.ndarray, np.ndarray]]:
+    """The interval series ``nn`` (ms) at beat times ``times`` (s) resampled at :data:`TACHOGRAM_RATE` Hz with a cubic
+    spline: ``(grid times, series)``, or None with too few intervals. Made once on all the trusted beats of a recording, so
+    that a window (or a part of one) is read from it afterwards."""
+    if len(nn) < 10:
+        return None
+    grid = np.arange(times[0], times[-1], 1.0 / TACHOGRAM_RATE)
+    return grid, CubicSpline(times, nn)(grid)
+
+
+def _band_power(f: np.ndarray, p: np.ndarray, lo: float, hi: float) -> float:
+    sel = (f >= lo) & (f < hi)
+    return float(_integrate(p[sel], f[sel])) if sel.sum() >= 2 else math.nan
+
+
+def spectrum_of_runs(tacho: Optional[tuple[np.ndarray, np.ndarray]], runs) -> tuple[float, float]:
+    """(LF, HF) power in ms² of the part of a :func:`tachogram` that lies in ``runs`` (a list of ``(start, end)`` in
+    seconds: the stretches of a window that the export range keeps). Each stretch is detrended and cut into Welch segments
+    of 64 s (half overlapping) that lie inside it; the segments of all the stretches are averaged, so a cut is never
+    bridged. If no stretch is as long as a segment, the longest one is used whole."""
+    if tacho is None:
+        return math.nan, math.nan
+    grid, series = tacho
+    pieces = []
+    for a, b in runs:
+        sel = (grid >= a) & (grid < b)
+        if sel.sum() >= 8:
+            x = series[sel]
+            pieces.append(x - np.polyval(np.polyfit(np.arange(len(x)), x, 1), np.arange(len(x))))
+    if not pieces or sum(len(x) for x in pieces) < 0.8 * MIN_SPECTRUM_S * TACHOGRAM_RATE:
+        return math.nan, math.nan
+    nper = 256
+    long_enough = [x for x in pieces if len(x) >= nper]
+    if long_enough:
+        total, weight = 0.0, 0
+        for x in long_enough:
+            f, p = welch(x, fs=TACHOGRAM_RATE, nperseg=nper, noverlap=nper // 2)
+            count = 1 + (len(x) - nper) // (nper - nper // 2)             # how many segments the stretch gave
+            total, weight = total + p * count, weight + count
+        p = total / weight
+    else:
+        x = max(pieces, key=len)
+        f, p = welch(x, fs=TACHOGRAM_RATE, nperseg=len(x), noverlap=len(x) // 2)
+    return _band_power(f, p, *LF_BAND), _band_power(f, p, *HF_BAND)
+
+
 def window_metrics(label: str, start: float, end: float, seconds: float, times_rel: np.ndarray, rr: np.ndarray,
-                   ok: np.ndarray) -> HrvResult:
+                   ok: np.ndarray, counted: Optional[np.ndarray] = None, rr_prev: float = math.nan,
+                   ok_prev: bool = False, tacho=None, runs=None) -> HrvResult:
     """The HRV measures of one window from its beats: ``times_rel`` (s, relative clock), each beat's interval ``rr`` (s,
     from the previous beat) and whether it is trusted. ``seconds`` is how much of the window is kept. Only trusted
-    intervals enter; successive differences only between two trusted intervals in a row."""
-    inside = np.isfinite(rr)
-    result = HrvResult(label, start, end, seconds, beats=len(times_rel), intervals=int((ok & inside).sum()),
+    intervals enter; successive differences only between two trusted intervals in a row.
+
+    ``counted`` says which beats count (default all): the ones an export range keeps; the others only stand between the
+    counted ones, so that a successive difference is never taken across a cut. ``rr_prev`` and ``ok_prev`` are the interval
+    and trust of the beat before the first one, which a difference at the window's edge needs. ``tacho`` (:func:`tachogram`
+    of the whole recording) and ``runs`` (the kept stretches of the window) give the spectrum from the whole recording's
+    interval series cut at the markers; without them it is estimated from this window's own trusted intervals."""
+    counted = np.ones(len(rr), dtype=bool) if counted is None else np.asarray(counted, dtype=bool)
+    inside = np.isfinite(rr) & counted
+    use = ok & inside
+    result = HrvResult(label, start, end, seconds, beats=int(counted.sum()), intervals=int(use.sum()),
                        artefact_share=float(((~ok) & inside).sum() / inside.sum()) if inside.any() else math.nan)
-    nn = rr[ok] * 1000.0
+    nn = rr[use] * 1000.0
     if len(nn) < 3:
         result.notes.append("too few trusted intervals")
         return result
@@ -303,8 +358,9 @@ def window_metrics(label: str, start: float, end: float, seconds: float, times_r
     result.sdnn = float(nn.std(ddof=1))
     result.cvnn = result.sdnn / result.mean_nn
     result.madnn = float(1.4826 * np.median(np.abs(nn - np.median(nn))))
-    pair = ok[1:] & ok[:-1]                                  # two intervals in a row, both trusted
-    diff = (rr[1:] - rr[:-1])[pair] * 1000.0
+    rr_ext, ok_ext = np.r_[rr_prev, rr], np.r_[ok_prev, ok]
+    pair = ok_ext[1:] & ok_ext[:-1] & counted                # two trusted intervals in a row, the later one counted
+    diff = (rr_ext[1:] - rr_ext[:-1])[pair] * 1000.0
     if len(diff) >= 2:
         result.rmssd = float(np.sqrt(np.mean(diff ** 2)))
         result.pnn50 = float(100.0 * np.mean(np.abs(diff) > 50.0))
@@ -314,7 +370,10 @@ def window_metrics(label: str, start: float, end: float, seconds: float, times_r
         if result.sd2 > 0:
             result.sd1_sd2 = result.sd1 / result.sd2
     if seconds >= MIN_SPECTRUM_S:
-        result.lf, result.hf = spectrum(times_rel[ok], nn)
+        if tacho is not None and runs is not None:
+            result.lf, result.hf = spectrum_of_runs(tacho, runs)
+        else:
+            result.lf, result.hf = spectrum(times_rel[use], nn)
         if math.isfinite(result.hf) and math.isfinite(result.lf) and result.hf > 0:
             result.lf_hf = result.lf / result.hf
             result.lfn = result.lf / (result.lf + result.hf)
@@ -333,69 +392,44 @@ def window_metrics(label: str, start: float, end: float, seconds: float, times_r
     return result
 
 
-EDGES = ("beyond", "inside")
-
-
 def analyse(sensor: Sensor, epoch_start: float, windows, trim: Optional[Trim] = None,
-            lead: str = LEAD_II, beats: Optional[Beats] = None,
-            edges: str = "beyond") -> Optional[tuple[list[HrvResult], Beats]]:
+            lead: str = LEAD_II, beats: Optional[Beats] = None) -> Optional[tuple[list[HrvResult], Beats]]:
     """HRV of a Shimmer sensor for each window. ``windows`` is a list of ``(label, start, end)`` in seconds on the
     recording's relative clock (``epoch_start`` is the Unix time of its zero); ``trim`` (:class:`Trim`) leaves out the
-    parts the export leaves out. With ``edges`` ``"beyond"`` (the default) the heartbeats are found on all the data and
-    the cut is made at the markers: a beat that is kept has its interval from the beat before it even if that lies in
-    a left-out part, so the edges lose nothing; only the beats and intervals that end in a left-out part are dropped (and
-    a successive difference needs two kept intervals in a row). With ``"inside"`` the beats in the left-out parts are
-    dropped and no interval counts that reaches into them (the first interval after a cut is lost). Returns the results
-    and the :class:`Beats` (all of them, with trusted flags changed for the trim), or None if the sensor has no ECG.
+    parts the export leaves out.
+
+    Everything is worked out on the whole recording first, and the export range only cuts afterwards: the beats are found
+    on all the ECG, the intervals are judged against their neighbours wherever they are, and the interval series for the
+    spectrum is made from all the trusted beats. A window then counts the beats that are in it and not in a left-out part,
+    each with its interval from the beat before it (even if that lies in a left-out part); a successive difference needs
+    two trusted intervals in a row, the later one counted, so it is never taken across a cut; the spectrum is read from
+    the kept stretches of the interval series without bridging the cuts. Returns the results and the :class:`Beats` (all
+    of them, with the trusted flags of beats in left-out parts cleared), or None if the sensor has no ECG.
     ``beats`` are the beats found earlier by :func:`beats_of` for this sensor: the detection, which is the slow part,
     is then not repeated, and the windows and the trim can be changed at no cost (the window of an app)."""
     beats = beats if beats is not None else beats_of(sensor, lead)
     if beats is None:
         return None
-    if edges not in EDGES:
-        raise ValueError(f"edges must be one of {EDGES}, not {edges!r}")
     rel = beats.unix - epoch_start
-    ok = beats.ok.copy()
-    rr = beats.rr.copy()
-    keep = np.ones(len(rel), dtype=bool)
-    span = np.zeros(len(rel), dtype=int)
-    beyond = edges == "beyond" and trim is not None and trim.active
-    if trim is not None and trim.active and len(rel):
-        keep = trim.keep_mask(rel)
-        if beyond:
-            # an interval counts if the beat that ends it is kept, whatever the beat before it
-            both = keep.copy()
-        else:
-            for index, (a, b) in enumerate(trim.kept_spans(float(rel.min()) - 1, float(rel.max()) + 1)):
-                span[(rel >= a) & (rel < b)] = index
-            # an interval counts only if both beats are kept and in the same kept stretch
-            both = np.zeros(len(rel), dtype=bool)
-            both[1:] = keep[1:] & keep[:-1] & (span[1:] == span[:-1])
-        ok &= both
-        rr = np.where(both | ~np.isfinite(rr), rr, np.nan)
-    beats = Beats(beats.device, beats.unix, beats.amplitude, beats.block, rr, ok, beats.rate, beats.gain, beats.notes)
+    ok, rr = beats.ok, beats.rr
+    cut = trim is not None and trim.active
+    keep = trim.keep_mask(rel) if cut and len(rel) else np.ones(len(rel), dtype=bool)
+    tacho = tachogram(rel[ok], rr[ok] * 1000.0) if ok.sum() >= 10 else None
     results = []
     for label, start, end in windows:
-        # "beyond": the left-out beats stay in the arrays (their intervals are masked) so that two intervals are a
-        # successive pair only if they really follow each other; "inside": they are dropped
-        sel = (rel >= start) & (rel < end) & (np.ones(len(rel), dtype=bool) if beyond else keep)
-        if trim is not None and trim.active:
-            seconds = sum(max(0.0, min(b, end) - max(a, start)) for a, b in trim.kept_spans(start, end))
-        else:
-            seconds = end - start
-        # the first beat of the window has its interval from a beat before the window: leave that one out
-        in_rr = rr[sel].copy()
-        in_ok = ok[sel].copy()
-        if sel.any():
-            first = np.flatnonzero(sel)[0]
-            if first > 0 and rel[first - 1] < start:
-                in_rr[0], in_ok[0] = np.nan, False
-        result = window_metrics(label, float(start), float(end), float(seconds), rel[sel], in_rr, in_ok)
-        if beyond:
-            result.beats = int(keep[sel].sum())
+        sel = (rel >= start) & (rel < end)
+        index = np.flatnonzero(sel)
+        before = index[0] - 1 if len(index) and index[0] > 0 else None
+        runs = trim.kept_spans(start, end) if cut else [(start, end)]
+        seconds = sum(b - a for a, b in runs)
+        result = window_metrics(label, float(start), float(end), float(seconds), rel[sel], rr[sel], ok[sel],
+                                counted=keep[sel], rr_prev=rr[before] if before is not None else math.nan,
+                                ok_prev=bool(ok[before]) if before is not None else False, tacho=tacho, runs=runs)
         result.notes = beats.notes + result.notes
         results.append(result)
-    return results, beats
+    shown = Beats(beats.device, beats.unix, beats.amplitude, beats.block, beats.rr, ok & keep, beats.rate, beats.gain,
+                  beats.notes)
+    return results, shown
 
 
 MOVING_WINDOW_S = 30.0                    # s, the default window of the moving RMSSD of the preview

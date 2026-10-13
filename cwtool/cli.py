@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from cwtool import devices, pipeline, sensors
-from cwtool.params import DisplayPhotometry, Parameters, VideoSettings
+from cwtool.params import DeviceMismatch, DisplayPhotometry, Parameters, VideoSettings
 from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video
 
@@ -33,9 +33,6 @@ def main(argv: list[str] | None = None) -> int:
                          "rest (default: any in the recording folder)")
     ap.add_argument("--no-hrv", action="store_true",
                     help="do not compute heart rate variability from a Shimmer's ECG when exporting sensor data")
-    ap.add_argument("--hrv-inside-only", action="store_true",
-                    help="cut the heart rate variability strictly inside the export range: the interval after a cut "
-                         "is lost (default: the beats at its edges use the data beyond the cut)")
     ap.add_argument("--start", type=float, metavar="S", help="leave out everything before S seconds (export only)")
     ap.add_argument("--end", type=float, metavar="S", help="leave out everything after S seconds (export only)")
     ap.add_argument("--exclude", type=float, nargs=2, action="append", default=[], metavar=("FROM", "TO"),
@@ -48,7 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     rec = devices.load(args.recording, args.device, lux_folder=args.lux or args.logs)
-    params = Parameters.load(args.params, rec.profile) if args.params else Parameters()
+    try:
+        params = Parameters.load(args.params, rec.profile, device=rec.device) if args.params else Parameters()
+    except DeviceMismatch as e:
+        print(e, file=sys.stderr)
+        return 2
     if args.display:
         params = DisplayPhotometry.load(args.display).apply(params)
     settings = VideoSettings().for_recording(rec)
@@ -87,8 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         found = sensors.load_sensors(args.sensors or args.logs or rec.folder, rec.epoch_start + float(rec.time[0]), span)
     elif args.sensors or args.logs:
         print("The recording has no absolute time: sensor data cannot be aligned", file=sys.stderr)
-    for p in pipeline.export(result, rec, params, out, trim=trim, sensors=found, hrv=not args.no_hrv,
-                            hrv_edges="inside" if args.hrv_inside_only else "beyond"):
+    for p in pipeline.export(result, rec, params, out, trim=trim, sensors=found, hrv=not args.no_hrv):
         print(f"wrote {p}")
     if args.plot:
         from cwtool.plot import plot_result

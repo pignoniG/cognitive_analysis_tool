@@ -27,7 +27,7 @@ from cwtool.gui.trim_panel import TrimPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
-from cwtool.params import DISPLAY_FIELDS, DisplayPhotometry, Parameters
+from cwtool.params import DISPLAY_FIELDS, DeviceMismatch, DisplayPhotometry, Parameters
 from cwtool.photometry import fit_light_response, fit_lux_response
 from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video
@@ -58,6 +58,8 @@ class MainWindow(QMainWindow):
         self.result = None
         self._task: Task | None = None
         self._no_session: str | None = None         # why the remembered logger folder gave nothing, if it did not
+        self._params_note: str | None = None          # why the parameters were reset, shown in the Set-up box
+        self._params_device: str | None = None       # the device the parameters in the panel were set for
         self._last_failure: str | None = None       # the analysis error already shown in a box
         self._params_path: Path | None = None
         # The sensor logger's recordings folder, remembered between sessions: one folder for all recordings, which holds
@@ -234,13 +236,6 @@ class MainWindow(QMainWindow):
         self.signal_list.setMaximumHeight(150)
         self.signal_list.setToolTip(f"The signals to show under ΔPD (at most {MAX_SHOWN}). All of them are exported")
         self.signal_list.itemChanged.connect(self._show_sensors)
-        self.hrv_edges_check = QCheckBox("Use the data beyond the export range at its edges")
-        self.hrv_edges_check.setChecked(True)
-        self.hrv_edges_check.setToolTip(
-            "The heartbeats are found on all the data and the export range only cuts which beats count: the first beat "
-            "kept after a cut keeps its interval from the beat before it, in the part that is left out. Off: the cut is "
-            "strict, and the interval that reaches across a cut is lost")
-        self.hrv_edges_check.toggled.connect(lambda _: self._hrv_timer.start() if self.hrv_beats else None)
         self.hrv_status = QLabel()
         self.hrv_status.setWordWrap(True)
         self.hrv_status.hide()
@@ -267,7 +262,6 @@ class MainWindow(QMainWindow):
         folder_row.addWidget(self.own_folder_button)
         folder_row.addStretch(1)
         sensor_layout.addLayout(folder_row)
-        sensor_layout.addWidget(self.hrv_edges_check)
         sensor_layout.addWidget(self.hrv_status)         # the HRV result sits right under its button
         sensor_layout.addWidget(self.hrv_table)
         sensor_layout.addWidget(self.hrv_notes)
@@ -822,7 +816,11 @@ class MainWindow(QMainWindow):
         self._start_task(load, self._recording_loaded, f"Loading {folder.name}…")
 
     def _recording_loaded(self, rec) -> None:
+        previous_device = self._params_device
+        self._params_note = None
         self.recording, self.video, self.result = rec, None, None
+        if previous_device and previous_device != rec.device:
+            self._forget_params_of(previous_device, rec.device)
         self._remember_recording(rec.folder)
         duration = rec.time[-1] - rec.time[0] if len(rec.time) else 0
         video = rec.scene_video.name if rec.scene_video else "none"
@@ -850,6 +848,7 @@ class MainWindow(QMainWindow):
         with_lux = rec.luminance_source == "lux_sensor" and rec.lux_values is not None
         self._show_sequence_controls("display" if on_display else ("lux" if with_lux else "none"))
         self.preview.set_recording(rec, self.params_panel.video_settings())
+        self._params_device = rec.device
         if getattr(self, "_params_baseline", None) is None:
             self._mark_params_saved()              # the starting parameters: changes are measured from them
         if len(rec.time):
@@ -1196,11 +1195,13 @@ class MainWindow(QMainWindow):
 
     def _update_setup(self) -> None:
         items = self._setup_items()
-        self.setup_box.setVisible(bool(items))
+        self.setup_box.setVisible(bool(items) or bool(self._params_note))
         lines = []
         for done, text, link in items:
             mark = f"<span style='color:{self.OK_COLOUR}'>✓</span>" if done else f"<span style='color:{palette.WARNING}'>✗</span>"
             lines.append(f"{mark} " + (text if done else f"<a href='{link}' style='color:{palette.WARNING}'>{text}</a>"))
+        if self._params_note:
+            lines.append(f"<i>{self._params_note}</i>")
         self.setup_label.setText("<br>".join(lines))
 
     def _setup_link(self, link: str) -> None:
@@ -1212,6 +1213,17 @@ class MainWindow(QMainWindow):
             self.choose_display()
         elif value == "logs":
             self.choose_sensors()
+
+    def _forget_params_of(self, old: str, new: str) -> None:
+        """A recording of another device was opened: the calibration and the parameters depend on the hardware, so the
+        participant's parameters of the previous device are not carried over; the defaults are used and the file is let go."""
+        self.params_panel.set_params(Parameters())
+        self._params_path = None
+        self._display_path = None
+        self.fits_done = {key: False for key in self.fits_done}
+        self._mark_params_saved()
+        self._params_note = (f"The parameters were set for a {old} recording: back to the defaults for this {new} recording "
+                             "(the calibration and the parameters depend on the hardware).")
 
     def _participant_dict(self) -> dict:
         """The parameters as the participant's file holds them (without the display photometry)."""
@@ -1278,11 +1290,17 @@ class MainWindow(QMainWindow):
             try:
                 profile = self.recording.profile if self.recording is not None else None
                 # Participant files hold no display photometry: the current one is kept.
-                self.params_panel.set_params(Parameters.load(path, profile, base=self.params_panel.params()))
+                self.params_panel.set_params(Parameters.load(path, profile, base=self.params_panel.params(),
+                                                             device=self._device() or None))
+            except DeviceMismatch as e:
+                self._error("Parameters of another device", str(e), hint=False)
+                return
             except Exception as e:
                 self._error("Cannot load parameters", str(e))
                 return
             self._params_path = Path(path)
+            self._params_note = None
+            self._params_device = self._device() or self._params_device
             self._mark_params_saved()
             self._update_state()
 
@@ -1291,7 +1309,7 @@ class MainWindow(QMainWindow):
         if self._params_path is None:
             self.save_params_as()
         else:
-            self.params_panel.params().save(self._params_path, participant_only=True)
+            self.params_panel.params().save(self._params_path, participant_only=True, device=self._device())
             self._mark_params_saved()
             self._update_state()
             self.statusBar().showMessage(f"Saved {self._params_path} (display photometry is saved separately)", 4000)
@@ -1587,10 +1605,6 @@ class MainWindow(QMainWindow):
         self.plots.clear_beats()
         self._update_hrv_controls()
 
-    def _hrv_edges(self) -> str:
-        """How the HRV is cut at the export range: on the data beyond the markers (default) or strictly inside."""
-        return "beyond" if self.hrv_edges_check.isChecked() else "inside"
-
     def _refresh_hrv(self) -> None:
         """The table and the beat markers from the beats found, for the current export range: only the windows and the
         trusted intervals are worked out again, not the detection, so this follows the range as it is edited."""
@@ -1604,7 +1618,7 @@ class MainWindow(QMainWindow):
             beats = self.hrv_beats.get(s.name)
             if beats is None:
                 continue
-            results, adjusted = hrv.analyse(s, rec.epoch_start, windows, trim, beats=beats, edges=self._hrv_edges())
+            results, adjusted = hrv.analyse(s, rec.epoch_start, windows, trim, beats=beats)
             if series is None:                       # the plots show the first ECG
                 series = hrv.time_series(adjusted, rec.epoch_start, self.rmssd_window.value())
             t, v = s.series(hrv.LEAD_II)
@@ -1764,12 +1778,11 @@ class MainWindow(QMainWindow):
         trim = self.trim_panel.trim()
         result, rec, params = self.result, self.recording, self.params_panel.params()
         sensors_, use_hrv, beats = list(self.sensors), bool(self.hrv_beats), dict(self.hrv_beats)
-        edges = self._hrv_edges()
         self.export_result.hide()
 
         def work(progress, cancelled):
             return pipeline.export(result, rec, params, Path(folder), trim=trim, sensors=sensors_, hrv=use_hrv,
-                                   hrv_beats=beats, progress=progress, hrv_edges=edges)
+                                   hrv_beats=beats, progress=progress)
 
         self._export_trim = trim
         self._start_task(work, lambda paths: self._exported(paths, Path(folder), trim), "Exporting…",

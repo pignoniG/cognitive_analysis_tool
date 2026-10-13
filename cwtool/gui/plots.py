@@ -278,12 +278,12 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.measured_curve = self.pupil.plot(pen=pg.mkPen("k", width=1.5), name="Measured", connect="finite")
         self.expected_curve = self.pupil.plot(pen=pg.mkPen(palette.EXPECTED, width=2), name="Expected")
         dash = pg.mkPen(palette.EXPECTED, width=1.5, style=pg.QtCore.Qt.DashLine)
-        self.black_line = pg.InfiniteLine(angle=0, pen=dash, label="black point",     # its label to the right of the
-                                          labelOpts={"position": 0.28, "color": palette.rgb(palette.EXPECTED)})   # white's
-        self.white_line = pg.InfiniteLine(angle=0, pen=dash, label="white point",
-                                          labelOpts={"position": 0.08, "color": palette.rgb(palette.EXPECTED)})
-        self.pupil.addItem(self.black_line, ignoreBounds=True)
-        self.pupil.addItem(self.white_line, ignoreBounds=True)
+        # the expected pupil at the display's black and white: dashed lines named in the legend, which has them only
+        # while there is a display (not written on the plot, where a label would cover the curves)
+        self.black_line = pg.PlotDataItem(pen=dash, name="Expected at black point")
+        self.white_line = pg.PlotDataItem(pen=dash, name="Expected at white point")
+        for line in (self.black_line, self.white_line):
+            line.setZValue(-5)
 
         self.lum.addLegend(offset=(-10, 10), brush=pg.mkBrush(255, 255, 255, 210))
         self.lum_curve = self.lum.plot(pen=pg.mkPen(palette.ACCENT, width=1.8), name="Luminance used",
@@ -582,12 +582,14 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         if self._follow:
             self.fit_to_data()
             QTimer.singleShot(0, self._fit_if_following)     # and again once the layout has settled
-        markers = np.isfinite(r.expected_black)   # not defined when luminance comes from a lux sensor
-        self.black_line.setVisible(bool(markers))
-        self.white_line.setVisible(bool(markers))
-        if markers:
-            self.black_line.setValue(r.expected_black)
-            self.white_line.setValue(r.expected_white)
+        markers = bool(np.isfinite(r.expected_black)) and len(finite_time) > 0   # not defined with a lux sensor
+        for line, value in ((self.white_line, r.expected_white), (self.black_line, r.expected_black)):
+            if markers:
+                line.setData([float(finite_time.min()), float(finite_time.max())], [value, value])
+                if line.scene() is None:
+                    self.pupil.addItem(line)             # and with it its entry in the legend
+            elif line.scene() is not None:
+                self.pupil.removeItem(line)
 
     def set_lux_route(self, sensor: bool, ratio: bool) -> None:
         """Show the sensor curve (with a lux sensor) and make the video ratio plot available (lux sensor with the video)."""

@@ -209,3 +209,59 @@ def test_the_status_strip_keeps_the_key_numbers_and_the_rest_is_in_the_details_p
     details = w.details_label.text()
     assert "expected PD at black" in details and "offset" in details and "Hz → " in details
     w.close()
+
+
+def test_parameters_belong_to_a_device_and_are_not_carried_to_another(app, tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from conftest import write_neon_recording, write_varjo_recording
+    from PySide6.QtWidgets import QFileDialog
+    from test_neon import FRAME_TIMES, GRAYS
+
+    from cwtool.params import Parameters
+
+    w = MainWindow()
+    errors = []
+    monkeypatch.setattr(w, "_error", lambda *a, **k: errors.append(a))
+    w.open_recording(write_varjo_recording(tmp_path / "v", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None)
+    device = w.recording.device
+    # a participant's file saved here names the device, and loads again here
+    mine = tmp_path / "mine.json"
+    replace(Parameters(), age=41.0).save(mine, participant_only=True, device=device)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(mine), "")))
+    w.choose_params()
+    assert errors == [] and w.params_panel.params().age == 41.0 and w._params_path == mine
+    # a file set for another device is refused, whatever it holds
+    other = tmp_path / "other.json"
+    replace(Parameters(), age=30.0).save(other, participant_only=True, device="pupil_core")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(other), "")))
+    w.choose_params()
+    assert len(errors) == 1 and "pupil_core" in errors[0][1] and "hardware" in errors[0][1]
+    assert w.params_panel.params().age == 41.0 and w._params_path == mine
+    # opening a recording of another device: back to the defaults, the file is let go
+    w.open_recording(write_neon_recording(tmp_path / "n", GRAYS, FRAME_TIMES))
+    assert wait_for(app, lambda: w.recording is not None and w.recording.device != device and w.result is not None)
+    assert w.params_panel.params().age == Parameters().age and w._params_path is None and not w.params_dirty()
+    assert "back to the defaults" in w.setup_label.text() and not w.setup_box.isHidden()      # and it says why
+    w.close()
+
+
+def test_the_black_and_white_points_are_legend_entries_only_where_they_are_defined(app, tmp_path):
+    import numpy as np
+    from conftest import write_core_recording, write_varjo_recording
+    from test_pupil_core import FRAME_TIMES, GRAYS
+
+    w = MainWindow()
+    names = lambda: [label.text for _, label in w.plots.pupil.legend.items]
+    assert "Expected at white point" not in names()                          # nothing open: no lines, no labels on the plot
+    w.open_recording(write_varjo_recording(tmp_path / "v", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None)
+    assert "Expected at white point" in names() and "Expected at black point" in names()
+    assert w.plots.white_line.getData()[1][0] == pytest.approx(w.result.expected_white)
+    # a recording whose luminance comes from a lux sensor has no such points
+    w.open_recording(write_core_recording(tmp_path / "c", GRAYS, FRAME_TIMES, lux=lambda t: 200.0))
+    assert wait_for(app, lambda: w.recording.device != "varjo" and w.result is not None
+                    and not np.isfinite(w.result.expected_black))
+    assert wait_for(app, lambda: "Expected at white point" not in names())
+    w.close()

@@ -1133,6 +1133,28 @@ is revised; they remain in the git history of this file.
   spectral values depend on the method, and the change from a baseline is what carries information. Not adopted: VLF,
   ULF, geometric, entropy, fractal and time-frequency measures (they need long recordings), and RSA from a respiration
   signal (the unit's respiration channel is not recorded).
+- **Check against the literature (13 October 2026), from Shaffer & Ginsberg 2017 (Front Public Health 5:258), Laborde et
+  al. 2017 (Front Psychol 8:213), Pham et al. 2021, Brennan et al. 2001 and the Kubios descriptions found in other papers;
+  the 1996 Task Force text itself could not be opened (HTTP 403), so what is attributed to it is as these papers quote it.**
+  Matches: the bands (LF 0.04–0.15, HF 0.15–0.40 Hz); at least 1 minute for HF and 2 for LF (the Task Force's standard
+  short-term recording is 5 minutes); RMSSD as the preferred vagal measure over pNN50, with windows of 10 s upward proposed
+  and little gain beyond 120 s; HF follows breathing at 9–24 breaths a minute; LF is not a sympathetic index and LF/HF is not
+  a sympathovagal balance; SD1 = RMSSD/√2 and SD2 = √(2 SDNN² − SD1²) (so SD1 repeats RMSSD, as the docs say); normal units
+  as LF/(LF+HF); the interval series resampled at 4 Hz with a cubic spline and Welch's method (as in Kubios, NeuroKit2 and
+  pyHRV); baseline against task change as the quantity of interest; breathing not corrected for but to be controlled or
+  recorded; the local-median judgement of intervals is the principle of Kubios's threshold correction. Differences, none of
+  them an error: (1) Welch segments are 64 s where Kubios (older report) used 256 s, so LF is coarse (2.6 bins above 0.04 Hz),
+  which is why LF is only called usable from 2 minutes, and absolute spectral values are not comparable with other tools;
+  (2) Laborde et al. prefer an autoregressive estimate for HF; (3) Task Force normal units divide by total power minus VLF,
+  which equals LF+HF when VLF is the rest; (4) sampling rate: the Task Force's minimum is 200 Hz, 125 Hz suffices when RSA is
+  normal and 500 Hz is advised when it is weak (Laborde et al.), the tool asks for 200 Hz or more and recommends 256; (5)
+  intervals that are not trusted are left out of the time-domain measures and bridged in the spectrum, where Kubios corrects
+  (interpolates) the flagged beats; a thesis found deletion best for badly corrupted series and interpolation for lightly
+  corrupted ones; (6) our limits (30 % from the local median of 11, 0.25–2.5 s) were chosen on my recordings, not taken from a
+  standard; the commonly quoted 20 % rule and Kubios's 0.15–0.45 s thresholds were not verified in their sources, so the
+  claim is only the shared principle; (7) Laborde et al. advise not to rely on automatic correction alone and to inspect the ECG:
+  the app draws the beats (green circles, red crosses for untrusted intervals) for that, and the first-version `weak ECG`
+  note flags a poor signal.
 - **Not done:** a clinical ECG with annotated beats or Kubios as a second reference; a recording with a task and
   movement (the artefact handling beyond the first seconds is untested); one lead only; untrusted intervals are left
   out, not repaired; the thresholds of the trust rule (30 % of the local median) are plausible values, not tuned.

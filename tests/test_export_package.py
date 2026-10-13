@@ -218,3 +218,27 @@ def test_cli_uses_the_trim_saved_with_the_recording(tmp_path, capsys):
     assert "saved with the recording" in capsys.readouterr().out
     t = np.array([float(r["timestamp_relative"]) for r in rows(tmp_path / "out/rec_cw.csv")])
     assert t.min() >= 2.0 and t.max() <= 6.0
+
+
+def test_a_parameter_file_of_another_device_is_refused(tmp_path, capsys):
+    import json
+
+    from cwtool import cli
+    from cwtool.params import DeviceMismatch, Parameters
+
+    p = tmp_path / "p.json"
+    Parameters().save(p, participant_only=True, device="pupil_core")
+    assert json.loads(p.read_text())["device"] == "pupil_core"
+    assert Parameters.load(p, device="pupil_core").age == Parameters().age         # the same device: loaded
+    assert Parameters.load(p).age == Parameters().age                               # no device asked: loaded
+    with pytest.raises(DeviceMismatch):
+        Parameters.load(p, device="varjo")
+    Parameters().save(p, participant_only=True)                                     # a file from before: names no device
+    assert Parameters.load(p, device="varjo")
+    # the command line says so and stops
+    from conftest import write_varjo_recording
+
+    folder = write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0)
+    Parameters().save(p, participant_only=True, device="pupil_core")
+    assert cli.main([str(folder), "--params", str(p)]) == 2
+    assert "hardware" in capsys.readouterr().err

@@ -256,12 +256,6 @@ def test_compute_hrv_shows_the_table_and_the_beats_and_the_export_uses_them(app,
     rows_out = rows(tmp / "out/rec_shimmer_hrv.csv")
     assert [r["window"] for r in rows_out] == ["recording", "Rest", "Task"] and float(rows_out[0]["kept_seconds"]) == pytest.approx(total - 4.0, abs=0.01)
 
-    # the cut at the export range: on the data beyond it by default; the box turns that off
-    assert w.hrv_edges_check.isChecked() and w._hrv_edges() == "beyond"
-    w.hrv_edges_check.setChecked(False)
-    assert w._hrv_edges() == "inside"
-    w.hrv_edges_check.setChecked(True)
-
     # changing the sensors forgets the beats, the plots and their checkboxes
     w.remove_sensors()
     assert not w.hrv_beats and not w.hrv_table.isVisible() and w.plots._beats == {}

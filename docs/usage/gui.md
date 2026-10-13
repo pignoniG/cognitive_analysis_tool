@@ -78,6 +78,10 @@ technical details under **Show Details…**. An analysis error appears once per 
   sensitivity and the latency and offset (each fitted in this session, or from the participant's parameter file). Glasses
   with a lux sensor: the lux readings, the sequence, and the sensitivity and offset. A ✗ line is a link to where it is
   done (the logger folder, the display photometry file, or the Calibrate tab).
+- **Parameters belong to a device.** The calibration and the parameters depend on the hardware (optics, camera, light
+  sensor, pupil estimate), so they are not carried from one device to another. A parameter file records the device it was
+  set for, and loading it for a recording of another device is refused with a message; opening a recording of another
+  device puts the defaults back (the Set-up box says so). Files written before this name no device and are accepted.
 - **Revert** (Params tab, next to Load and Save) puts the parameters back to what they were when last loaded or saved
   (or at the start), after asking; it is on only while they differ. The window title says "changed" meanwhile. The display
   photometry is not part of it (it has its own file).
@@ -113,9 +117,8 @@ export everything for one participant as a single package.
   select the row to read it. The table follows the [export range](#export-range) as you edit it, since only the windows
   are worked out again, not the beats. The button then reads *Recompute HRV*; importing other sensor data or opening
   another recording forgets the result. The beats are found by NeuroKit2 (`pip install "cwtool[hrv]"`).
-- **Use the data beyond the export range at its edges** (a box under the HRV button, on by default): the heartbeats are
-  found on all the data and the export range only cuts which beats count, so the first beat after a cut keeps its
-  interval. Off: a strict cut that loses it. See [how the HRV is cut](../processing/hrv.md#cutting-at-the-export-range).
+- **The export range and the HRV**: the HRV is always worked out on the whole recording and cut afterwards, so the
+  first beat after a cut keeps its interval and nothing is lost at the edges ([how](../processing/hrv.md#cutting-at-the-export-range)).
 - **Heart rate variability plots**: two plots join the others under ΔPD, on the same time axis and cursor, switched in the
   **Heart rate variability** drop-down under the plots (**Heart rate**, off at first, and **RMSSD**, on): the heart rate (bpm) from the trusted intervals, and the
   RMSSD (ms) of a moving window (30 s, changed in the box next to them; the first point is one window after the first
@@ -221,7 +224,8 @@ of the gaze circle and the background.
   scene video* turned off (the summary line then warns): it helps when the sensor sees little of the changing
   screen and only adds noise on a uniform view.
 - The dashed green lines are the expected pupil at the display's black and white points: the range the model can
-  explain on that device.
+  explain on that device. They are named in the legend (*Expected at white point*, *Expected at black point*), not on
+  the plot, and only display devices have them.
 - Events from the event log are shaded orange and labelled in the ΔPD plot.
 
 ## Calibration sequence
