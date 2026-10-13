@@ -162,9 +162,83 @@ def sensor_settings(folder: Path) -> dict:
         return {}
 
 
+def _file_span(path: Path) -> Optional[tuple[float, float]]:
+    """(first, last) Unix time of a sensor file, from its first row and its last (read from the end of the file, so a
+    long file costs nothing); None if it has no rows or does not start with the time column."""
+    try:
+        with open(path, "rb") as f:
+            header = f.readline().decode("utf-8", "replace").split(",")
+            if header[0].strip() != TIME_COLUMN:
+                return None
+            first = f.readline().decode("utf-8", "replace").split(",")[0]
+            f.seek(0, 2)
+            f.seek(max(f.tell() - 4096, 0))
+            tail = f.read().decode("utf-8", "replace").strip().splitlines()
+        return float(first), float(tail[-1].split(",")[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def session_span(folder: Path) -> Optional[tuple[float, float]]:
+    """The Unix time a logger session folder covers: ``start`` and ``end`` of its ``session.json``, or, if it has no
+    end (the logger was stopped by a crash) or no manifest, the first and last rows of its sensor files; None if it has
+    neither."""
+    folder = Path(folder)
+    start = end = None
+    try:
+        info = json.loads((folder / "session.json").read_text())
+        start, end = info.get("start (unix s)"), info.get("end (unix s)")
+    except (OSError, ValueError, AttributeError):
+        pass
+    if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+        spans = [s for s in (_file_span(path) for path, _ in find_sensor_files(folder)) if s]
+        if not spans:
+            return (float(start), float(start)) if isinstance(start, (int, float)) else None
+        start = min(s[0] for s in spans) if not isinstance(start, (int, float)) else start
+        end = max(s[1] for s in spans)
+    return float(start), float(end)
+
+
+def is_session(folder: Path) -> bool:
+    """True if the folder is one logger session (it holds sensor files); False for the logger's recordings folder, which
+    holds the sessions."""
+    return bool(find_sensor_files(Path(folder)))
+
+
+def resolve_session(folder: Path, epoch_start: float, duration: float) -> tuple[Optional[Path], float]:
+    """The logger session to use for a recording that starts at Unix time ``epoch_start`` and lasts ``duration`` seconds,
+    and how many seconds of it the session covers. ``folder`` is a session itself (it is used as it is) or the logger's
+    recordings folder: the session in it that overlaps the recording most is chosen, so that one folder can be given for
+    all recordings. (None, 0.0) if no session overlaps."""
+    folder = Path(folder)
+    if is_session(folder):
+        span = session_span(folder)
+        overlap = max(0.0, min(span[1], epoch_start + duration) - max(span[0], epoch_start)) if span else 0.0
+        return folder, overlap
+    best, best_overlap = None, 0.0
+    try:
+        candidates = sorted(p for p in folder.iterdir() if p.is_dir())
+    except OSError:
+        return None, 0.0
+    for candidate in candidates:
+        span = session_span(candidate) if is_session(candidate) else None
+        if span is None:
+            continue
+        overlap = min(span[1], epoch_start + duration) - max(span[0], epoch_start)
+        if overlap > best_overlap:
+            best, best_overlap = candidate, overlap
+    return best, best_overlap
+
+
 def load_sensors(folder: Path, epoch_start: float, duration: float, margin: float = 30.0) -> list[Sensor]:
     """The sensors of a session folder, cut to a recording that starts at Unix time ``epoch_start`` and lasts
-    ``duration`` seconds (with ``margin`` on both sides). Sensors with no rows in that span are left out."""
+    ``duration`` seconds (with ``margin`` on both sides). ``folder`` may be the logger's recordings folder instead of one
+    session: the session that overlaps the recording is used (:func:`resolve_session`). Sensors with no rows in that
+    span are left out."""
+    resolved, _ = resolve_session(folder, epoch_start, duration)
+    if resolved is None:
+        return []
+    folder = resolved
     t0, t1 = epoch_start - margin, epoch_start + duration + margin
     settings = sensor_settings(folder)
     out = []

@@ -11,9 +11,10 @@ Each device has its own layout; the tool detects it from the files present.
 - **Tobii Pro Glasses 3** (experimental): the recording folder from the SD card, with `recording.g3` and
   `gazedata.gz`.
 
-For the glasses (Pupil Core, Neon, Glasses 3), put the lux sensor logs (`<month>_<day>_<hour>.csv`) in the recording folder or a `lux`
-subfolder, or point the app (**File → Choose lux folder…**) or `cwtool --lux` at the one folder where you keep them all:
-it is remembered and needs no copying into each recording. Optionally add an `event_log` CSV from the
+For the glasses (Pupil Core, Neon, Glasses 3), put the lux sensor log (`lux.csv`, or the older `<month>_<day>_<hour>.csv`
+files) in the recording folder or a `lux` subfolder, or point the app (**File → Logger folder…**) or `cwtool --logs` at the
+sensor logger's recordings folder, where each session folder holds the lux log and the Shimmer and EmotiBit files: the
+session of the recording is found by its time, the folder is remembered and nothing is copied into each recording. Optionally add an `event_log` CSV from the
 [event logger](../usage/tools.md#event-logger) to label the phases of the experiment.
 
 ## 2. Open it

@@ -89,6 +89,48 @@ def test_sensor_files_are_found_read_and_cut(tmp_path):
         sensors.read_sensor(tmp_path / "x.csv")
 
 
+def test_the_logger_folder_can_be_given_instead_of_one_session(tmp_path, capsys):
+    """The logger saves one folder per recording into one folder: pointing at that folder finds the session of the recording
+    by time, so it can stay the same for every recording."""
+    epoch = 1_700_000_000.0
+    logs = tmp_path / "logs"
+    for name, start in (("2026-10-01_09-00-00", epoch - 5000), ("2026-10-01_12-00-00", epoch), ("2026-10-01_15-00-00", epoch + 9000)):
+        write_session(logs / name, epoch=start, seconds=12)
+    # the session that covers the recording is found, and its files are the ones read
+    session, overlap = sensors.resolve_session(logs, epoch, 8.0)
+    assert session.name == "2026-10-01_12-00-00" and overlap == pytest.approx(8.0, abs=2.5)
+    loaded = sensors.load_sensors(logs, epoch, 8.0, margin=0.0)
+    assert [s.name for s in loaded] == ["shimmer", "emotibit"] and loaded[0].path.parent == session
+    # a session folder still works as before, the logger folder is not taken for one
+    assert sensors.is_session(session) and not sensors.is_session(logs)
+    assert sensors.resolve_session(session, epoch, 8.0)[0] == session
+    assert [s.name for s in sensors.load_sensors(session, epoch, 8.0)] == ["shimmer", "emotibit"]
+    # no session overlaps a recording of another time
+    assert sensors.resolve_session(logs, epoch + 3000, 8.0) == (None, 0.0) and sensors.load_sensors(logs, epoch + 3000, 8.0) == []
+    # the span comes from the manifest when it has one (a crashed session has none)
+    (session / "session.json").write_text(json.dumps({"start (unix s)": epoch - 10, "end (unix s)": epoch + 50, "sources": {
+        "shimmer": {"file": "shimmer.csv", "kind": "shimmer"}, "emotibit": {"file": "emotibit.csv", "kind": "emotibit"}}}))
+    assert sensors.session_span(session) == (epoch - 10, epoch + 50)
+    # the longest overlap wins when two sessions touch the recording
+    write_session(logs / "2026-10-01_12-30-00", epoch=epoch + 6, seconds=12)
+    assert sensors.resolve_session(logs, epoch, 8.0)[0].name == "2026-10-01_12-00-00"
+    (session / "session.json").unlink()
+    assert sensors.resolve_session(logs, epoch + 7, 8.0)[0].name == "2026-10-01_12-30-00"
+
+
+def test_cli_takes_the_logger_folder_for_the_sensors(tmp_path):
+    folder = write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0)
+    rec = devices.load(folder)
+    start = rec.epoch_start + float(rec.time[0])
+    logs = tmp_path / "logs"
+    write_session(logs / "2026-10-01_08-00-00", epoch=start - 7200)
+    write_session(logs / "2026-10-01_10-00-00", epoch=start)
+    assert cli.main([str(folder), "--out", str(tmp_path / "out"), "--sensors", str(logs)]) == 0
+    assert (tmp_path / "out/rec_shimmer.csv").exists() and (tmp_path / "out/rec_emotibit.csv").exists()
+    manifest = json.loads((tmp_path / "out/rec_export.json").read_text())
+    assert all("2026-10-01_10-00-00" in s["source"] for s in manifest["sensors"])
+
+
 # --- the export package
 
 def _load(folder):

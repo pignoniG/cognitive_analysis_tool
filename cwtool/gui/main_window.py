@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import traceback
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QSettings, QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QSettings, QSize, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox,
-                               QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox,
-                               QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget, QToolButton,
-                               QVBoxLayout, QWidget)
+                               QHBoxLayout, QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu,
+                               QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget,
+                               QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
 from cwtool import __version__, calibration, devices, hrv, palette, pipeline, sensors
 from cwtool.fit import fit_calibration
+from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.icons import icon, tinted
 from cwtool.gui.photometry_dialog import PhotometryDialog
@@ -33,6 +36,9 @@ RECOMPUTE_DELAY_MS = 150
 # channel of a sensor with none of these; at most MAX_SHOWN at once, as each is a plot.
 PREFERRED_SIGNALS = ("exg_ads1292r_1_ch1_24bit", "EDA", "PPG_IR")
 MAX_SHOWN = 6
+# the columns of the HRV table: header, the field of the result, the format (the full set is in the exported file)
+HRV_COLUMNS = (("Window", "label", "{}"), ("s", "seconds", "{:.0f}"), ("HR", "mean_hr", "{:.0f}"),
+               ("RMSSD", "rmssd", "{:.0f}"), ("SDNN", "sdnn", "{:.0f}"), ("LF/HF", "lf_hf", "{:.1f}"))
 
 
 class MainWindow(QMainWindow):
@@ -49,20 +55,27 @@ class MainWindow(QMainWindow):
         self.video = None
         self.result = None
         self._task: Task | None = None
+        self._last_failure: str | None = None       # the analysis error already shown in a box
         self._params_path: Path | None = None
-        # The folder with the lux logs, remembered between sessions: one folder for all recordings, so the
-        # logs need not be copied into each.
-        saved = str(self._settings.value("lux_folder", ""))
-        self._lux_folder: Path | None = Path(saved) if saved and Path(saved).is_dir() else None
+        # The sensor logger's recordings folder, remembered between sessions: one folder for all recordings, which holds
+        # the lux log and the Shimmer and EmotiBit files of each session, so nothing is copied into the recordings.
+        # (It was "lux_folder" before the lux log and the sensor data shared it.)
+        saved = [str(self._settings.value(key, "") or "") for key in ("sensor_logs_folder", "lux_folder")]
+        self._logs_folder: Path | None = next((Path(s) for s in saved if s and Path(s).is_dir()), None)
+        self._logs_override: Path | None = None     # one session chosen for the open recording, not remembered
         self._display_path: Path | None = None
         self._base_sequence: calibration.Sequence | None = None
 
         self._recompute_timer = QTimer(self, singleShot=True, interval=RECOMPUTE_DELAY_MS)
         self._recompute_timer.timeout.connect(self.recompute)
         self.sensors: list[sensors.Sensor] = []     # the logger's sensor files, cut to this recording
+        self.hrv_beats: dict[str, hrv.Beats] = {}   # the beats found in each ECG by Compute HRV (exported when present)
+        self.hrv_series: hrv.TimeSeries | None = None   # the heart rate and moving RMSSD of the first ECG, for the plots
         self._sensor_task: Task | None = None       # reads them, alongside the video analysis
         self._trim_save_timer = QTimer(self, singleShot=True, interval=400)
         self._trim_save_timer.timeout.connect(self._save_trim)
+        self._hrv_timer = QTimer(self, singleShot=True, interval=150)    # the HRV table follows the export range
+        self._hrv_timer.timeout.connect(self._refresh_hrv)
 
         self._build_actions()
         self._build_ui()
@@ -82,27 +95,32 @@ class MainWindow(QMainWindow):
             return a
 
         self.open_action = action("Open recording…", self.choose_recording, QKeySequence.Open)
-        self.lux_action = action("Choose lux folder…", self.choose_lux_folder)
-        self.lux_action.setToolTip("The folder with the lux sensor logs (its subfolders are searched too), "
-                                   "remembered for the next recordings and sessions")
-        self.clear_lux_action = action("Use the recording's own lux logs", self.clear_lux_folder)
+        self.forget_logs_action = action("Forget the logger folder", self.forget_logger_folder)
+        self.forget_logs_action.setToolTip("Look for the lux log and the sensor files in the recording's own folder again")
         self.load_params_action = action("Load parameters…", self.choose_params)
         self.save_params_action = action("Save parameters", self.save_params, QKeySequence.Save)
         self.save_params_as_action = action("Save parameters as…", self.save_params_as, QKeySequence.SaveAs)
         self.load_display_action = action("Load display photometry…", self.choose_display)
         self.save_display_action = action("Save display photometry…", self.save_display)
-        self.sensors_action = action("Import sensor data…", self.choose_sensors)
-        self.sensors_action.setToolTip("Shimmer and EmotiBit files from the sensor logger: shown under ΔPD and "
-                                       "exported with the results, trimmed the same way")
-        self.export_action = action("Export results…", self.export)
+        self.sensors_action = action("Logger folder… (lux and sensor data)", self.choose_sensors)
+        self.sensors_action.setToolTip("The sensor logger's recordings folder, or one of its sessions: the lux log and "
+                                       "the Shimmer and EmotiBit files of the recording are found in it by their time. "
+                                       "The folder is remembered for every recording")
+        self.export_action = action("Export results…", self.export, QKeySequence("Ctrl+E"))
         quit_action = action("Quit", self.close, QKeySequence.Quit)
 
         file_menu = self.menuBar().addMenu("&File")
-        for a in (self.open_action, self.lux_action, self.clear_lux_action, self.sensors_action, None,
+        for a in (self.open_action, self.sensors_action, self.forget_logs_action, None,
                   self.load_params_action, self.save_params_action,
                   self.save_params_as_action, None, self.load_display_action, self.save_display_action, None,
                   self.export_action, None, quit_action):
             file_menu.addSeparator() if a is None else file_menu.addAction(a)
+
+        self.help_menu = self.menuBar().addMenu("&Help")
+        for a in (action("Gestures and shortcuts…", self.show_gestures),
+                  action("Documentation (opens the web page)", lambda: QDesktopServices.openUrl(QUrl(errors.DOCS_URL))),
+                  action("About", self.show_about)):
+            self.help_menu.addAction(a)
 
         self.fit_action = action("Reset view", lambda: self.plots.fit_to_data(), QKeySequence("Ctrl+0"))
         self.fit_action.setToolTip("Show all the data again (Ctrl+0, or double-click the plots)")
@@ -139,13 +157,14 @@ class MainWindow(QMainWindow):
         self.recording_label.setWordWrap(True)
         self.recording_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         rec_layout.addWidget(self.recording_label)
-        self.lux_box = QGroupBox("Lux sensor log")
+        self.lux_box = QGroupBox("Lux sensor log (from the logger folder)")
         lux_layout = QHBoxLayout(self.lux_box)
-        lux_choose = QPushButton("Choose folder…")
-        lux_choose.setToolTip(self.lux_action.toolTip())
-        lux_choose.clicked.connect(self.choose_lux_folder)
+        lux_choose = QPushButton("Logger folder…")
+        lux_choose.setToolTip(self.sensors_action.toolTip())          # the same folder as the sensor data's
+        lux_choose.clicked.connect(self.choose_sensors)
         self.lux_own_button = QPushButton("Use the recording's own")
-        self.lux_own_button.clicked.connect(self.clear_lux_folder)
+        self.lux_own_button.setToolTip(self.forget_logs_action.toolTip())
+        self.lux_own_button.clicked.connect(self.forget_logger_folder)
         lux_layout.addWidget(lux_choose)
         lux_layout.addWidget(self.lux_own_button)
         self.lux_box.hide()
@@ -183,20 +202,53 @@ class MainWindow(QMainWindow):
         self.sensors_label.setWordWrap(True)
         self.sensors_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         sensor_buttons = QHBoxLayout()
-        self.import_sensors_button = QPushButton("Import…")
-        self.import_sensors_button.setToolTip("Choose a sensor logger session folder (it is looked for in the "
-                                              "recording's own folder when the recording is opened)")
+        self.import_sensors_button = QPushButton("Logger folder…")
+        self.import_sensors_button.setToolTip("Choose the sensor logger's recordings folder (the session that overlaps "
+                                              "this recording is found, and the folder is remembered for every "
+                                              "recording) or one session folder. The logger's files in the recording's "
+                                              "own folder are used when it is opened")
         self.import_sensors_button.clicked.connect(self.choose_sensors)
         self.remove_sensors_button = QPushButton("Remove")
         self.remove_sensors_button.clicked.connect(self.remove_sensors)
+        self.hrv_button = QPushButton("Compute HRV")
+        self.hrv_button.setToolTip("Find the heartbeats in the Shimmer's ECG (lead II) and compute the heart rate "
+                                   "variability of the whole recording and of each event. The beats are drawn on the "
+                                   "ECG plot, the measures are shown below, and both go into the export package")
+        self.hrv_button.clicked.connect(self.compute_hrv)
+        self.hrv_button.setShortcut(QKeySequence("Ctrl+H"))
+        self.hrv_button.setEnabled(False)
         sensor_buttons.addWidget(self.import_sensors_button)
         sensor_buttons.addWidget(self.remove_sensors_button)
+        sensor_buttons.addWidget(self.hrv_button)
         self.signal_list = QListWidget()
         self.signal_list.setMaximumHeight(150)
         self.signal_list.setToolTip(f"The signals to show under ΔPD (at most {MAX_SHOWN}). All of them are exported")
         self.signal_list.itemChanged.connect(self._show_sensors)
+        self.hrv_status = QLabel()
+        self.hrv_status.setWordWrap(True)
+        self.hrv_status.hide()
+        self.hrv_table = QTableWidget(0, len(HRV_COLUMNS))
+        self.hrv_table.setHorizontalHeaderLabels([c[0] for c in HRV_COLUMNS])
+        self.hrv_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.hrv_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.hrv_table.verticalHeader().hide()
+        self.hrv_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.hrv_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.hrv_table.setMaximumHeight(170)
+        self.hrv_table.setStyleSheet("QTableWidget { font-size: 11px; } QHeaderView::section { font-size: 10px; padding: 1px; }")
+        self.hrv_table.setToolTip("One row per window: the whole recording and each event. HR in bpm; RMSSD and SDNN in "
+                                  "ms. The exported file has more (pNN50, pNN20, SD1, SD2, CV, MAD, LF, HF ...). Select a "
+                                  "row to read its notes")
+        self.hrv_table.itemSelectionChanged.connect(self._hrv_row_selected)
+        self.hrv_table.hide()
+        self.hrv_notes = QLabel()
+        self.hrv_notes.setWordWrap(True)
+        self.hrv_notes.hide()
         sensor_layout.addWidget(self.sensors_label)
         sensor_layout.addLayout(sensor_buttons)
+        sensor_layout.addWidget(self.hrv_status)         # the HRV result sits right under its button
+        sensor_layout.addWidget(self.hrv_table)
+        sensor_layout.addWidget(self.hrv_notes)
         sensor_layout.addWidget(self.signal_list)
 
         data_page = QWidget()
@@ -335,11 +387,6 @@ class MainWindow(QMainWindow):
         self.trim_panel.changed.connect(self._trim_changed)
         self.export_summary = QLabel()
         self.export_summary.setWordWrap(True)
-        self.hrv_check = QCheckBox("Heart rate variability from the Shimmer's ECG")
-        self.hrv_check.setChecked(True)
-        self.hrv_check.setToolTip("Adds the beat times and the HRV measures of the whole recording and of each event "
-                                  "to the package (lead II; needs an ECG sampled at 256 Hz or more)")
-        self.hrv_check.toggled.connect(self._update_export_summary)
         self.export_button = QPushButton("Export results…")
         self.export_button.setMinimumHeight(40)
         self.export_button.setToolTip("One package: the results, the lux and sensor files, the parameters, a manifest "
@@ -348,9 +395,18 @@ class MainWindow(QMainWindow):
         export_page = QWidget()
         export_layout = QVBoxLayout(export_page)
         export_layout.addWidget(self.trim_panel)
-        export_layout.addWidget(self.hrv_check)
         export_layout.addWidget(self.export_summary)
         export_layout.addWidget(self.export_button)
+        self.export_progress = QProgressBar()
+        self.export_progress.setRange(0, 1000)
+        self.export_progress.setTextVisible(False)
+        self.export_progress.hide()
+        export_layout.addWidget(self.export_progress)
+        self.export_result = QLabel()          # what the last export wrote, and where
+        self.export_result.setWordWrap(True)
+        self.export_result.setOpenExternalLinks(True)
+        self.export_result.hide()
+        export_layout.addWidget(self.export_result)
         export_layout.addStretch(1)
 
         # --- the left column: a rail of tabs, their pages, and the preview under them
@@ -363,7 +419,8 @@ class MainWindow(QMainWindow):
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.NoFrame)
             scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            self.pages.addWidget(scroll)
+            scroll.horizontalScrollBar().valueChanged.connect(lambda _, bar=scroll.horizontalScrollBar(): bar.setValue(0))
+            self.pages.addWidget(scroll)         # the pages only scroll vertically, also by a trackpad swipe
         self.rail.changed.connect(self.pages.setCurrentIndex)
 
         self.preview = VideoPreview()
@@ -383,7 +440,7 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(0)
         left_layout.addWidget(self.rail)
         left_layout.addWidget(self.left_split, 1)
-        left.setMinimumWidth(400)
+        left.setMinimumWidth(470)     # the widest page (the export range) needs 455 with its scroll bar
 
         # --- the right: a status strip over the plots
         right = QWidget()
@@ -412,12 +469,66 @@ class MainWindow(QMainWindow):
         right_layout.addLayout(strip)
         right_layout.addWidget(self.warnings_label)
         right_layout.addWidget(self.plots, 1)
+        # every plot is switched on and off here, under the plots
+        self.plots_bar = QWidget()
+        bar = QHBoxLayout(self.plots_bar)
+        bar.setContentsMargins(0, 0, 0, 0)
+        bar.addWidget(QLabel("<b>Plots:</b>"))
+        self.plot_checks = {}
+        for key, text, tip, on in (
+                ("pupil", "Pupil diameter", "Measured and expected pupil diameter", True),
+                ("lum", "Luminance", "The luminance used to predict the pupil (and the sensor's, on the lux route)", False),
+                ("ratio", "Video ratio", "Y_gaze / Y_frame, only on the lux route with the video", False),
+                ("cw", "ΔPD", "The cognitive-workload signal: measured minus expected pupil diameter", True)):
+            check = QCheckBox(text)
+            check.setChecked(on)
+            check.setToolTip(tip)
+            check.toggled.connect(partial(self.plots.set_plot_shown, key))
+            self.plots.set_plot_shown(key, on)
+            self.plot_checks[key] = check
+            bar.addWidget(check)
+        self.plot_checks["ratio"].setEnabled(False)
+        self.plots.zoom_button.setShortcut(QKeySequence("Z"))
+        self.signals_button = QPushButton("Sensor signals")     # the signals shown under ΔPD: the list's choice again
+        self.signals_button.setToolTip("Show or hide the imported sensor signals under ΔPD")
+        self.signals_button.setMenu(QMenu(self.signals_button))
+        self.signals_button.hide()
+        self.hrv_bar = QWidget()                # the HRV preview plots, once the HRV is computed
+        hrv_layout = QHBoxLayout(self.hrv_bar)
+        hrv_layout.setContentsMargins(0, 0, 0, 0)
+        self.hr_check = QCheckBox("Heart rate")
+        self.hr_check.setChecked(False)
+        self.hr_check.setToolTip("The heart rate (bpm) from the trusted intervals, under ΔPD on the same time axis")
+        self.rmssd_check = QCheckBox("RMSSD")
+        self.rmssd_check.setChecked(True)
+        self.rmssd_check.setToolTip("The RMSSD (ms) of the trusted intervals of a moving window: a preview of how the "
+                                    "vagal part of the variability changes. Not what the export holds (that is per window "
+                                    "of the table). Red points: more than 10 % of the intervals were not trusted")
+        self.rmssd_window = QDoubleSpinBox()
+        self.rmssd_window.setRange(10.0, 120.0)
+        self.rmssd_window.setSingleStep(5.0)
+        self.rmssd_window.setValue(hrv.MOVING_WINDOW_S)
+        self.rmssd_window.setSuffix(" s window")
+        self.rmssd_window.setKeyboardTracking(False)
+        self.rmssd_window.setToolTip("Length of the moving window of the RMSSD (10 to 30 s is the least that is "
+                                     "reported as usable)")
+        for w in (self.hr_check, self.rmssd_check):
+            w.toggled.connect(self._hrv_plots_changed)
+        self.rmssd_window.valueChanged.connect(self._hrv_plots_changed)
+        hrv_layout.addWidget(self.hr_check)
+        hrv_layout.addWidget(self.rmssd_check)
+        hrv_layout.addWidget(self.rmssd_window)
+        self.hrv_bar.hide()
+        bar.addWidget(self.hrv_bar)
+        bar.addWidget(self.signals_button)
+        bar.addStretch(1)
+        right_layout.addWidget(self.plots_bar)
 
         splitter = QSplitter()
         splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([430, 1130])
+        splitter.setSizes([480, 1080])
         self.setCentralWidget(splitter)
         self.main_split = splitter
 
@@ -485,7 +596,7 @@ class MainWindow(QMainWindow):
                                        if self.video is not None else "Analyse the scene video")
         self.cancel_button.setVisible(busy)   # only while an analysis or fit runs
         self.open_action.setEnabled(not busy)
-        self.clear_lux_action.setEnabled(self._lux_folder is not None and not busy)
+        self.forget_logs_action.setEnabled(self._logs_for_recording() is not None and not busy)
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
         self.light_button.setEnabled(self.fit_button.isEnabled())
@@ -516,7 +627,7 @@ class MainWindow(QMainWindow):
                 f"pupil ×{r.pupil_scale:.3g}, offset {r.offset:+.2f} mm &nbsp;&nbsp; "
                 f"{r.measured_rate:.0f} Hz → {r.rate:.0f} Hz{gaps}")
         self.lux_box.setVisible(has_rec and self.recording.luminance_source == "lux_sensor")
-        self.lux_own_button.setEnabled(self._lux_folder is not None and not busy)
+        self.lux_own_button.setEnabled(self._logs_for_recording() is not None and not busy)
         missing_lux = has_rec and self.recording.luminance_source == "lux_sensor" and self.recording.lux_values is None
         self.rail.mark(0, bool(missing_lux), "No lux sensor readings found for this recording")
         self.export_button.setEnabled(self.result is not None)
@@ -542,11 +653,27 @@ class MainWindow(QMainWindow):
             text += ", video not used"
         return text
 
-    def _error(self, title: str, message: str) -> None:
-        box = QMessageBox(QMessageBox.Warning, title, message.split("\n\n")[0], parent=self)
-        if "\n\n" in message:
-            box.setDetailedText(message.split("\n\n", 1)[1])
+    def _error(self, title: str, message: str, hint: bool = True) -> None:
+        """Tell the user what went wrong in a sentence, what to try (for the errors we know), and the details."""
+        head, details = errors.split_message(message)
+        box = QMessageBox(QMessageBox.Warning, title, head, parent=self)
+        if hint:
+            box.setInformativeText(errors.advice(message))
+        if details:
+            box.setDetailedText(details)
         box.exec()
+
+    def show_gestures(self) -> None:
+        """Help: the mouse gestures of the plots and the keyboard shortcuts."""
+        box = QMessageBox(QMessageBox.NoIcon, "Gestures and shortcuts", errors.gestures_html(), parent=self)
+        box.setTextFormat(Qt.RichText)
+        box.exec()
+
+    def show_about(self) -> None:
+        """Help: the version and where the documentation is."""
+        QMessageBox.about(self, "About", f"<b>Cognitive Workload Tool {__version__}</b><br>Pupil-based cognitive "
+                          f"workload from eye-tracking recordings, with the sensor logger's data.<br>"
+                          f"<a href='{errors.DOCS_URL}'>{errors.DOCS_URL}</a>")
 
     # Recording and video
 
@@ -556,31 +683,46 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Open recording folder", start)
         if folder:
             self._settings.setValue("last_recording_dir", str(Path(folder).parent))
+            self._logs_override = None               # a session chosen for the last recording is not for this one
             self.open_recording(Path(folder))
 
-    def choose_lux_folder(self) -> None:
-        """Ask for the folder with the lux sensor logs, when it is not in the recording's."""
-        start = str(self._lux_folder or self._settings.value("last_recording_dir", str(Path.home())))
-        folder = QFileDialog.getExistingDirectory(self, "Folder with the lux sensor logs", start)
-        if folder:
-            self.set_lux_folder(Path(folder))
+    def _logs_for_recording(self) -> Path | None:
+        """The logger folder to look in for the open recording's lux log and sensor files: the session chosen for it, else
+        the remembered recordings folder, else None (the recording's own folder)."""
+        return self._logs_override or self._logs_folder
 
-    def set_lux_folder(self, folder: Path | None) -> None:
-        """Use ``folder`` for the lux logs of this and the next recordings (None: the recording's own),
-        remember it, and reload the open recording with it."""
-        self._lux_folder = folder
-        self._settings.setValue("lux_folder", str(folder) if folder else "")
-        if self.recording is not None:
-            self.open_recording(self.recording.folder)
+    def set_logs_folder(self, folder: Path | None, remember: bool = True) -> None:
+        """Use ``folder`` (the logger's recordings folder, or one session) for the lux log and the sensor files. A
+        recordings folder is remembered for every recording; one session is used for the open recording only. The lux log
+        is read when the recording is loaded, so a glasses recording is loaded again; the sensor files are imported."""
+        if folder is not None and sensors.is_session(folder):
+            self._logs_override = folder
+            self._settings.setValue("last_sensor_dir", str(folder.parent))
+        else:
+            self._logs_override = None
+            self._logs_folder = folder
+            if remember:
+                self._settings.setValue("sensor_logs_folder", str(folder) if folder else "")
+                self._settings.setValue("lux_folder", "")
+                if folder:
+                    self._settings.setValue("last_sensor_dir", str(folder))
+        rec = self.recording
+        if rec is None:
+            self._update_state()
+            return
+        if rec.luminance_source == "lux_sensor":
+            self.open_recording(rec.folder)          # reads the lux log again, then imports the sensor files
+        elif self._logs_for_recording() is not None:
+            self.import_sensors(self._logs_for_recording())
         self._update_state()
 
-    def clear_lux_folder(self) -> None:
-        """Go back to looking for the lux logs in the recording's own folder."""
-        self.set_lux_folder(None)
+    def forget_logger_folder(self) -> None:
+        """Go back to looking for the lux log and the sensor files in the recording's own folder."""
+        self.set_logs_folder(None)
 
     def open_recording(self, folder: Path) -> None:
         """Load a recording in the background, then set up the plots, the preview and the controls for its device."""
-        lux_folder = self._lux_folder
+        lux_folder = self._logs_for_recording()
 
         def load(progress, cancelled):
             """Background task: read the recording."""
@@ -601,7 +743,8 @@ class MainWindow(QMainWindow):
             f"<br>video: {video}<br>events: {len(rec.events)}"
             + (f"<br>lux sensor: {len(rec.lux_values)} readings" if rec.lux_values is not None
                else ("<br>lux sensor: none found" if rec.luminance_source == "lux_sensor" else ""))
-            + (f"<br>lux folder: {self._lux_folder}" if self._lux_folder and rec.luminance_source == "lux_sensor" else ""))
+            + (f"<br>logger folder: {self._logs_for_recording()}"
+               if self._logs_for_recording() and rec.luminance_source == "lux_sensor" else ""))
         self.plots.clear_result()
         self.plots.show_events(rec.events)
         self._recording_sensors_and_trim(rec)
@@ -665,23 +808,29 @@ class MainWindow(QMainWindow):
 
     # Tasks
 
-    def _start_task(self, fn, on_success, message: str, show_progress: bool = False) -> None:
+    def _start_task(self, fn, on_success, message: str, show_progress: bool = False, bar=None) -> None:
+        """Run ``fn(progress, cancelled)`` in the background; ``bar`` is the progress bar to drive (default: the video
+        analysis' one in the Data tab)."""
         if self._task is not None and self._task.isRunning():
             return
         self.statusBar().showMessage(message)
+        self._task_message = message
         self._task = Task(fn, self)
-        self._task.progressed.connect(lambda p: self.progress.setValue(int(p * 1000)))
+        self._bar = bar or self.progress
+        self._task.progressed.connect(lambda p: self._bar.setValue(int(p * 1000)))
         self._task.succeeded.connect(on_success)
         self._task.failed.connect(lambda msg: self._error("Error", msg))
         self._task.finished.connect(self._task_finished)
-        self.progress.setValue(0)
-        self.progress.setVisible(show_progress)
+        self._bar.setValue(0)
+        self._bar.setVisible(show_progress)
         self._task.start()
         self._update_state()
 
     def _task_finished(self) -> None:
         self.progress.hide()
-        self.statusBar().clearMessage()
+        self.export_progress.hide()
+        if self.statusBar().currentMessage() == getattr(self, "_task_message", None):
+            self.statusBar().clearMessage()      # the task's own message; not the result it reported meanwhile
         self._update_state()
 
     def cancel_task(self) -> None:
@@ -704,8 +853,13 @@ class MainWindow(QMainWindow):
             self.result = None
             self.statusBar().showMessage(f"Analysis failed: {e}")
             self.plots.clear_result()
+            if str(e) != self._last_failure:       # one box per cause, not one per edit of the parameters
+                self._last_failure = str(e)
+                self._error("The analysis failed", f"{e}\n\n{traceback.format_exc()}")
         else:
+            self._last_failure = None
             self.plots.show_result(self.result)
+            self.plot_checks["ratio"].setEnabled(self.plots.ratio_available())
             self._update_sequence_rms()
         self.preview.set_analysis(self.video, self.result)
         self._update_state()
@@ -968,6 +1122,7 @@ class MainWindow(QMainWindow):
         self._update_state()
 
     def _update_export_summary(self) -> None:
+        self._update_hrv_controls()
         rec = self.recording
         if rec is None or self.result is None:
             self.export_summary.setText("")
@@ -977,9 +1132,7 @@ class MainWindow(QMainWindow):
             parts.append(f"{len(rec.events)} event{'s' if len(rec.events) != 1 else ''}")
         if rec.lux_values is not None:
             parts.append("lux")
-        ecg = [s for s in self.sensors if hrv.has_ecg(s)]
-        self.hrv_check.setVisible(bool(ecg))
-        parts += [f"{s.name} + HRV" if s in ecg and self.hrv_check.isChecked() else s.name for s in self.sensors]
+        parts += [f"{s.name} + HRV" if s.name in self.hrv_beats else s.name for s in self.sensors]
         parts += ["parameters", "manifest", "PDF plot"]
         self.export_summary.setText("The package holds: " + ", ".join(parts) + ".")
 
@@ -1011,17 +1164,18 @@ class MainWindow(QMainWindow):
         if self.recording is None:
             self._error("Import sensor data", "Open a recording first: the sensor data is placed on its time axis.")
             return
-        start = self._settings.value("last_sensor_dir", str(self.recording.folder))
-        folder = QFileDialog.getExistingDirectory(self, "Sensor logger session folder", start)
+        start = str(self._logs_folder or self._settings.value("last_sensor_dir", str(self.recording.folder)))
+        folder = QFileDialog.getExistingDirectory(self, "Sensor logger folder: its recordings folder, or one session", start)
         if folder:
-            self._settings.setValue("last_sensor_dir", str(Path(folder).parent))
-            self.import_sensors(Path(folder))
+            self.set_logs_folder(Path(folder))
 
     def _recording_sensors_and_trim(self, rec) -> None:
         """A recording was opened: forget the sensor data of the previous one, look for the logger's files in the
         recording's own folder, and bring back the export range saved with it."""
         self.sensors = []
+        self._clear_hrv()
         self.signal_list.clear()
+        self._rebuild_signal_menu()
         self.plots.set_sensors([])
         self._update_sensors_label()
         if len(rec.time):
@@ -1032,8 +1186,11 @@ class MainWindow(QMainWindow):
         trim = Trim.load(rec.folder / TRIM_FILE)
         self.trim_panel.set_trim(trim, quiet=True)
         self.plots.show_trim(trim, lo, hi)
+        logs = self._logs_for_recording()
         if sensors.find_sensor_files(rec.folder):
             self.import_sensors(rec.folder, quiet=True)
+        elif logs is not None:                       # the logger's recordings folder, given once for all recordings
+            self.import_sensors(logs, quiet=True)
 
     def import_sensors(self, folder: Path, quiet: bool = False) -> None:
         """Load the Shimmer and EmotiBit files of a logger session, cut to the recording's span and placed on its time
@@ -1052,24 +1209,30 @@ class MainWindow(QMainWindow):
         start, span = rec.epoch_start + float(rec.time[0]), float(rec.time[-1] - rec.time[0])
 
         def load(progress, cancelled):
-            """Background task: read the sensor files."""
-            return sensors.load_sensors(folder, start, span)
+            """Background task: find the session of the recording (in the logger's folder, if that is what was given) and
+            read its sensor files."""
+            session, _ = sensors.resolve_session(folder, start, span)
+            return sensors.load_sensors(folder, start, span), session or folder
 
         self.statusBar().showMessage(f"Reading the sensor data in {folder.name}…")
         self._sensor_task = Task(load, self)
-        self._sensor_task.succeeded.connect(lambda found: self._sensors_loaded(found, folder, quiet))
+        self._sensor_task.succeeded.connect(lambda result: self._sensors_loaded(result[0], result[1], quiet, folder))
         self._sensor_task.failed.connect(lambda msg: self._error("Import sensor data", msg))
         self._sensor_task.finished.connect(lambda: self.statusBar().clearMessage())
         self._sensor_task.start()
 
-    def _sensors_loaded(self, found, folder: Path, quiet: bool) -> None:
+    def _sensors_loaded(self, found, folder: Path, quiet: bool, given: Path | None = None) -> None:
+        """The sensor files were read: ``folder`` is the session they come from, ``given`` the folder that was asked for
+        (the logger's recordings folder, when that is what it was)."""
         if not found:
             if not quiet:
-                self._error("Import sensor data", f"No sensor data in {folder} overlaps this recording. The files "
-                                                  "must come from the sensor logger (their first column is the "
-                                                  "Unix time) and cover the same time as the recording.")
+                self._error("Import sensor data", f"No sensor data in {given or folder} overlaps this recording. The "
+                                                  "files must come from the sensor logger (their first column is the "
+                                                  "Unix time) and cover the same time as the recording; if the folder "
+                                                  "is the logger's recordings folder, none of its sessions does.")
             return
         self.sensors = found
+        self._clear_hrv()
         self.signal_list.blockSignals(True)
         self.signal_list.clear()
         shown = 0
@@ -1091,14 +1254,38 @@ class MainWindow(QMainWindow):
     def remove_sensors(self) -> None:
         """Forget the imported sensor data."""
         self.sensors = []
+        self._clear_hrv()
         self.signal_list.clear()
+        self._rebuild_signal_menu()
         self.plots.set_sensors([])
         self._update_sensors_label()
 
+    def _rebuild_signal_menu(self) -> None:
+        """The menu under the plots lists the signals of the list (ticked = shown); a tick in either changes the other."""
+        menu = self.signals_button.menu()
+        items = [self.signal_list.item(row) for row in range(self.signal_list.count())]
+        if [a.text() for a in menu.actions()] == [i.text() for i in items]:     # the same signals: only the ticks
+            for action, item in zip(menu.actions(), items):
+                action.blockSignals(True)
+                action.setChecked(item.checkState() == Qt.Checked)
+                action.blockSignals(False)
+            return
+        menu.clear()
+        for row in range(self.signal_list.count()):
+            item = self.signal_list.item(row)
+            action = menu.addAction(item.text())
+            action.setCheckable(True)
+            action.setChecked(item.checkState() == Qt.Checked)
+            action.toggled.connect(lambda on, item=item: item.setCheckState(Qt.Checked if on else Qt.Unchecked))
+        self.signals_button.setVisible(self.signal_list.count() > 0)
+
     def _update_sensors_label(self, folder: Path | None = None) -> None:
         if not self.sensors:
-            self.sensors_label.setText("Shimmer and EmotiBit files from the sensor logger can be shown under ΔPD "
-                                       "and exported with it, as one package.")
+            logs = self._logs_for_recording()
+            self.sensors_label.setText("The sensor logger's folder gives the lux log and the Shimmer and EmotiBit files, "
+                                       "which can be shown under ΔPD and exported with it, as one package."
+                                       + (f"<br>Logger folder: {logs} (the session of each recording is found in it)"
+                                          if logs else ""))
         else:
             parts = ", ".join(f"{s.name} ({len(s):,} rows)" for s in self.sensors)
             warn = "".join(f"<br><span style='color:{palette.WARNING}'>{s.name}: {note}</span>"
@@ -1107,6 +1294,141 @@ class MainWindow(QMainWindow):
             self.sensors_label.setToolTip(str(folder) if folder else "")
         self.remove_sensors_button.setEnabled(bool(self.sensors))
         self._update_export_summary()
+
+    def _ecg_sensors(self) -> list:
+        """The imported sensors that hold a Shimmer ECG."""
+        return [s for s in self.sensors if hrv.has_ecg(s)]
+
+    def _update_hrv_controls(self) -> None:
+        """The Compute HRV button is on with an ECG imported and no other task running."""
+        busy = self._task is not None and self._task.isRunning()
+        self.hrv_button.setEnabled(bool(self._ecg_sensors()) and not busy)
+        self.hrv_button.setText("Recompute HRV" if self.hrv_beats else "Compute HRV")
+
+    def compute_hrv(self) -> None:
+        """Find the heartbeats in the Shimmer's ECG in the background, then show the HRV of the whole recording and of
+        each event, draw the beats on the ECG plot and keep them for the export."""
+        ecg = self._ecg_sensors()
+        if not ecg or self.recording is None:
+            return
+        self.hrv_status.setText("Finding the heartbeats…")
+        self.hrv_status.show()
+
+        def work(progress, cancelled):
+            """Background task: the beats of each ECG."""
+            return {s.name: hrv.beats_of(s) for s in ecg}
+
+        self._start_task(work, self._hrv_done, "Finding the heartbeats…")
+
+    def _hrv_done(self, found: dict) -> None:
+        """The beats were found: keep them, and show the measures and the beats."""
+        self.hrv_beats = {name: beats for name, beats in found.items() if beats is not None}
+        if not self.hrv_beats:
+            self.hrv_status.setText("No ECG lead was found in the sensor data.")
+        self._refresh_hrv()
+        self._update_export_summary()
+
+    def _clear_hrv(self) -> None:
+        """Forget the beats and the table (the recording or the sensor data changed)."""
+        self.hrv_beats, self.hrv_series = {}, None
+        self.hrv_table.setRowCount(0)
+        for w in (self.hrv_table, self.hrv_status, self.hrv_notes, self.hrv_bar):
+            w.hide()
+        self.plots.clear_beats()
+        self._update_hrv_controls()
+
+    def _refresh_hrv(self) -> None:
+        """The table and the beat markers from the beats found, for the current export range: only the windows and the
+        trusted intervals are worked out again, not the detection, so this follows the range as it is edited."""
+        rec = self.recording
+        if not self.hrv_beats or rec is None:
+            return
+        trim, windows = self.trim_panel.trim(), pipeline.hrv_windows(rec)
+        several = len(self.hrv_beats) > 1
+        rows, beats_total, untrusted, series = [], 0, 0, None
+        for s in self.sensors:
+            beats = self.hrv_beats.get(s.name)
+            if beats is None:
+                continue
+            results, adjusted = hrv.analyse(s, rec.epoch_start, windows, trim, beats=beats)
+            if series is None:                       # the plots show the first ECG
+                series = hrv.time_series(adjusted, rec.epoch_start, self.rmssd_window.value())
+            t, v = s.series(hrv.LEAD_II)
+            self.plots.set_beats(f"{s.name}: {hrv.LEAD_II}", adjusted.unix - rec.epoch_start,
+                                 self._beat_heights(t, v, adjusted.unix), adjusted.ok)
+            rows += [(f"{s.name}: {r.label}" if several else r.label, r) for r in results]
+            beats_total += results[0].beats
+            untrusted += int((np.isfinite(adjusted.rr) & ~adjusted.ok).sum())
+        self.hrv_table.setRowCount(len(rows))
+        for i, (label, r) in enumerate(rows):
+            for j, (_, field, fmt) in enumerate(HRV_COLUMNS):
+                value = label if field == "label" else getattr(r, field)
+                text = value if field == "label" else ("–" if not np.isfinite(value) else fmt.format(value))
+                item = QTableWidgetItem((text + " *") if j == 0 and r.notes else text)
+                item.setData(Qt.UserRole, r.notes)
+                if j:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.hrv_table.setItem(i, j, item)
+        self.hrv_table.show()
+        self.hrv_status.setText(f"{beats_total} beats; {untrusted} intervals not trusted (red crosses on the ECG plot). "
+                                "The table follows the export range, and goes into the package. * = a note: select "
+                                "the row.")
+        self.hrv_status.show()
+        self._hrv_row_selected()
+        self._update_hrv_controls()
+        before = [spec[0] for spec in self._hrv_specs()]
+        self.hrv_series = series
+        self.hrv_bar.setVisible(series is not None)
+        specs = self._hrv_specs()
+        if [spec[0] for spec in specs] == before and all(
+                self.plots.update_series(s[0], s[1], s[2], s[3].get("weak")) for s in specs):
+            return                                   # the same plots with new data: they are not built again
+        self._show_sensors()
+
+    def _hrv_specs(self) -> list:
+        """The plots of the heart rate and of the moving RMSSD that are switched on, as specs for the sensor plots (after
+        the signals chosen in the list, which have their own limit)."""
+        series = self.hrv_series
+        if series is None:
+            return []
+        specs = []
+        if self.hr_check.isChecked() and len(series.hr):
+            specs.append(("Heart rate (bpm)", series.hr_time, series.hr, {"colour": (190, 70, 60), "axis": "HR (bpm)"}))
+        if self.rmssd_check.isChecked() and len(series.rmssd):
+            weak = series.weak & np.isfinite(series.rmssd)
+            specs.append((f"RMSSD (ms), moving {series.window:g} s window", series.rmssd_time, series.rmssd,
+                          {"colour": (50, 130, 90), "axis": "RMSSD (ms)", "weak": (series.rmssd_time[weak], series.rmssd[weak])}))
+        return specs
+
+    def _hrv_plots_changed(self, *_) -> None:
+        """A checkbox or the window of the moving RMSSD changed: the plots under ΔPD are built again."""
+        if self.hrv_series is None:
+            return
+        if abs(self.hrv_series.window - self.rmssd_window.value()) > 1e-9:
+            self._refresh_hrv()                      # a new window: the series, and the plots if their titles changed
+        else:
+            self._show_sensors()
+
+    @staticmethod
+    def _beat_heights(t: np.ndarray, v: np.ndarray, beats: np.ndarray) -> np.ndarray:
+        """Where to put the marker of each beat on the ECG plot: the sample of the ECG furthest from its median within
+        three samples of the beat (a beat is refined below one sample, and the R wave is a few samples wide)."""
+        if not len(beats) or not len(t):
+            return np.zeros(len(beats))
+        centre = np.nanmedian(v)
+        index = np.clip(np.searchsorted(t, beats), 0, len(t) - 1)
+        offsets = np.arange(-3, 4)
+        window = np.clip(index[:, None] + offsets[None, :], 0, len(t) - 1)
+        values = v[window]
+        return values[np.arange(len(beats)), np.nanargmax(np.abs(values - centre), axis=1)]
+
+    def _hrv_row_selected(self) -> None:
+        """Show the notes of the selected window of the HRV table (why a measure is rough or missing)."""
+        rows = self.hrv_table.selectionModel().selectedRows() if self.hrv_table.isVisible() else []
+        notes = self.hrv_table.item(rows[0].row(), 0).data(Qt.UserRole) if rows else None
+        self.hrv_notes.setText("<br>".join(f"<span style='color:{palette.WARNING}'>{n}</span>" for n in notes)
+                               if notes else "")
+        self.hrv_notes.setVisible(bool(notes))
 
     @staticmethod
     def _ecg_notes(sensor) -> list[str]:
@@ -1120,6 +1442,7 @@ class MainWindow(QMainWindow):
         return []
 
     def _show_sensors(self, *_) -> None:
+        self._rebuild_signal_menu()
         rec = self.recording
         specs = []
         for row in range(self.signal_list.count()):
@@ -1132,7 +1455,7 @@ class MainWindow(QMainWindow):
         if len(specs) > MAX_SHOWN:
             self.statusBar().showMessage(f"Showing the first {MAX_SHOWN} of {len(specs)} selected signals", 4000)
             specs = specs[:MAX_SHOWN]
-        self.plots.set_sensors(specs)
+        self.plots.set_sensors(specs + self._hrv_specs())
 
     def _sequence_span(self):
         """The calibration sequence on the plots, for the export range's "leave out calibration" button."""
@@ -1147,11 +1470,15 @@ class MainWindow(QMainWindow):
         if rec is not None and len(rec.time):
             self.plots.show_trim(trim, float(rec.time[0]), float(rec.time[-1]))
         self._trim_save_timer.start()
+        if self.hrv_beats:
+            self._hrv_timer.start()
 
     def _trim_dragged(self, trim: Trim) -> None:
         """The user dragged the export range on the plots."""
         self.trim_panel.set_trim(trim, quiet=True)
         self._trim_save_timer.start()
+        if self.hrv_beats:
+            self._hrv_timer.start()
 
     def _save_trim(self) -> None:
         """Keep the export range with the recording, so it comes back when it is opened again."""
@@ -1181,17 +1508,25 @@ class MainWindow(QMainWindow):
         if not folder:
             return
         trim = self.trim_panel.trim()
-        try:
-            paths = pipeline.export(self.result, self.recording, self.params_panel.params(), Path(folder),
-                                    trim=trim, sensors=self.sensors, hrv=self.hrv_check.isChecked())
-        except OSError as e:
-            self._error("Cannot export", str(e))
-            return
+        result, rec, params = self.result, self.recording, self.params_panel.params()
+        sensors_, use_hrv, beats = list(self.sensors), bool(self.hrv_beats), dict(self.hrv_beats)
+        self.export_result.hide()
+
+        def work(progress, cancelled):
+            return pipeline.export(result, rec, params, Path(folder), trim=trim, sensors=sensors_, hrv=use_hrv,
+                                   hrv_beats=beats, progress=progress)
+
+        self._export_trim = trim
+        self._start_task(work, lambda paths: self._exported(paths, Path(folder), trim), "Exporting…",
+                         show_progress=True, bar=self.export_progress)
+
+    def _exported(self, paths: list, folder: Path, trim) -> None:
+        """The files are written: add the PDF plot (drawn here, matplotlib is not for other threads) and say where."""
         try:
             from cwtool.plot import plot_result
-            p = Path(folder) / f"{self.recording.name}_plot.pdf"
+            p = folder / f"{self.recording.name}_plot.pdf"
             plot_result(self.result, self.recording, trim).savefig(p, bbox_inches="tight")
-            paths.append(p)
+            paths = list(paths) + [p]
         except ImportError:
             pass
         extra = ""
@@ -1200,6 +1535,10 @@ class MainWindow(QMainWindow):
         if trim.active:
             extra += ", trimmed"
         self.statusBar().showMessage(f"Exported {len(paths)} files{extra} to {folder}", 6000)
+        # the Export tab keeps what the status bar shows for a few seconds
+        self.export_result.setText(f"Last export: {len(paths)} files{extra}<br>"
+                                   f"<a href='{QUrl.fromLocalFile(str(folder)).toString()}'>{folder}</a>")
+        self.export_result.show()
 
     def closeEvent(self, event) -> None:
         """Stop the running task and save the layout before closing."""

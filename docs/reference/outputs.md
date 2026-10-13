@@ -62,8 +62,9 @@ the rest are the logger file's own columns, raw as logged: the Shimmer's channel
 
 ### `<name>_<sensor>_hrv.csv` and `<name>_<sensor>_beats.csv`
 
-For a Shimmer file with an ECG (unless HRV is turned off: *Heart rate variability* in the Export tab, `--no-hrv`; it needs
-NeuroKit2, and without it the manifest says `skipped` and gives the reason).
+For a Shimmer file with an ECG, when the HRV was computed: with **Compute HRV** in the app before exporting, or by
+default on the command line (`--no-hrv` turns it off). It needs NeuroKit2; without it the manifest says `skipped` and
+gives the reason.
 `_hrv.csv` has one row per window, the whole recording and each event: `window`, `start_relative`, `end_relative`,
 `kept_seconds`, `beats`, `trusted_intervals`, `untrusted_percent`, `mean_hr_bpm`, `mean_nn_ms`, `sdnn_ms`, `cvnn`,
 `madnn_ms`, `rmssd_ms`, `pnn50_percent`, `pnn20_percent`, `sd1_ms`, `sd2_ms`, `sd1_sd2`, `lf_ms2`, `hf_ms2`, `lf_hf`, `lfn`,

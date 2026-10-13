@@ -22,7 +22,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--params", type=Path, help="participant parameters JSON")
     ap.add_argument("--display", type=Path,
                     help="display photometry JSON (display devices; participant files do not hold it)")
-    ap.add_argument("--lux", type=Path, help="folder with lux sensor logs (glasses; default: in the recording)")
+    ap.add_argument("--logs", type=Path, metavar="FOLDER",
+                    help="the sensor logger's recordings folder (or one session): the lux log of a glasses recording and "
+                         "the Shimmer and EmotiBit files are found in it by their time (default: in the recording)")
+    ap.add_argument("--lux", type=Path, help="folder with lux sensor logs, if not the one of --logs (glasses; default: in "
+                                             "the recording)")
     ap.add_argument("--out", type=Path, help="export folder (default: RECORDING/cwtool_export)")
     ap.add_argument("--sensors", type=Path, metavar="FOLDER",
                     help="sensor logger session folder (Shimmer, EmotiBit) to add to the export, trimmed like the "
@@ -40,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--plot", action="store_true", help="save a PDF plot (needs matplotlib)")
     args = ap.parse_args(argv)
 
-    rec = devices.load(args.recording, args.device, lux_folder=args.lux)
+    rec = devices.load(args.recording, args.device, lux_folder=args.lux or args.logs)
     params = Parameters.load(args.params, rec.profile) if args.params else Parameters()
     if args.display:
         params = DisplayPhotometry.load(args.display).apply(params)
@@ -77,8 +81,8 @@ def main(argv: list[str] | None = None) -> int:
     found = []
     if len(rec.time) and math.isfinite(rec.epoch_start):
         span = float(rec.time[-1] - rec.time[0])
-        found = sensors.load_sensors(args.sensors or rec.folder, rec.epoch_start + float(rec.time[0]), span)
-    elif args.sensors:
+        found = sensors.load_sensors(args.sensors or args.logs or rec.folder, rec.epoch_start + float(rec.time[0]), span)
+    elif args.sensors or args.logs:
         print("The recording has no absolute time: sensor data cannot be aligned", file=sys.stderr)
     for p in pipeline.export(result, rec, params, out, trim=trim, sensors=found, hrv=not args.no_hrv):
         print(f"wrote {p}")

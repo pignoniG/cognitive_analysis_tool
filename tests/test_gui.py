@@ -15,6 +15,7 @@ pytest.importorskip("pyqtgraph")
 
 pytestmark = pytest.mark.usefixtures("isolated_qsettings")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from cwtool.gui.main_window import MainWindow  # noqa: E402
@@ -338,6 +339,9 @@ def test_lux_route_is_shown(app, tmp_path):
     plots = ResultPlots()
     r = pipeline.run(rec, video, Parameters(delay=0.0))
     plots.show_result(r)
+    assert not plots.plot_shown("ratio") and plots.ratio_available()      # the video ratio is off until asked for
+    plots.set_plot_shown("ratio", True)
+    plots.set_plot_shown("lum", True)        # the sensor curve is on the luminance plot
     assert plots.ratio.isVisible() and plots.sensor_curve.isVisible()
     text = MainWindow._route_text(r)
     assert "lux sensor" in text and "video ratio" in text
@@ -403,24 +407,176 @@ def test_glasses_calibration_controls_and_run_file(app, tmp_path):
     assert not w.sequence_check.isChecked() and "outside" in w.statusBar().currentMessage()
 
 
-def test_lux_folder_is_remembered(app, tmp_path, monkeypatch):
+def test_the_logger_folder_is_remembered(app, tmp_path, monkeypatch):
+    """One folder, the sensor logger's, gives the lux log and the sensor files; it is kept between sessions."""
     from PySide6.QtCore import QSettings
     from cwtool.gui import main_window as mw
 
     QSettings.setPath(QSettings.NativeFormat, QSettings.UserScope, str(tmp_path / "settings"))
     QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path / "settings"))
-    folder = tmp_path / "lux"
+    folder = tmp_path / "logs"
     folder.mkdir()
     w = mw.MainWindow()
+    w._settings.remove("sensor_logs_folder")
     w._settings.remove("lux_folder")
-    w.set_lux_folder(folder)
-    assert w._lux_folder == folder and w.clear_lux_action.isEnabled()
+    w.set_logs_folder(folder)
+    assert w._logs_folder == folder and w.forget_logs_action.isEnabled()
     again = mw.MainWindow()                       # the next session
-    assert again._lux_folder == folder
-    again.clear_lux_folder()
-    assert again._lux_folder is None and not again.clear_lux_action.isEnabled()
-    assert mw.MainWindow()._lux_folder is None
+    assert again._logs_folder == folder
+    again.forget_logger_folder()
+    assert again._logs_folder is None and not again.forget_logs_action.isEnabled()
+    assert mw.MainWindow()._logs_folder is None
+    w.set_logs_folder(folder)                     # a folder that later disappears is not used
     folder.rmdir()
-    w.set_lux_folder(folder)                      # a folder that later disappears is not used
-    folder.rmdir() if folder.exists() else None
-    assert mw.MainWindow()._lux_folder is None
+    assert mw.MainWindow()._logs_folder is None
+    # the folder that was remembered for the lux log alone is still honoured
+    old = tmp_path / "old_lux"
+    old.mkdir()
+    w._settings.setValue("lux_folder", str(old))
+    assert mw.MainWindow()._logs_folder == old
+
+
+def test_the_time_axis_cannot_be_scrolled_off_the_recording(app, tmp_path):
+    """A swipe or a drag that misses the cursor must not slide the plots away from their data."""
+    from conftest import write_varjo_recording
+
+    w = MainWindow()
+    w.open_recording(write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None)
+    lo, hi = float(w.result.time[0]), float(w.result.time[-1])
+    vb = w.plots.pupil.vb
+    vb.translateBy(x=1000.0)                                                  # scrolled far to the right
+    x0, x1 = vb.viewRange()[0]
+    assert x1 <= hi + 1e-6 and x0 >= lo - 1e-6
+    vb.translateBy(x=-5000.0)                                                 # and to the left
+    x0, x1 = vb.viewRange()[0]
+    assert x0 >= lo - 1e-6 and x1 <= hi + 1e-6
+    vb.scaleBy((100.0, 1.0))                                                  # zoomed out far beyond the recording
+    x0, x1 = vb.viewRange()[0]
+    assert x0 >= lo - 1e-6 and x1 <= hi + 1e-6
+    vb.setXRange(lo + 2.0, lo + 4.0, padding=0)                               # zooming in and moving within it still works
+    vb.translateBy(x=1.0)
+    x0, x1 = vb.viewRange()[0]
+    assert x1 - x0 == pytest.approx(2.0, abs=0.05) and x0 > lo + 2.5
+    # the other plots, linked in time, follow and the sensor plots have the same limits
+    assert all(p.vb.viewRange()[0][0] >= lo - 1e-6 for p in w.plots._plots)
+    w.close()
+
+
+class FakeMouseEvent:
+    """Just what TimeViewBox reads from a pyqtgraph mouse event."""
+
+    def __init__(self, button, down, pos, last=None, finish=False, modifiers=None, vb=None):
+        self._vb = vb
+        self._button, self._down, self._pos, self._last, self._finish = button, down, pos, last or pos, finish
+        self._modifiers = modifiers or Qt.NoModifier
+
+    def accept(self): pass
+    def button(self): return self._button
+    def modifiers(self): return self._modifiers
+    def isFinish(self): return self._finish
+    def buttonDownScenePos(self): return self._down
+    def scenePos(self): return self._pos
+    def lastScenePos(self): return self._last
+    def buttonDownPos(self): return self._vb.mapFromScene(self._down) if self._vb else self._down
+    def pos(self): return self._vb.mapFromScene(self._pos) if self._vb else self._pos
+
+
+def test_plots_pan_in_time_and_the_zoom_button_zooms_to_a_rectangle(app, tmp_path):
+    """Drag pans in time; in zoom mode a rectangle zooms in time and value; right-click zooms out."""
+    from conftest import write_varjo_recording
+    from PySide6.QtCore import QPointF
+
+    w = MainWindow()
+    w.resize(1400, 900)
+    w.show()
+    w.open_recording(write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128] * 6, pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None, 60)
+    plots, vb = w.plots, w.plots.pupil.vb
+    assert all(p.vb.state["mouseEnabled"] == [True, False] for p in plots._plots)
+    full_x, full_y = vb.viewRange()
+    rect = vb.sceneBoundingRect()
+    mid, centre = rect.center().y(), rect.center().x()
+    # not in zoom mode, a left drag pans in time only and the value axis stays where it is
+    vb.setXRange(full_x[0] + 10, full_x[0] + 20, padding=0)
+    before = vb.viewRange()
+    a = QPointF(centre, mid)
+    vb.mouseDragEvent(FakeMouseEvent(Qt.LeftButton, a, QPointF(a.x() - 60, mid + 40), last=a))
+    x, y = vb.viewRange()
+    assert x[0] > before[0][0] and x[1] - x[0] == pytest.approx(before[0][1] - before[0][0])
+    assert y == pytest.approx(before[1])
+    plots.fit_to_data()
+    # zoom mode: the rectangle is drawn from where the button went down, and zooms in time and in value
+    plots.zoom_button.click()
+    assert plots.zoom_button.isChecked() and all(p.vb.zoom_mode for p in plots._plots)
+    d0, d1 = QPointF(centre - 50, mid - 30), QPointF(centre + 80, mid + 30)
+    vb.mouseDragEvent(FakeMouseEvent(Qt.LeftButton, d0, d1, vb=vb))
+    band = vb.rbScaleBox.mapRectToScene(vb.rbScaleBox.rect())
+    assert band.left() == pytest.approx(d0.x(), abs=1.5) and band.right() == pytest.approx(d1.x(), abs=1.5)
+    vb.rbScaleBox.hide()
+    a, b = QPointF(centre - rect.width() / 10, mid - rect.height() / 4), QPointF(centre + rect.width() / 10, mid + rect.height() / 4)
+    vb.mouseDragEvent(FakeMouseEvent(Qt.LeftButton, a, b, finish=True))
+    x, y = vb.viewRange()
+    assert (x[1] - x[0]) == pytest.approx(0.2 * (full_x[1] - full_x[0]), rel=0.2)
+    assert (y[1] - y[0]) < 0.7 * (full_y[1] - full_y[0])                          # zoomed in value as well
+    assert plots.pupil in plots._y_zoomed and plots.cw not in plots._y_zoomed
+    vb.setXRange(x[0] + 1, x[1] + 1, padding=0)                                      # moving along: the zoomed value axis stays
+    assert vb.viewRange()[1] == pytest.approx(y)
+    # a click-sized drag does not zoom
+    before = vb.viewRange()[0]
+    vb.mouseDragEvent(FakeMouseEvent(Qt.LeftButton, a, QPointF(a.x() + 1, a.y() + 1), finish=True))
+    assert vb.viewRange()[0] == pytest.approx(before)
+    # right click zooms out and fits the value axis to the data again
+    vb.mouseClickEvent(FakeMouseEvent(Qt.RightButton, a, QPointF(centre, mid)))
+    wider = vb.viewRange()[0]
+    assert (wider[1] - wider[0]) > 1.8 * (before[1] - before[0]) and plots.pupil not in plots._y_zoomed
+    assert all(p.vb.viewRange()[0] == pytest.approx(wider) for p in plots._plots)
+    # the reset button shows it all again, and a drag pans once zoom mode is off
+    plots.fit_to_data()
+    assert vb.viewRange()[0][1] - vb.viewRange()[0][0] > 0.95 * (full_x[1] - full_x[0])
+    plots.zoom_button.click()
+    assert not any(p.vb.zoom_mode for p in plots._plots)
+    w.close()
+
+
+def test_every_plot_can_be_switched_and_the_axes_line_up(app, tmp_path):
+    from conftest import write_varjo_recording
+
+    w = MainWindow()
+    w.resize(1400, 900)
+    w.show()
+    w.open_recording(write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None)
+    plots = w.plots
+    # by default: the pupil diameter and ΔPD; luminance and the video ratio (not available here) are off
+    assert [k for k in plots.PLOT_KEYS if plots.plot_shown(k)] == ["pupil", "cw"]
+    assert w.plot_checks["pupil"].isChecked() and w.plot_checks["cw"].isChecked() and not w.plot_checks["lum"].isChecked()
+    assert not w.plot_checks["ratio"].isEnabled()
+    w.plot_checks["lum"].setChecked(True)
+    app.processEvents()
+    assert plots.lum.isVisible()
+    # the left axes are as wide and start at the same place, whatever their numbers are
+    widths = {p.getAxis("left").width() for p in plots._plots}
+    assert len(widths) == 1
+    lefts = {round(p.vb.sceneBoundingRect().left()) for p in plots._plots if p.isVisible()}
+    rights = {round(p.vb.sceneBoundingRect().right()) for p in plots._plots if p.isVisible()}
+    assert len(lefts) == 1 and len(rights) == 1
+    # hiding the last plot moves the time axis up to the last one shown
+    w.plot_checks["cw"].setChecked(False)
+    app.processEvents()
+    assert not plots.cw.isVisible()
+    assert plots.lum.getAxis("bottom").style["showValues"] and not plots.pupil.getAxis("bottom").style["showValues"]
+    w.close()
+
+
+def test_the_left_pages_never_scroll_sideways(app):
+    w = MainWindow()
+    w.resize(1400, 900)
+    w.show()
+    w.main_split.setSizes([1, 1000])                                              # as narrow as the window allows
+    for i in range(w.pages.count()):
+        w.rail.set_current(i)
+        app.processEvents()
+        scroll = w.pages.widget(i)
+        assert scroll.horizontalScrollBar().maximum() == 0, f"page {i} is wider than its column"
+    w.close()

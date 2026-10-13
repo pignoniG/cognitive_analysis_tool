@@ -632,22 +632,38 @@ def event_means(result: Result, events, trim: Optional[Trim] = None) -> list[tup
     return out
 
 
+def hrv_windows(rec: Recording) -> list[tuple[str, float, float]]:
+    """The windows the heart rate variability is computed for: the whole recording and each event, clipped to it
+    (``(label, start, end)`` in seconds on the relative clock)."""
+    first, last = (float(rec.time[0]), float(rec.time[-1])) if len(rec.time) else (0.0, 0.0)
+    return [("recording", first, last)] + [(e.label, max(e.start, first), min(e.end, last))
+                                           for e in rec.events if e.end > first and e.start < last]
+
+
 def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, trim: Optional[Trim] = None,
-           sensors=(), hrv: bool = True) -> list[Path]:
+           sensors=(), hrv: bool = True, hrv_beats: Optional[dict] = None, progress=None) -> list[Path]:
     """Write the results of a recording as one package in ``out_dir``: ``<name>_pupil.csv``, ``<name>_cw.csv``,
     ``<name>_events.csv`` (with events), ``<name>_lux.csv`` (with a lux log), one ``<name>_<sensor>.csv`` for each
     of ``sensors`` (:class:`cwtool.sensors.Sensor`), for a sensor with an ECG (a Shimmer) also its heart rate
     variability (``<name>_<sensor>_hrv.csv`` per window: the recording and each event, and
-    ``<name>_<sensor>_beats.csv``, unless ``hrv`` is False), ``<name>_params.json`` and ``<name>_export.json`` (what
-    the package holds); returns their paths.
+    ``<name>_<sensor>_beats.csv``, unless ``hrv`` is False; ``hrv_beats`` maps a sensor's name to the beats already found
+    for it, :func:`cwtool.hrv.beats_of`, so that the detection is not repeated), ``<name>_params.json`` and
+    ``<name>_export.json`` (what the package holds); returns their paths.
 
     ``trim`` (:class:`cwtool.trim.Trim`) leaves out the parts of the recording that are not wanted, from every
-    file; ΔPD in SD units is then normalised with the SD of what is kept. See docs/reference/outputs.md."""
+    file; ΔPD in SD units is then normalised with the SD of what is kept. ``progress``, if given, is called with the share
+    of the package written (0 to 1). See docs/reference/outputs.md."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     trim = trim or Trim()
     paths = []
     first, last = (float(rec.time[0]), float(rec.time[-1])) if len(rec.time) else (0.0, 0.0)
+    steps, done = 5 + len(sensors), [0]
+
+    def step() -> None:
+        done[0] += 1
+        if progress is not None:
+            progress(min(1.0, done[0] / steps))
 
     keep = trim.keep_mask(result.time)
     keep_cw = trim.keep_mask(result.cw_time)
@@ -666,6 +682,7 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
                        result.measured[keep], result.measured_raw[keep], result.expected[keep]):
             w.writerow([f"{v:.6f}" for v in row])
     paths.append(p)
+    step()
 
     p = out_dir / f"{rec.name}_cw.csv"
     with open(p, "w", newline="") as f:
@@ -674,6 +691,7 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         for t, v in zip(result.cw_time[keep_cw], result.cw[keep_cw]):
             w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}", f"{v / sd:.6f}"])
     paths.append(p)
+    step()
 
     means = event_means(result, rec.events, trim) if rec.events else []
     if means:
@@ -685,6 +703,7 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
                 w.writerow([label, f"{s:.3f}", f"{e:.3f}", f"{m:.6f}", f"{m / sd:.6f}"])
         paths.append(p)
 
+    step()      # the event means
     if rec.lux_time is not None and len(rec.lux_time):
         p = out_dir / f"{rec.name}_lux.csv"
         sel = trim.keep_mask(rec.lux_time, first, last)
@@ -704,10 +723,9 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         info = {"file": p.name, "kind": sensor.kind, "source": str(sensor.path), "rows": len(kept_rows),
                 "columns": ["timestamp_unix", "timestamp_relative"] + sensor.header[1:]}
         if hrv and hrv_module.has_ecg(sensor):
-            windows = [("recording", first, last)] + [(e.label, max(e.start, first), min(e.end, last))
-                                                      for e in rec.events if e.end > first and e.start < last]
             try:
-                found = hrv_module.analyse(sensor, rec.epoch_start, windows, trim)
+                found = hrv_module.analyse(sensor, rec.epoch_start, hrv_windows(rec), trim,
+                                           beats=(hrv_beats or {}).get(sensor.name))
             except ImportError as e:                    # NeuroKit2 is not installed: the rest of the package is written
                 warnings.warn(str(e))
                 info["hrv"] = {"skipped": str(e)}
@@ -721,6 +739,7 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
                                "sampling rate (Hz)": round(beats.rate, 2), "ecg gain": beats.gain,
                                "notes": beats.notes}
         sensor_info.append(info)
+        step()
 
     p = out_dir / f"{rec.name}_params.json"
     params.save(p)

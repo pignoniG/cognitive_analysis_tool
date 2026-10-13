@@ -275,3 +275,26 @@ def test_without_neurokit2_the_export_skips_the_hrv_and_says_why(tmp_path, monke
     with pytest.raises(ImportError, match="cwtool\\[hrv\\]"):
         monkeypatch.setattr(builtins, "__import__", refuse)
         hrv.detect_r_peaks(np.zeros(2000), np.arange(2000) / 256.0)
+
+
+def _beats_of_intervals(rr_ms, ok=None):
+    t = np.cumsum(np.asarray(rr_ms, float) / 1000.0)
+    rr = np.r_[np.nan, np.diff(t)]
+    ok = np.isfinite(rr) if ok is None else np.asarray(ok, bool)
+    return hrv.Beats(t, t + EPOCH, np.ones(len(t)), np.zeros(len(t), int), rr, ok, 256.0, 4.0)
+
+
+def test_the_heart_rate_and_the_moving_rmssd_of_known_intervals():
+    beats = _beats_of_intervals(np.tile([900.0, 1100.0], 100))                 # RMSSD 200 ms, 54.5 and 66.7 bpm
+    series = hrv.time_series(beats, EPOCH, window=30.0)
+    assert set(np.round(series.hr, 1)) == {54.5, 66.7} and len(series.hr) == len(beats.device) - 1
+    assert np.allclose(series.rmssd, 200.0, atol=0.5) and not series.weak.any()
+    assert series.rmssd_time[0] == pytest.approx(beats.device[0] - 0.0 + 30.0, abs=1.0)    # one window after the first beat
+    # a window with too few trusted successive differences gives no value, and one with many untrusted is weak
+    ok = np.ones(len(beats.device), bool)
+    ok[60:140] = False
+    hole = hrv.time_series(_beats_of_intervals(np.tile([900.0, 1100.0], 100), ok), EPOCH, window=30.0)
+    assert np.isnan(hole.rmssd).any() and hole.weak.any() and np.isfinite(hole.rmssd[0])
+    assert len(hole.hr) == 100 + 99 - 80 + 0 - 19 or len(hole.hr) < len(series.hr)           # untrusted intervals have no heart rate
+    # too few beats: empty
+    assert len(hrv.time_series(_beats_of_intervals([1000.0, 1000.0]), EPOCH).hr) == 0

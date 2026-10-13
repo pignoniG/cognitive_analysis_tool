@@ -12,7 +12,7 @@ The window has the controls on the left, the plots on the right, and the video p
 | Tab page | **Data**: the recording, the lux log (glasses), the scene video and its analysis settings, the sensor data. **Params**: the parameters, in pills (below). **Calibrate**: numbered steps. **Export**: the export range and the Export button |
 | Video preview | Under the page, 16:9, following the cursor. **Values** shows the colours and luminance measured at the cursor, **Pop out** moves it to a window of its own, **Hide** (or **P**) gives its room back to the page. Drag the divider above it to resize |
 | Status strip | One line over the plots: ΔPD RMS and SD, the light left in ΔPD, the expected pupil at the display's black and white points (display devices) or where the luminance comes from (with the lux sensor: its median luminance × the median video ratio and its 10th–90th percentile range), the pupil scale and offset applied, sampling rates and the share of the recording in gaps. A red **⚠ N warnings** button on its right opens the list |
-| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis, with the imported sensor signals under them. They use the whole width of the window |
+| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis, with the imported sensor signals under them. They use the whole width of the window; the checkboxes under them switch each plot on and off (pupil diameter and ΔPD, and the RMSSD once computed, are on at first) |
 
 The last tab, pill, preview state and sizes are remembered between sessions.
 
@@ -33,20 +33,24 @@ of the tab are the participant's parameter file.
 **File**
 
 - **Open recording…**: choose a recording folder. The device is detected automatically.
-- **Choose lux folder…**: one folder with the lux sensor logs for all glasses recordings, so the logs need not be
-  copied into each. Its subfolders are searched (one per day is fine) and only the logs that overlap the recording are
-  read. It is remembered between sessions, shown in the Recording box, and used instead of any logs inside the
-  recording. If it holds no readings for a recording, a warning says so (check the folder and the loggers' clocks).
-- **Use the recording's own lux logs**: forget the folder and go back to the recording folder or its `lux` subfolder.
+- **Logger folder… (lux and sensor data)**: the [sensor logger](logger.md)'s recordings folder, or one of its sessions.
+  The logger writes the lux log (`lux.csv`) and the Shimmer and EmotiBit files of a recording into one session folder,
+  so one folder serves both: the session that overlaps the recording is found by its time, the lux log is read from it
+  (glasses recordings) and the sensor files are imported (see [Sensor data](#sensor-data-optional)). Give the
+  recordings folder once: it is remembered between sessions and used for every recording, so nothing is copied into the
+  recordings; one session folder is used for the open recording only. It is shown in the Recording box. If it holds
+  nothing for a recording, a warning says so (check the folder and the clocks). The same button is in the *Sensor data*
+  and *Lux sensor log* boxes of the Data tab.
+- **Forget the logger folder**: go back to the recording's own folder and its `lux` subfolder for the lux logs and
+  the sensor files.
 - **Load parameters… / Save parameters / Save parameters as…**: the participant's parameter file (JSON), without
   the display photometry. Files written by version 1.x are converted when loaded.
 - **Load display photometry… / Save display photometry…**: the headset's nominal Lmin, Lmax and gamma. The last
   file used with a device is loaded automatically with its recordings; the window title shows which one is in use.
-- **Import sensor data…**: the Shimmer and EmotiBit files of a [sensor logger](logger.md) session, shown under ΔPD
-  and exported with the results (see [Sensor data](#sensor-data-optional)).
-- **Export results…**: one package into a folder of your choice (default `cwtool_export` inside the recording): the
+- **Export results…** (Ctrl+E): one package into a folder of your choice (default `cwtool_export` inside the recording): the
   results CSVs, the sensor files, the parameters used, a manifest and a PDF plot, all trimmed to the
-  [export range](#export-range).
+  [export range](#export-range). It runs in the background with a progress bar in the Export tab, so the window stays
+  usable; when it ends, the tab keeps "Last export" with a link to the folder.
 
 **View**
 
@@ -54,21 +58,49 @@ of the tab are the participant's parameter file.
 - **Show video preview** (P): show or hide the preview under the tab pages.
 - **Data tab**, **Params tab**, **Calibrate tab**, **Export tab** (Ctrl+1 to Ctrl+4).
 
+**Help**
+
+- **Gestures and shortcuts…**: the mouse gestures of the plots and the keyboard shortcuts, in one list. The shortcuts
+  are Ctrl+O (open), Ctrl+S and Ctrl+Shift+S (save parameters), Ctrl+E (export), Ctrl+H (compute HRV), Z (zoom mode of
+  the plots), Ctrl+0 (reset view), Ctrl+1 to Ctrl+4 (tabs), P (preview) and Ctrl+Q.
+- **Documentation**: opens this site. **About**: the version.
+
+**Errors**: when something fails the window shows what happened in a sentence, what to try for the causes it knows (a
+missing package, file or permission, an unreadable video, no memory or disk space, a damaged parameter file), and the
+technical details under **Show Details…**. An analysis error appears once per cause, not at every edit of the parameters.
+
 ## Sensor data (optional)
 
 Files from the [sensor logger](logger.md), the Shimmer's ECG and the EmotiBit's EDA, PPG and motion, can be put next
 to the pupil data. They are not used by the analysis; they let you see heart and skin responses against ΔPD, and
 export everything for one participant as a single package.
 
-- **Import…** (or **File → Import sensor data…**): choose a logger session folder. When a recording is opened, the
-  logger's files in its own folder are imported automatically. Only the rows that overlap the recording are read. The
-  recording must say when it started (its absolute time), as the sensor files are on the Unix clock.
+- **Logger folder…** (or **File → Logger folder…**): choose the logger's recordings folder, or one session. The
+  session that overlaps the recording is found (the one with the longest overlap) and its sensor files imported, and
+  its lux log is used for a glasses recording: it is the same folder as for the lux log. When a recording is opened,
+  the files in its own folder, or else in the remembered logger folder, are imported automatically. Only the rows that
+  overlap the recording are read. The recording must say when it started (its absolute time), as the sensor files are on
+  the Unix clock.
 - The list under the buttons holds every signal of every file (the Shimmer's channels, the EmotiBit's streams). The
   ticked ones are drawn, one plot each, under ΔPD on the same time axis, cursor and events; at first the ECG channel
   of the Shimmer and the EmotiBit's EDA and PPG. At most six at a time.
 - Values are shown as the logger saved them: the Shimmer's are raw ADC counts, not millivolts.
 - A Shimmer file whose ECG was sampled below 200 Hz gets a warning under the list (too coarse for
   [heart rate variability](../processing/hrv.md)).
+- **Compute HRV** (next to Import and Remove, on when an ECG is imported) finds the heartbeats of the Shimmer's ECG in
+  the background and then shows, under the buttons, a table with one row per window (the whole recording and each
+  event): heart rate, RMSSD, SDNN and LF/HF, with the other measures in the exported file. The beats are drawn on the
+  ECG plot, as green circles where the interval before the beat is trusted and red crosses where it is not, so the
+  detection can be checked by eye. A `*` after a window's name means it carries a note (a short window, many untrusted intervals):
+  select the row to read it. The table follows the [export range](#export-range) as you edit it, since only the windows
+  are worked out again, not the beats. The button then reads *Recompute HRV*; importing other sensor data or opening
+  another recording forgets the result. The beats are found by NeuroKit2 (`pip install "cwtool[hrv]"`).
+- **Heart rate variability plots**: two plots join the others under ΔPD, on the same time axis and cursor, switched by
+  the checkboxes **Heart rate** (off at first) and **RMSSD** (on) under the plots: the heart rate (bpm) from the trusted intervals, and the
+  RMSSD (ms) of a moving window (30 s, changed in the box next to them; the first point is one window after the first
+  beat). Red points on the RMSSD curve mark windows in which more than 10 % of the intervals were not trusted, and a gap
+  is a window with too few trusted intervals. These plots are a preview and are not exported; the table is. They follow
+  the export range.
 - **Remove** forgets the sensor data. All the signals, not only the ticked ones, go into the export.
 
 ## Export range
@@ -87,10 +119,10 @@ decides what is written by **Export results…**, for every file at once (result
 - The range is saved next to the recording (`cwtool_trim.json`) and comes back when it is opened again; clearing it
   removes the file. It is separate from the participant's parameter file, since it belongs to one recording.
 
-With a Shimmer ECG among the sensor files, the Export tab also has **Heart rate variability from the Shimmer's ECG**
-(on by default): the package then holds the beat times and the HRV measures of the whole recording and of each event,
-computed on what the range keeps ([method](../processing/hrv.md)). The beats are found by NeuroKit2 (the `hrv` extra,
-`pip install "cwtool[hrv]"`); without it the export is written without the HRV and a warning says why.
+If the heart rate variability was computed (**Compute HRV** in the [Sensor data](#sensor-data-optional) box), the
+package also holds the beat times and the HRV measures of the whole recording and of each event, on what the range
+keeps ([method](../processing/hrv.md)); the summary above the export button says "+ HRV". Without it the package has no
+HRV: the export does not compute it by itself.
 
 ΔPD in SD units (`delta_pd_sd`) is normalised with the SD of what is kept, so a calibration with large swings does not
 shrink the other values; see [Output files](../reference/outputs.md).
@@ -136,12 +168,23 @@ of the gaze circle and the background.
 
 ## Plots
 
-- The view fits the data when a recording opens and follows it while you change parameters. Drag with the left
-  mouse button to pan and use the wheel to zoom; after that the view stays where you put it.
-- **Reset view** (button in the top right corner of the plots, **View** menu, Ctrl+0, or a double-click on the
-  plots) shows all the data again: the whole recording and the range of the measured, expected and ΔPD curves. The calibration overlay, events and reference
-  lines never stretch it.
-- Right-click for pyqtgraph's view menu (e.g. export an image).
+- **Which plots are shown**: the checkboxes under the plots (**Pupil diameter**, **Luminance**, **Video ratio**, **ΔPD**,
+  and **Heart rate** and **RMSSD** once the HRV is computed). At first the pupil diameter, ΔPD and RMSSD are on. The
+  video ratio can only be ticked on the lux route with the video. **Sensor signals** under them is a menu with the same
+  choice as the list in the Data tab. The plots that remain share the height, and the time axis is on the last one.
+- **Time axis**: the view fits the whole recording when it opens and follows it while you change parameters. Drag with
+  the left mouse button (or the middle one) to **pan** in time, or swipe sideways; **right-click** to zoom out; the
+  wheel zooms around the pointer. The time axis stays inside the recording.
+- **Zoom button** (the magnifier, top right of the plots, left of Reset view): while it is pressed, the left button draws a rectangle
+  and the plots zoom to it (the rectangle is gray), in time and, for the plot you drew on, in value. That plot keeps its value range as you
+  move along the time axis; a right click (or Reset view) fits it to the data again. Press the button again to go back
+  to panning.
+- **Value axes** cannot be dragged. Unless you zoomed one, each fits the data of the time span in view, so zooming in on
+  a part shows that part at full height.
+- All the left axes are of the same width, so the plots line up whatever the numbers beside them.
+- **Reset view** (the four-arrows button in the top right corner of the plots, **View** menu, Ctrl+0, or a double-click on the
+  plots) shows the whole recording again. The calibration overlay, events and reference lines never stretch the
+  value axes.
 - The dark orange bar marks the current video frame; its time is shown at its top. Click on either plot to move it, or drag it to
   scrub the video: the preview follows while dragging, skipping frames if decoding cannot keep up. **◀ Frame / Frame ▶**
   in the preview move it frame by frame.

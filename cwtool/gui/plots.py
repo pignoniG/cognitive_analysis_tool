@@ -6,10 +6,12 @@ from functools import partial
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import QPointF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QToolButton
 
 from cwtool import calibration, palette
+from cwtool.gui.icons import pixmap
 from cwtool.pipeline import Result, residual_rms
 from cwtool.trim import Trim
 
@@ -32,6 +34,79 @@ class LogAxis(pg.AxisItem):
         return [f"{10 ** v:.3g}" for v in values]
 
 
+AXIS_WIDTH = 74     # pixels of every plot's left axis (tick labels and label), so that the plot areas line up
+
+
+class TimeViewBox(pg.ViewBox):
+    """View box that moves and zooms along the time axis; the plots fit the value axis to the data.
+
+    Drag with the left button to pan in time (the middle button does too). In *zoom mode* (the Zoom button) the left
+    button draws a rectangle instead and zooms to it, in time and in value (:attr:`sigValueZoomed`). A right click zooms
+    out; the wheel zooms in time around the pointer, a horizontal scroll pans."""
+
+    sigValueZoomed = Signal(object, float, float)    # this box, the low and high of the value range zoomed to
+    sigValueReset = Signal(object)                   # this box: its value axis is fitted to the data again
+
+    ZOOM_OUT = 2.0      # factor of a right click
+    MIN_BAND_PX = 4     # a drag shorter than this is a click, not a zoom
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setMouseEnabled(x=True, y=False)
+        self.setMenuEnabled(False)
+        self.zoom_mode = False
+        self.rbScaleBox.setPen(pg.mkPen((90, 90, 90), width=1))          # the zoom rectangle is a neutral gray
+        self.rbScaleBox.setBrush(pg.mkBrush(110, 110, 110, 60))
+
+    def set_zoom_mode(self, on: bool) -> None:
+        """Left drag draws a rectangle to zoom to (on) or pans (off)."""
+        self.zoom_mode = bool(on)
+        self.setCursor(Qt.CrossCursor if on else Qt.ArrowCursor)
+
+    def _manual(self) -> None:
+        self.sigRangeChangedManually.emit([True, False])
+
+    def mouseDragEvent(self, ev, axis=None) -> None:
+        """Left drag: pan, or in zoom mode zoom to the rectangle; middle drag: pan; right drag: nothing."""
+        ev.accept()
+        button = ev.button()
+        if button == Qt.LeftButton and self.zoom_mode:
+            if ev.isFinish():
+                self.rbScaleBox.hide()
+                p0, p1 = ev.buttonDownScenePos(), ev.scenePos()
+                if abs(p1.x() - p0.x()) >= self.MIN_BAND_PX and abs(p1.y() - p0.y()) >= self.MIN_BAND_PX:
+                    a, b = self.mapSceneToView(p0), self.mapSceneToView(p1)
+                    self.setXRange(min(a.x(), b.x()), max(a.x(), b.x()), padding=0)
+                    self.sigValueZoomed.emit(self, min(a.y(), b.y()), max(a.y(), b.y()))
+                    self._manual()
+            else:     # the rectangle is placed in the view box's own coordinates
+                self.updateScaleBox(ev.buttonDownPos(), ev.pos())
+        elif button in (Qt.LeftButton, Qt.MiddleButton):
+            moved = self.mapSceneToView(ev.scenePos()).x() - self.mapSceneToView(ev.lastScenePos()).x()
+            self.translateBy(x=-moved)
+            self._manual()
+
+    def mouseClickEvent(self, ev) -> None:
+        """Right click: zoom out around the pointer, and fit the value axis to the data again."""
+        if ev.button() == Qt.RightButton:
+            ev.accept()
+            self.scaleBy(x=self.ZOOM_OUT, center=self.mapSceneToView(ev.scenePos()))
+            self.sigValueReset.emit(self)
+            self._manual()
+        else:
+            super().mouseClickEvent(ev)
+
+    def wheelEvent(self, ev, axis=None) -> None:
+        """Wheel: zoom around the pointer; a horizontal scroll (a trackpad swipe) pans."""
+        ev.accept()
+        if getattr(ev, "orientation", lambda: Qt.Vertical)() == Qt.Horizontal:
+            span = self.viewRange()[0]
+            self.translateBy(x=-ev.delta() / 1200.0 * (span[1] - span[0]))
+        else:
+            self.scaleBy(x=1.02 ** (-ev.delta() / 8.0), center=self.mapSceneToView(ev.scenePos()))
+        self._manual()
+
+
 class ResultPlots(pg.GraphicsLayoutWidget):
     """Stacked plots sharing the time axis: pupil, luminance, the video ratio (lux route only) and ΔPD.
     The calibration sequence start is a draggable vertical line on the pupil plot.
@@ -46,13 +121,24 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.pupil = self.addPlot(row=0, col=0)
-        self.lum = self.addPlot(row=1, col=0, axisItems={"left": LogAxis("left")})
-        self.ratio = self.addPlot(row=2, col=0)
-        self.cw = self.addPlot(row=3, col=0)
+        self.pupil = self.addPlot(row=0, col=0, viewBox=TimeViewBox())
+        self.lum = self.addPlot(row=1, col=0, viewBox=TimeViewBox(), axisItems={"left": LogAxis("left")})
+        self.ratio = self.addPlot(row=2, col=0, viewBox=TimeViewBox())
+        self.cw = self.addPlot(row=3, col=0, viewBox=TimeViewBox())
         self._plots = (self.pupil, self.lum, self.ratio, self.cw)
         self._base_plots = self._plots
+        self.PLOT_KEYS = ("pupil", "lum", "ratio", "cw")
+        self._shown = {"pupil": True, "lum": False, "ratio": False, "cw": True}    # which of the four the user wants
+        self._ratio_available = False          # the video ratio exists only on the lux route with the video
+        self._y_sources: dict = {}             # plot -> [(time, values, trim %)] the value axis is fitted to
+        self._y_zoomed: set = set()            # the plots whose value axis the user zoomed: it stays as they set it
+        self._zoom_mode = False
         self._sensor_plots: list = []
+        self._sensor_labels: list = []        # the label of each sensor plot, as set_sensors was given it
+        self._x_limits = None                  # (first, last) time of the recording: the time axis stays inside it
+        self._beats: dict = {}                 # label -> (times, values, trusted) of the beats drawn on that plot
+        self._beat_items: list = []
+        self._series_items: dict = {}          # label -> (curve, red points, plot) of each sensor plot
         self._sensor_cursors: list = []
         self._events: list = []
         self._cursor_time = 0.0
@@ -74,12 +160,15 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             p.setDownsampling(auto=True, mode="peak")
             for side in ("left", "bottom"):
                 p.getAxis(side).enableAutoSIPrefix(False)  # keep values in mm and s
+            p.getAxis("left").setWidth(AXIS_WIDTH)
         self._follow = True
         self._data = (None, None, None)    # time, pupil values, ΔPD values the view is fitted to
-        self._lum_data = (None, None)      # luminance and video ratio values the view is fitted to
         for p in self._plots:
             p.vb.sigRangeChangedManually.connect(self._moved_by_user)
             p.hideButtons()   # pyqtgraph's own auto-range button would include the overlays
+        for p in self._plots:
+            self._watch_box(p)
+        self.pupil.vb.sigXRangeChanged.connect(self._fit_y_all)    # the value axes show the data of the time span in view
         self.pupil.setLabel("left", "Pupil diameter (mm)")
         self.cw.setLabel("left", "ΔPD (mm)")
         self.lum.setLabel("left", "Luminance (cd/m²)")
@@ -90,21 +179,32 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             p.getAxis("bottom").setStyle(showValues=False)     # the time axis is at the bottom of the stack
         self.pupil.addLegend(offset=(-10, 44), brush=pg.mkBrush(255, 255, 255, 210))   # below Reset view
 
+        button_style = ("QToolButton { padding: 0; border: 1px solid #999; border-radius: 5px;"
+                        " background: rgba(255, 255, 255, 230); }"
+                        f"QToolButton:hover {{ background: #fff1eb; border-color: {palette.ACCENT}; }}"
+                        f"QToolButton:checked {{ background: {palette.ACCENT}; border-color: {palette.ACCENT}; }}")
         self.reset_button = QToolButton(self)
-        self.reset_button.setText("Reset view")
-        self.reset_button.setToolTip("Show all the data again (Ctrl+0, or double-click the plots)")
-        self.reset_button.setStyleSheet(
-            "QToolButton { font-size: 13px; padding: 5px 12px; border: 1px solid #999; border-radius: 5px;"
-            " background: rgba(255, 255, 255, 230); color: #222; }"
-            f"QToolButton:hover {{ background: #fff1eb; border-color: {palette.ACCENT}; }}")
+        self.reset_button.setIcon(self._button_icon("arrows-maximize"))
+        self.reset_button.setToolTip("Reset view: show all the data again (Ctrl+0, or double-click the plots)")
+        self.reset_button.setStyleSheet(button_style)
         self.reset_button.clicked.connect(self.fit_to_data)
+        self.zoom_button = QToolButton(self)
+        self.zoom_button.setIcon(self._button_icon("zoom-in"))
+        self.zoom_button.setCheckable(True)
+        self.zoom_button.setToolTip("Zoom mode: drag a rectangle on a plot to zoom to it, in time and in value. "
+                                    "Off: dragging pans in time. Right-click zooms out")
+        self.zoom_button.setStyleSheet(button_style)
+        for button in (self.reset_button, self.zoom_button):     # square, the icon in the middle
+            button.setIconSize(QSize(18, 18))
+            button.setFixedSize(32, 32)
+        self.zoom_button.toggled.connect(self.set_zoom_mode)
 
         self.raw_curve = self.pupil.plot(pen=pg.mkPen((160, 160, 160), width=1), name="Measured (raw)", connect="finite")
         self.measured_curve = self.pupil.plot(pen=pg.mkPen("k", width=1.5), name="Measured", connect="finite")
         self.expected_curve = self.pupil.plot(pen=pg.mkPen(palette.EXPECTED, width=2), name="Expected")
         dash = pg.mkPen(palette.EXPECTED, width=1.5, style=pg.QtCore.Qt.DashLine)
-        self.black_line = pg.InfiniteLine(angle=0, pen=dash, label="black point",
-                                          labelOpts={"position": 0.08, "color": palette.rgb(palette.EXPECTED)})
+        self.black_line = pg.InfiniteLine(angle=0, pen=dash, label="black point",     # its label to the right of the
+                                          labelOpts={"position": 0.28, "color": palette.rgb(palette.EXPECTED)})   # white's
         self.white_line = pg.InfiniteLine(angle=0, pen=dash, label="white point",
                                           labelOpts={"position": 0.08, "color": palette.rgb(palette.EXPECTED)})
         self.pupil.addItem(self.black_line, ignoreBounds=True)
@@ -158,7 +258,44 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         if not hasattr(self, "reset_button"):     # resized while the base class is being built
             return
         self.reset_button.adjustSize()
+        self.zoom_button.adjustSize()
         self.reset_button.move(self.width() - self.reset_button.width() - 12, 8)
+        self.zoom_button.move(self.reset_button.x() - self.zoom_button.width() - 8, 8)
+
+    @staticmethod
+    def _button_icon(name: str) -> QIcon:
+        """The icon of a button over the plots: dark on the light button, white when it is pressed (the plots are always
+        light, so the palette's text colour is not used)."""
+        icon = QIcon()
+        icon.addPixmap(pixmap(name, "#222222", 18), QIcon.Normal, QIcon.Off)
+        icon.addPixmap(pixmap(name, "#ffffff", 18), QIcon.Normal, QIcon.On)
+        return icon
+
+    def set_zoom_mode(self, on: bool) -> None:
+        """Dragging draws a rectangle to zoom to, in time and in value (on), or pans in time (off)."""
+        self._zoom_mode = bool(on)
+        if self.zoom_button.isChecked() != self._zoom_mode:
+            self.zoom_button.setChecked(self._zoom_mode)
+        for plot in self._plots:
+            plot.vb.set_zoom_mode(self._zoom_mode)
+
+    def _watch_box(self, plot) -> None:
+        plot.vb.sigValueZoomed.connect(self._value_zoomed)
+        plot.vb.sigValueReset.connect(self._value_reset)
+        plot.vb.set_zoom_mode(self._zoom_mode)
+
+    def _value_zoomed(self, box, lo: float, hi: float) -> None:
+        """The user zoomed a plot to a rectangle: its value axis keeps that range until the view is reset."""
+        for plot in self._plots:
+            if plot.vb is box:
+                self._y_zoomed.add(plot)
+                plot.setYRange(lo, hi, padding=0)
+
+    def _value_reset(self, box) -> None:
+        for plot in self._plots:
+            if plot.vb is box:
+                self._y_zoomed.discard(plot)
+                self._fit_y(plot)
 
     def cursor_time(self) -> float:
         """Time (s) of the red cursor."""
@@ -194,6 +331,11 @@ class ResultPlots(pg.GraphicsLayoutWidget):
                 self.cursor_changed.emit(t)
                 return
 
+    @staticmethod
+    def _log10(values) -> np.ndarray:
+        v = np.asarray(values, dtype=float)
+        return np.log10(np.where(v > 0, v, np.nan))
+
     def clear_result(self) -> None:
         """Empty the curves; the next result is fitted to the view."""
         for c in (self.raw_curve, self.measured_curve, self.expected_curve, self.cw_curve, self.lum_curve,
@@ -204,30 +346,68 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     def _moved_by_user(self, *_) -> None:
         self._follow = False
 
+    def _apply_x_limits(self) -> None:
+        """Keep the time axis of every plot inside the recording: it can be zoomed in and moved along the recording, but
+        not scrolled off the data (which a swipe on a trackpad or a drag that misses the cursor would do), and not zoomed
+        out beyond it. The sensor files reach a little past the recording; that part is not shown."""
+        if self._x_limits is None:
+            return
+        lo, hi = self._x_limits
+        for plot in self._plots:
+            plot.vb.setLimits(xMin=lo, xMax=hi)
+
     def fit_to_data(self) -> None:
-        """Show all the data: the time span of the signals and the full range of the smoothed
-        measured, expected and ΔPD curves (artefacts are already removed from them; the noisier
-        raw curve may extend beyond). The view then follows parameter changes again."""
+        """Show all the recording: its time span, and the value axes fitted to the data. The view then follows parameter
+        changes again."""
         self._follow = True
-        t, pupil, cw = self._data
+        self._y_zoomed.clear()
+        t = self._data[0]
         if t is None:
             return
         finite_t = t[np.isfinite(t)]
         if len(finite_t):
             self.pupil.setXRange(float(finite_t[0]), float(finite_t[-1]), padding=0.02)
-        for plot, values in ((self.pupil, pupil), (self.cw, cw)):
-            lo, hi = data_range(values)
+        self._fit_y_all()
+
+    # The value axes: they cannot be dragged, they always show all the data of the time span in view
+
+    def _set_y_source(self, plot, sources) -> None:
+        """Fit ``plot``'s value axis to ``sources``, a list of ``(time, values, trim)``: the finite values between the
+        ``trim`` and 100 - ``trim`` percentiles of every curve (artefacts are already removed from the smoothed ones; the
+        noisier raw curve may extend beyond)."""
+        self._y_sources[plot] = [(np.asarray(t, dtype=float), np.asarray(v, dtype=float), trim) for t, v, trim in sources]
+        self._fit_y(plot)
+
+    def _fit_y_all(self, *_) -> None:
+        for plot in self._y_sources:
+            self._fit_y(plot)
+
+    def _fit_y(self, plot) -> None:
+        if plot in self._y_zoomed:
+            return
+        lo_x, hi_x = self.pupil.vb.viewRange()[0]
+        lows, highs = [], []
+        for t, v, trim in self._y_sources.get(plot, ()):
+            if len(t) != len(v):
+                continue
+            lo, hi = data_range(v[(t >= lo_x) & (t <= hi_x)], trim)
             if lo is not None:
-                plot.setYRange(lo, hi, padding=0.08)
-        lum, ratio = self._lum_data
-        if lum is not None:
-            positive = np.asarray(lum, dtype=float)
-            lo, hi = data_range(np.log10(positive[positive > 0]))    # the luminance plot is logarithmic
-            if lo is not None:
-                self.lum.setYRange(lo, hi, padding=0.1)
-        lo, hi = data_range(ratio)
-        if lo is not None:
-            self.ratio.setYRange(lo, hi, padding=0.1)
+                lows.append(lo)
+                highs.append(hi)
+        if lows:
+            lo, hi = min(lows), max(highs)
+            margin = 0.08 * (hi - lo)
+            plot.setYRange(lo - margin, hi + margin, padding=0)
+
+    def _restore_x(self, view) -> None:
+        try:
+            self.pupil.setXRange(*view, padding=0)
+        except RuntimeError:     # the widget is gone
+            pass
+
+    def _fit_if_following(self) -> None:
+        if self._follow:
+            self.fit_to_data()
 
     def show_result(self, r: Result) -> None:
         """Draw the pupil, ΔPD and luminance curves of a result."""
@@ -246,10 +426,19 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.lum.setLabel("left", "Luminance (cd/m², relative)" if r.luminance_mode == "camera, relative"
                           else "Luminance (cd/m²)")
         self._data = (np.asarray(r.time), np.concatenate([r.measured, r.expected]), np.asarray(r.cw))
-        self._lum_data = (np.concatenate([r.luminance] + ([r.luminance_sensor] if has_sensor else [])),
-                          r.luminance_ratio if has_ratio else None)
+        finite_time = np.asarray(r.time)[np.isfinite(r.time)]
+        self._x_limits = (float(finite_time.min()), float(finite_time.max())) if len(finite_time) else None
+        self._apply_x_limits()
+        self._set_y_source(self.pupil, [(r.time, r.measured, 0.0), (r.time, r.expected, 0.0)])
+        self._set_y_source(self.cw, [(r.cw_time, r.cw, 0.0)])
+        logs = [(r.time, self._log10(r.luminance), 0.0)]      # the luminance plot is logarithmic
+        if has_sensor:
+            logs.append((r.time, self._log10(r.luminance_sensor), 0.0))
+        self._set_y_source(self.lum, logs)
+        self._set_y_source(self.ratio, [(r.time, r.luminance_ratio, 0.0)] if has_ratio else [])
         if self._follow:
             self.fit_to_data()
+            QTimer.singleShot(0, self._fit_if_following)     # and again once the layout has settled
         markers = np.isfinite(r.expected_black)   # not defined when luminance comes from a lux sensor
         self.black_line.setVisible(bool(markers))
         self.white_line.setVisible(bool(markers))
@@ -258,11 +447,33 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             self.white_line.setValue(r.expected_white)
 
     def set_lux_route(self, sensor: bool, ratio: bool) -> None:
-        """Show the sensor curve (lux route) and the video ratio panel (lux route with the video)."""
+        """Show the sensor curve (lux route) and make the video ratio plot available (lux route with the video)."""
         self.sensor_curve.setVisible(sensor)
-        self.ratio.setVisible(ratio)
-        self.ci.layout.setRowStretchFactor(2, self._stretch[2] if ratio else 0)
-        self.ci.layout.setRowMaximumHeight(2, 16777215 if ratio else 0)
+        self._ratio_available = ratio
+        self._apply_rows()
+
+    # Which of the four plots are shown (the others are hidden and their room goes to the rest)
+
+    def ratio_available(self) -> bool:
+        """Whether the video ratio plot has anything to show (lux route with the video)."""
+        return self._ratio_available
+
+    def plot_shown(self, key: str) -> bool:
+        """Whether the plot ``key`` ("pupil", "lum", "ratio" or "cw") is shown."""
+        return self._shown[key] and (key != "ratio" or self._ratio_available)
+
+    def set_plot_shown(self, key: str, on: bool) -> None:
+        """Show or hide the pupil, luminance, video ratio or ΔPD plot."""
+        self._shown[key] = bool(on)
+        self._apply_rows()
+
+    def _apply_rows(self) -> None:
+        for row, (key, plot) in enumerate(zip(self.PLOT_KEYS, self._base_plots)):
+            on = self.plot_shown(key)
+            plot.setVisible(on)
+            self.ci.layout.setRowStretchFactor(row, self._stretch[row] if on else 0)
+            self.ci.layout.setRowMaximumHeight(row, 16777215 if on else 0)
+        self._arrange_axes()
 
     def show_events(self, events) -> None:
         """Shade the events (phases of the experiment) on every plot."""
@@ -285,18 +496,31 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     # Sensor signals (the logger's Shimmer and EmotiBit files), one plot each under ΔPD
 
     def set_sensors(self, specs) -> None:
-        """Show ``specs``, a list of ``(label, time, values)`` (time in the recording's relative seconds), as
-        plots under ΔPD on the shared time axis; an empty list removes them."""
+        """Show ``specs``, a list of ``(label, time, values)`` or ``(label, time, values, options)`` (time in the
+        recording's relative seconds), as plots under ΔPD on the shared time axis; an empty list removes them. The options
+        are a dictionary: ``colour`` (r, g, b) of the curve, ``axis`` (the axis label; by default the label cut short) and
+        ``weak`` = (times, values) of points to mark in red."""
         for plot, line in self._sensor_cursors:
             self.cursors.remove(line)
         for row in range(4, 4 + len(self._sensor_plots)):
             self.ci.layout.setRowStretchFactor(row, 0)
         for plot in self._sensor_plots:
+            self._y_sources.pop(plot, None)
+            self._y_zoomed.discard(plot)
             self.removeItem(plot)
-        self._sensor_plots, self._sensor_cursors = [], []
+        self._sensor_plots, self._sensor_cursors, self._sensor_labels = [], [], []
+        self._series_items = {}
         red = palette.rgb(palette.CURSOR)
-        for i, (label, t, v) in enumerate(specs):
-            plot = self.addPlot(row=4 + i, col=0)
+        view = self.pupil.vb.viewRange()[0]
+        for i, spec in enumerate(specs):
+            label, t, v = spec[:3]
+            options = spec[3] if len(spec) > 3 else {}
+            box = TimeViewBox()
+            box.setXRange(*view, padding=0)     # a new view starts at 0 to 1 s, and would pull the others to it
+            plot = self.addPlot(row=4 + i, col=0, viewBox=box)
+            self._watch_box(plot)
+            plot.getAxis("left").setWidth(AXIS_WIDTH)
+            plot.setLabel("left", options.get("axis") or short_label(label))
             plot.setXLink(self.pupil)
             plot.showGrid(x=True, y=True, alpha=0.2)
             plot.setClipToView(True)
@@ -307,11 +531,14 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             plot.hideButtons()
             plot.disableAutoRange()   # the sensor files reach a little past the recording: they do not set the view
             plot.setTitle(label, size="8pt")
-            plot.plot(*peak_decimate(t, v), pen=pg.mkPen((40, 90, 150), width=1.2), connect="finite")
-            lo, hi = data_range(v, 0.5)             # fitted once to the signal (without the outermost 0.5 %)
-            if lo is not None:
-                margin = 0.08 * (hi - lo)
-                plot.setYRange(lo - margin, hi + margin, padding=0)
+            curve = plot.plot(*peak_decimate(t, v), pen=pg.mkPen(options.get("colour", (40, 90, 150)), width=1.2),
+                              connect="finite")
+            weak = pg.ScatterPlotItem(*(options.get("weak") or ([], [])), symbol="o", size=6, pen=pg.mkPen(None),
+                                      brush=pg.mkBrush(*palette.rgb(palette.RED)))
+            weak.setZValue(10)
+            plot.addItem(weak, ignoreBounds=True)
+            self._series_items[label] = (curve, weak, plot)
+            self._set_y_source(plot, [(t, v, 0.5)])     # without the outermost 0.5 % of the values
             line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(red, width=2),
                                    hoverPen=pg.mkPen(red, width=4))
             line.setZValue(20)
@@ -321,17 +548,69 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             plot.addItem(line, ignoreBounds=True)
             self.ci.layout.setRowStretchFactor(4 + i, 1.6)
             self._sensor_plots.append(plot)
+            self._sensor_labels.append(label)
             self._sensor_cursors.append((plot, line))
             self.cursors.append(line)
         self._plots = self._base_plots + tuple(self._sensor_plots)
         self._arrange_axes()
         self.show_events(self._events)
         self._redraw_trim()
+        self._draw_beats()
+        self._apply_x_limits()
+        self.pupil.setXRange(*view, padding=0)      # new plots must not move the time axis the others show
+        QTimer.singleShot(0, partial(self._restore_x, view))
+
+    def update_series(self, label: str, t, v, weak=None) -> bool:
+        """Replace the data of the sensor plot titled ``label`` (and its red points) without rebuilding the plots, and
+        fit its value axis again. Returns False if no such plot is shown."""
+        if label not in self._series_items:
+            return False
+        curve, marks, plot = self._series_items[label]
+        curve.setData(*peak_decimate(t, v), connect="finite")
+        marks.setData(*(weak or ([], [])))
+        self._set_y_source(plot, [(t, v, 0.5)])
+        return True
+
+    def set_beats(self, label: str, times, values, trusted) -> None:
+        """Mark the heartbeats found in an ECG on the sensor plot titled ``label``: at ``times`` (relative seconds) and
+        height ``values`` (the ECG there): green circles where the interval before the beat is trusted, red crosses where
+        it is not."""
+        self._beats[label] = (np.asarray(times, dtype=float), np.asarray(values, dtype=float),
+                              np.asarray(trusted, dtype=bool))
+        self._draw_beats()
+
+    def clear_beats(self) -> None:
+        """Remove the beat markers."""
+        self._beats = {}
+        self._draw_beats()
+
+    def _draw_beats(self) -> None:
+        """(Re)draw the beat markers on the plots that are shown; markers of a plot that is not shown wait."""
+        for plot, item in self._beat_items:
+            plot.removeItem(item)
+        self._beat_items = []
+        for plot, label in zip(self._sensor_plots, self._sensor_labels):
+            if label not in self._beats:
+                continue
+            t, v, ok = self._beats[label]
+            for flag, colour, symbol in ((True, palette.rgb(palette.GREEN), "o"),
+                                         (False, palette.rgb(palette.RED), "x")):
+                sel = ok == flag
+                if sel.any():
+                    item = pg.ScatterPlotItem(t[sel], v[sel], symbol=symbol, size=8,
+                                              pen=pg.mkPen(colour, width=2) if symbol == "x" else pg.mkPen(None),
+                                              brush=pg.mkBrush(*colour))
+                    item.setZValue(10)
+                    plot.addItem(item, ignoreBounds=True)
+                    self._beat_items.append((plot, item))
 
     def _arrange_axes(self) -> None:
-        """The time axis (values and label) is on the last plot of the stack."""
+        """The time axis (values and label) is on the last plot of the stack that is shown."""
+        shown = [p for key, p in zip(self.PLOT_KEYS, self._base_plots) if self.plot_shown(key)] + self._sensor_plots
+        if not shown:
+            return
         for plot in self._plots:
-            last = plot is self._plots[-1]
+            last = plot is shown[-1]
             plot.getAxis("bottom").setStyle(showValues=last)
             plot.getAxis("bottom").setLabel("Time (s)" if last else "")
 
@@ -458,6 +737,13 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
 
 DECIMATED_BINS = 1500
+
+
+def short_label(label: str, limit: int = 13) -> str:
+    """The text of a plot's title cut to what fits beside a short plot as an axis label: after the sensor's name, with an
+    ellipsis."""
+    text = label.split(": ", 1)[-1]
+    return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 def peak_decimate(x, y, bins: int = DECIMATED_BINS):

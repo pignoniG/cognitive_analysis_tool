@@ -2,7 +2,7 @@
 
 ```text
 cwtool RECORDING [--device {pupil_core,pupil_neon,tobii_g3,varjo}] [--params FILE] [--display FILE]
-                 [--lux FOLDER] [--sensors FOLDER] [--start S] [--end S] [--exclude FROM TO]
+                 [--logs FOLDER] [--lux FOLDER] [--sensors FOLDER] [--start S] [--end S] [--exclude FROM TO]
                  [--out FOLDER] [--reanalyse] [--workers N] [--plot]
 ```
 
@@ -12,9 +12,10 @@ cwtool RECORDING [--device {pupil_core,pupil_neon,tobii_g3,varjo}] [--params FIL
 | `--device` | skip auto-detection |
 | `--params` | participant parameter file (JSON) saved by the app; defaults otherwise |
 | `--display` | display photometry file (JSON) saved by the app (Varjo); participant files do not hold Lmin, Lmax and gamma, so without it the defaults are used |
-| `--lux` | folder with lux sensor logs (glasses), searched with its subfolders; default: the recording folder or its `lux` subfolder |
-| `--sensors` | [sensor logger](logger.md) session folder (Shimmer, EmotiBit) to add to the export, trimmed like the rest; default: any logger files in the recording folder |
-| `--no-hrv` | do not compute [heart rate variability](../processing/hrv.md) from a Shimmer's ECG when packing sensor data (it needs NeuroKit2, the `hrv` extra; without it the HRV is skipped with a warning) |
+| `--logs` | the [sensor logger](logger.md)'s recordings folder, or one session: the lux log (glasses) and the Shimmer and EmotiBit files of the recording are found in it by their time; default: the recording folder |
+| `--lux` | folder with lux sensor logs (glasses), if not the one of `--logs`, searched with its subfolders; default: the recording folder or its `lux` subfolder |
+| `--sensors` | [sensor logger](logger.md) session folder or recordings folder (Shimmer, EmotiBit) to add to the export, trimmed like the rest, if not the one of `--logs`; default: any logger files in the recording folder |
+| `--no-hrv` | do not compute [heart rate variability](../processing/hrv.md) from a Shimmer's ECG when packing sensor data (the command line computes it by default; it needs NeuroKit2, the `hrv` extra, and without it the HRV is skipped with a warning) |
 | `--start`, `--end` | leave out everything before or after this time, in seconds on the exports' `timestamp_relative` axis |
 | `--exclude FROM TO` | leave out FROM to TO seconds, for example a calibration; repeat for several segments |
 | `--out` | export folder; default `RECORDING/cwtool_export` |

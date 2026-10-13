@@ -5,6 +5,11 @@ Heart rate variability (HRV) is computed from the ECG of a Shimmer3 ECG unit rec
 export package next to it, for the whole recording and for each event, so that heart and pupil measures of the same
 phase can be compared. The code is `cwtool/hrv.py` (no Qt).
 
+Where it is computed: in the app, with **Compute HRV** in the [Sensor data](../usage/gui.md#sensor-data-optional) box
+(the beats are drawn on the ECG plot and the measures shown in a table, so the detection can be checked before
+exporting; the export then includes them); on the command line, by `cwtool` when it packs sensor data (`--no-hrv`
+turns it off). The logger computes nothing: it records the raw ECG and its settings.
+
 ## What the ECG must be
 
 | | |

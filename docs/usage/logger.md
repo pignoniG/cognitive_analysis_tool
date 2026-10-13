@@ -161,9 +161,10 @@ flushed every second, so a crash loses little. Every data file starts with a hea
 The main app can show the Shimmer and EmotiBit files under ΔPD and export them with the results, trimmed to what
 you choose ([Sensor data](gui.md#sensor-data-optional)).
 
-`lux.csv` is read by the analysis as it is: put it (the recording's folder) with the eye tracker's recording, or
-point the *lux folder* setting at it ([Luminance](../processing/luminance.md#lux-sensor-devices)). The older hourly
-`<month>_<day>_<hour>.csv` files remain supported.
+The whole session folder is read by the analysis: point **File → Logger folder…** of the app (or `cwtool --logs`) at the
+logger's recordings folder, once, and the session of each recording is found by its time; the lux log (`lux.csv`) and the
+Shimmer and EmotiBit files come from that one folder ([Luminance](../processing/luminance.md#lux-sensor-devices)). `lux.csv`
+can also be put in the eye tracker's recording folder. The older hourly `<month>_<day>_<hour>.csv` files remain supported.
 
 ### Clocks
 

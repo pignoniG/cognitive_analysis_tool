@@ -35,7 +35,7 @@ which re-runs on every parameter change. Step 9 runs on demand and writes its re
 | Grid | irregular samples are averaged into bins at the measured rate (`common.bin_samples`, `common.sample_rate`) |
 | Time base | seconds from the first scene video frame (can start below 0); `epoch_start` is its Unix time |
 | Gaze | normalised scene video coordinates, origin top left |
-| Lux | the lux logs in the recording, its `lux` subfolder or `--lux`/**Choose lux folder** (`lux.find_lux_folder`, `lux.read_lux`), moved onto the recording clock with `epoch_start` |
+| Lux | the lux logs in the recording, its `lux` subfolder or the logger folder (`--logs`/**Logger folder…**, `--lux`) (`lux.find_lux_folder`, `lux.read_lux`), moved onto the recording clock with `epoch_start` |
 | Events | `event_log` CSV (`common.read_event_log`) plus Neon and Glasses 3 recording events (`common.events_from_markers`) |
 | Profile | pupil unit and scale, luminance source (`display` or `lux_sensor`), camera field of view, circular scene, native rate, adapting field, `experimental` |
 

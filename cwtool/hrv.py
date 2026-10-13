@@ -334,12 +334,14 @@ def window_metrics(label: str, start: float, end: float, seconds: float, times_r
 
 
 def analyse(sensor: Sensor, epoch_start: float, windows, trim: Optional[Trim] = None,
-            lead: str = LEAD_II) -> Optional[tuple[list[HrvResult], Beats]]:
+            lead: str = LEAD_II, beats: Optional[Beats] = None) -> Optional[tuple[list[HrvResult], Beats]]:
     """HRV of a Shimmer sensor for each window. ``windows`` is a list of ``(label, start, end)`` in seconds on the
     recording's relative clock (``epoch_start`` is the Unix time of its zero); ``trim`` (:class:`Trim`) leaves out the
     parts the export leaves out: their beats are dropped and no interval counts across them. Returns the results and
-    the :class:`Beats` (all of them, with trusted flags changed for the trim), or None if the sensor has no ECG."""
-    beats = beats_of(sensor, lead)
+    the :class:`Beats` (all of them, with trusted flags changed for the trim), or None if the sensor has no ECG.
+    ``beats`` are the beats found earlier by :func:`beats_of` for this sensor: the detection, which is the slow part,
+    is then not repeated, and the windows and the trim can be changed at no cost (the window of an app)."""
+    beats = beats if beats is not None else beats_of(sensor, lead)
     if beats is None:
         return None
     rel = beats.unix - epoch_start
@@ -375,6 +377,54 @@ def analyse(sensor: Sensor, epoch_start: float, windows, trim: Optional[Trim] = 
         result.notes = beats.notes + result.notes
         results.append(result)
     return results, beats
+
+
+MOVING_WINDOW_S = 30.0                    # s, the default window of the moving RMSSD of the preview
+MOVING_MIN_DIFFS = 10                     # successive differences a moving window needs to give an RMSSD
+MOVING_WEAK_SHARE = 0.10                  # of the intervals of a moving window not trusted: the point is marked as weak
+
+
+@dataclass
+class TimeSeries:
+    """The heart rate and a moving RMSSD over time, for the preview plots (not exported)."""
+
+    window: float                      # s, the window of the moving RMSSD
+    hr_time: np.ndarray                # s on the recording's relative clock: the end of each trusted interval
+    hr: np.ndarray                     # bpm, 60 / the interval
+    rmssd_time: np.ndarray             # s: the end of each window
+    rmssd: np.ndarray                  # ms, NaN where the window has too few trusted successive differences
+    weak: np.ndarray                   # bool: more than MOVING_WEAK_SHARE of the intervals of the window were not trusted
+
+
+def time_series(beats: Beats, epoch_start: float, window: float = MOVING_WINDOW_S, step: float = 1.0) -> TimeSeries:
+    """The heart rate (one point per trusted interval) and the RMSSD of the trusted intervals of the last ``window``
+    seconds, every ``step`` s, from ``beats`` (:func:`analyse` gives them with the export range applied). The first
+    point of the moving RMSSD is one window after the first beat. Successive differences are taken between two trusted
+    intervals in a row only, as in :func:`window_metrics`."""
+    t = beats.unix - epoch_start
+    rr = beats.rr
+    empty = np.empty(0)
+    if len(t) < 3:
+        return TimeSeries(window, empty, empty, empty, empty, empty.astype(bool))
+    good = beats.ok & np.isfinite(rr)
+    diff = np.full(len(t), np.nan)
+    both = good[1:] & good[:-1]
+    diff[1:][both] = (rr[1:] - rr[:-1])[both]
+    has_diff = np.isfinite(diff)
+
+    def running(x):
+        return np.concatenate([[0.0], np.cumsum(x)])
+    squares, n_diff = running(np.where(has_diff, diff ** 2, 0.0)), running(has_diff)
+    n_finite, n_trusted = running(np.isfinite(rr)), running(good)
+    grid = np.arange(t[0] + window, t[-1] + 1e-9, step)
+    hi = np.searchsorted(t, grid, side="right")
+    lo = np.searchsorted(t, grid - window, side="right")
+    count = n_diff[hi] - n_diff[lo]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        rmssd = np.where(count >= MOVING_MIN_DIFFS, np.sqrt((squares[hi] - squares[lo]) / count) * 1000.0, np.nan)
+        finite = n_finite[hi] - n_finite[lo]
+        share = np.where(finite > 0, 1.0 - (n_trusted[hi] - n_trusted[lo]) / finite, 1.0)
+    return TimeSeries(window, t[good], 60.0 / rr[good], grid, rmssd, share > MOVING_WEAK_SHARE)
 
 
 SUMMARY_COLUMNS = ["window", "start_relative", "end_relative", "kept_seconds", "beats", "trusted_intervals",

@@ -22,6 +22,7 @@ NAMES = (
     "folder-open", "file-import", "device-floppy",                              # open, load, save
     "eye", "eye-off", "external-link", "list-details",                          # the preview: show, hide, pop out, values
     "alert-triangle",                                                           # warnings
+    "zoom-in", "arrows-maximize",                                               # the plots: zoom, reset the view
     "sun", "heartbeat", "activity", "flask", "plus",                            # the logger: sensors and adding one
 )
 DEVICE_PIXEL_RATIO = 2.0
