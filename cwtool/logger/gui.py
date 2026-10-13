@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDia
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
                                QHeaderView, QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
+import numpy as np  # noqa: E402
 import pyqtgraph as pg  # noqa: E402
 
 from cwtool import palette
@@ -27,7 +28,9 @@ from cwtool.gui.workers import Task
 from cwtool.logger.protocol import read_protocol
 from cwtool.logger.session import Logger
 
-REFRESH_MS = 100
+REFRESH_MS = 100          # the table, the clock and the protocol
+PLOT_EVERY = 3            # the plots are redrawn every this many refreshes (three times a second)
+PLOT_BINS = 500           # a live curve has at most two points (the minimum and the maximum) per bin
 PLOT_SECONDS = 30.0
 
 # The recording button: green to start, red to stop (project colours; the light green gets dark text).
@@ -97,9 +100,6 @@ def find_devices(kind: str):
     return None
 
 
-class AddSourceDialog(QDialog):
-    """Settings of a new source: ``kind`` is lux, shimmer, emotibit or simulated."""
-
 # (text, Hz) of the Shimmer's sampling rate choice in the add dialog; None leaves the device as it is
 SHIMMER_RATES = (("As set on the device", None),
                  ("51.2 Hz (movement and skin conductance; too coarse for ECG)", 51.2),
@@ -107,6 +107,9 @@ SHIMMER_RATES = (("As set on the device", None),
                  ("256 Hz (ECG and heart rate variability)", 256.0),
                  ("512 Hz (ECG, clinical grade)", 512.0))
 
+
+class AddSourceDialog(QDialog):
+    """Settings of a new source: ``kind`` is lux, shimmer, emotibit or simulated."""
 
     def __init__(self, kind: str, taken: set[str], found=None, parent=None):
         super().__init__(parent)
@@ -120,15 +123,15 @@ SHIMMER_RATES = (("As set on the device", None),
         self.port = QComboBox(editable=True)
         self.match = QComboBox(editable=True)
         self.set_clock = QCheckBox("Set the Shimmer's clock to the computer's time", checked=True)
-        if kind in ("lux", "shimmer"):
-            if kind == "lux":
-                self.port.addItem("Automatic", None)
         self.rate = QComboBox()
         for text, hz in SHIMMER_RATES:
             self.rate.addItem(text, hz)
         self.rate.setToolTip("Sets the Shimmer's sampling rate when connecting; its ECG chips are set to match. "
                              "Heart rate variability needs 256 Hz or more. The setting stays on the device "
                              "until it is switched off.")
+        if kind in ("lux", "shimmer"):
+            if kind == "lux":
+                self.port.addItem("Automatic", None)
             if kind == "shimmer":  # paired over Bluetooth (macOS): connected directly, not through a serial port
                 for name, address in found or []:
                     self.port.addItem(f"{name}  (Bluetooth {address})", address)
@@ -141,10 +144,10 @@ SHIMMER_RATES = (("As set on the device", None),
                 pass
             form.addRow("Serial port" if kind == "lux" else "Serial port (Bluetooth or USB dock)", self.port)
             if kind == "shimmer":
+                form.addRow("Sampling rate", self.rate)
                 form.addRow(self.set_clock)
         if kind == "emotibit":
             for device, streams in (found or {}).items():  # the devices streaming over LSL right now
-                form.addRow("Sampling rate", self.rate)
                 self.match.addItem(f"{device}  ({len(streams)} streams)", device)
             form.addRow("Device ID (LSL source)", self.match)
             form.addRow(QLabel("Start the EmotiBit Oscilloscope and enable its LSL output first."))
@@ -186,6 +189,33 @@ def plot_range(values, pad: float = 0.08, trim: float = 0.5):
     return lo - margin, hi + margin
 
 
+def peak_downsample(t, v, width: float = PLOT_SECONDS / PLOT_BINS):
+    """``t`` and ``v`` reduced to the minimum and the maximum of each stretch of ``width`` seconds, in time order, so
+    peaks survive and a curve of any number of samples has at most ``2 * PLOT_BINS`` points. Drawing a curve costs time
+    in proportion to its points: a noisy one of thousands of samples (a Shimmer at 512 Hz) froze the window.
+
+    The stretches are fixed on the time axis (multiples of ``width`` of the absolute time), not counted from the newest
+    sample, so a sample is in the same stretch at every redraw and the part of the curve that was already drawn keeps
+    its shape as it moves to the left. Signals with fewer than four samples per stretch (below about 70 Hz) are returned
+    as they are."""
+    t = np.asarray(t, dtype=float)
+    v = np.asarray(v, dtype=float)
+    if len(t) < 3 or np.median(np.diff(t)) * 4 > width:       # decided by the rate, so the look does not switch
+        return t, v
+    ids = np.floor(t / width).astype(np.int64)
+    starts = np.flatnonzero(np.r_[True, ids[1:] != ids[:-1]])
+    stretch = np.repeat(np.arange(len(starts)), np.diff(np.r_[starts, len(v)]))
+    picks = []
+    for reduce in (np.minimum, np.maximum):
+        extreme = reduce.reduceat(v, starts)
+        hit = np.flatnonzero(v == extreme[stretch])
+        picks.append(hit[np.unique(stretch[hit], return_index=True)[1]])    # the first sample at the extreme
+    first, second = np.minimum(*picks), np.maximum(*picks)
+    index = np.empty(2 * len(starts), dtype=int)
+    index[0::2], index[1::2] = first, second
+    return t[index], v[index]
+
+
 class SourcePlot(pg.PlotWidget):
     """Live view of one signal of one source."""
 
@@ -200,7 +230,7 @@ class SourcePlot(pg.PlotWidget):
         self.enableAutoRange(x=False, y=False)
         self.setXRange(-PLOT_SECONDS, 0, padding=0)
         self.signal = QComboBox()
-        self.curve = self.plot(pen=pg.mkPen(palette.ACCENT, width=1.5))
+        self.curve = self.plot(pen=pg.mkPen(palette.ACCENT, width=1))     # a thin pen is much cheaper to draw
         self.setTitle(name)
         self._signals = []
 
@@ -217,9 +247,10 @@ class SourcePlot(pg.PlotWidget):
                 self.signal.setCurrentText(current)
             self.signal.blockSignals(False)
         t, v = self.logger.live(self.name, self.signal.currentText(), PLOT_SECONDS)
-        if t:
-            self.curve.setData([x - t[-1] for x in t], v)
+        if len(t):
             lo, hi = plot_range(v)
+            x, y = peak_downsample(t - t[-1], v)
+            self.curve.setData(x, y, skipFiniteCheck=True)
             if lo is not None:
                 self.setYRange(lo, hi, padding=0)
 
@@ -258,6 +289,7 @@ class LoggerWindow(QMainWindow):
         self._watchdog = StallWatchdog(Path(str(self._settings.value("folder", str(Path.home() / "cwtool_logs"))))
                                        / "stall.log")
         self._watchdog.start()
+        self._ticks = 0
         self._timer = QTimer(self, interval=REFRESH_MS)
         self._timer.timeout.connect(self._refresh)
         self._timer.start()
@@ -404,25 +436,40 @@ class LoggerWindow(QMainWindow):
             self.folder.setText(d)
 
     def toggle_recording(self) -> None:
-        """Start recording into the chosen folder, or stop and report where it was saved."""
+        """Start recording into the chosen folder, or stop and report where it was saved. The button says at once that
+        the click was received (Starting… / Stopping…) while the files are opened or closed."""
         if self.logger.recording:
+            self._busy("Stopping…", "Closing the files…")
             session = self.logger.stop_recording()
             self._stop_protocol()
+            self._style_record(False)
             self.statusBar().showMessage(f"Saved to {session}")
             return
         if not self.logger.sources:
             QMessageBox.information(self, "Nothing to record", "Add a sensor first.")
             return
         self._settings.setValue("folder", self.folder.text())
+        self._busy("Starting…", "Opening the files…")
         try:
             session = self.logger.start_recording(Path(self.folder.text()))
         except OSError as e:
+            self._style_record(False)
             QMessageBox.warning(self, "Cannot record", str(e))
             return
         self._rec_start = time.time()
+        self._style_record(True)
         self.statusBar().showMessage(f"Recording to {session}")
 
+    def _busy(self, button_text: str, message: str) -> None:
+        """Show that a click on the record button was received before the slow part runs."""
+        self.record.setText(button_text)
+        self.record.setEnabled(False)
+        self.statusBar().showMessage(message)
+        self.record.repaint()
+        self.statusBar().repaint()
+
     def _style_record(self, recording: bool) -> None:
+        self.record.setEnabled(True)
         self.record.setText("Stop recording" if recording else "Start recording")
         self.record.setStyleSheet(RECORD_BASE + RECORD_STYLES[recording])
 
@@ -489,9 +536,11 @@ class LoggerWindow(QMainWindow):
                 self.table.setItem(r, c, QTableWidgetItem(text))
         if "disk" in self.logger.errors:  # a write failed (full disk, ...): the recording goes on without those rows
             self.statusBar().showMessage(f"Could not write to disk: {self.logger.errors['disk']}")
-        for plot in self._plots.values():
-            if plot.name in sources:
-                plot.refresh()
+        self._ticks += 1
+        if self._ticks % PLOT_EVERY == 1:
+            for plot in self._plots.values():
+                if plot.name in sources:
+                    plot.refresh()
         if self.logger.recording:
             if self.record.text() != "Stop recording":
                 self._style_record(True)

@@ -31,7 +31,10 @@ the error that stopped it), its row count and the time since the last row.
 
 ### What the plots show
 
-The time axis is the last 30 s. The value axis follows the data: the span of the signal with a margin, ignoring the
+The time axis is the last 30 s, redrawn three times a second. A curve of thousands of samples (a Shimmer at 512 Hz) is
+drawn as the minimum and the maximum of each of 500 stretches, so peaks and spikes stay visible and drawing costs the
+same at any rate; the file always has every sample. (Drawing all of them made the window freeze: a noisy 512 Hz channel
+took seconds to draw.) The record button says *Starting…* or *Stopping…* as soon as it is clicked. The value axis follows the data: the span of the signal with a margin, ignoring the
 outermost 0.5 % so one spike does not flatten it, and at least 1 % of the signal's level so noise on a flat signal is
 not magnified.
 

@@ -7,6 +7,7 @@ import json
 import threading
 import time
 
+import numpy as np
 import pytest
 
 from cwtool import lux
@@ -390,3 +391,89 @@ def Qt_MatchStartsWith():
     from PySide6.QtCore import Qt
 
     return Qt.MatchStartsWith
+
+
+def test_a_live_curve_is_reduced_to_a_few_points_that_keep_the_peaks():
+    from cwtool.logger.gui import PLOT_BINS, peak_downsample
+
+    t = 1.7e9 + np.arange(15360) / 512.0
+    v = np.sin(t) * 10
+    v[7001] = 1e6                                                    # a spike must survive
+    x, y = peak_downsample(t, v)
+    assert len(x) == len(y) <= 2 * (PLOT_BINS + 2) and y.max() == 1e6 and (np.diff(x) >= 0).all()
+    x, y = peak_downsample(t[::10], v[::10])                           # slow signals (51 Hz) are untouched
+    assert len(x) == len(t[::10])
+
+
+def test_the_part_of_a_live_curve_that_is_already_drawn_does_not_change_as_it_scrolls():
+    """The curve is redrawn as new samples arrive. A stretch of the signal must come out as the same points each
+    time, or the old data changes shape while it moves to the left."""
+    from cwtool.logger.gui import PLOT_SECONDS, peak_downsample
+
+    rng = np.random.default_rng(3)
+    t = 1.7e9 + np.arange(40000) / 512.0
+    v = rng.standard_normal(len(t)) * 1000
+    shown = {}
+    for now in (40.0, 40.37, 41.0, 42.123):                           # the newest sample is at 1.7e9 + now
+        sel = (t <= 1.7e9 + now) & (t >= 1.7e9 + now - PLOT_SECONDS)
+        x, y = peak_downsample(t[sel], v[sel])
+        shown[now] = dict(zip(np.round(x, 6), y))
+    first, last = shown[40.0], shown[42.123]
+    inside = [k for k in first if 1.7e9 + 12.3 < k < 1.7e9 + 39.9]    # clear of the edges, where the window moved
+    assert len(inside) > 700 and all(k in last and first[k] == last[k] for k in inside)
+    # what is not in both drawings is only at an edge: the oldest data left the window, the newest bin was still filling
+    odd = [k for k in set(first) ^ set(last) if 1.7e9 + 12.3 < k < 1.7e9 + 39.9]
+    assert not odd
+
+
+def test_the_window_stays_responsive_with_a_noisy_512_hz_source_and_the_buttons_answer(tmp_path):
+    """A Shimmer-like source (512 Hz, 18 channels) whose plotted channel is noisy over the whole plot height froze the
+    window: the plot drew thousands of points every refresh and the record button never answered."""
+    import os
+    import random
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6.QtWidgets")
+    pytest.importorskip("pyqtgraph")
+    from PySide6.QtWidgets import QApplication
+
+    from cwtool.logger.gui import LoggerWindow
+
+    class Noisy(SimulatedSource):
+        def run(self, emit, stopped):
+            n, start, rng = 0, time.time(), random.Random(1)
+            while not stopped.is_set():
+                due = int((time.time() - start) * self.rate)
+                rows = []
+                while n < due:
+                    rows.append((start + n / self.rate, *(rng.uniform(-1e6, 1e6) for _ in self.columns[1:])))
+                    n += 1
+                if rows:
+                    emit(rows)
+                time.sleep(0.01)
+
+    app = QApplication.instance() or QApplication([])
+    w = LoggerWindow()
+    w.folder.setText(str(tmp_path / "out"))
+    w.logger.add(Noisy("shimmer", rate=512, channels=18))
+    w._connected("shimmer")
+    w.show()
+    end = time.time() + 20                                              # the live buffer holds 30 s at 512 Hz
+    while len(w.logger.live("shimmer", "ch1")[0]) < 3000 and time.time() < end:
+        app.processEvents()
+        time.sleep(0.02)
+    w._plots["shimmer"].signal.setCurrentText("ch1")
+    t0 = time.perf_counter()
+    for _ in range(6):                                                  # six redraws of the plot
+        w._plots["shimmer"].refresh()
+        app.processEvents()
+    assert (time.perf_counter() - t0) / 6 < 0.15
+    assert len(w._plots["shimmer"].curve.getData()[0]) <= 2 * 502       # not the thousands of samples
+    t0 = time.perf_counter()
+    w.record.click()
+    assert time.perf_counter() - t0 < 1.0 and w.logger.recording and w.record.text() == "Stop recording"
+    assert w.record.isEnabled()
+    w.record.click()
+    assert not w.logger.recording and w.record.text() == "Start recording" and w.record.isEnabled()
+    assert "Saved to" in w.statusBar().currentMessage()
+    w.logger.shutdown()

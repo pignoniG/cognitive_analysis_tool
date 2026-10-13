@@ -12,10 +12,12 @@ from collections import defaultdict, deque
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+
 from cwtool.logger.base import Source
 
 LIVE_SECONDS = 60.0
-LIVE_POINTS = 6000
+LIVE_POINTS = 16000   # per signal: 30 s of the plot at 512 Hz
 
 
 class EventLog:
@@ -163,14 +165,13 @@ class Logger:
                 self._write_queue.put((sink, rows))
 
     def live(self, name: str, signal: str, seconds: float = 30.0):
-        """(times, values) of the last ``seconds`` of a signal, for plotting."""
+        """(times, values) as arrays of the last ``seconds`` of a signal, for plotting."""
         with self._lock:
-            data = list(self._live.get((name, signal), ()))
-        if not data:
-            return [], []
-        end = data[-1][0]
-        data = [d for d in data if d[0] >= end - seconds]
-        return [d[0] for d in data], [d[1] for d in data]
+            data = np.array(self._live.get((name, signal), ()), dtype=float).reshape(-1, 2)
+        if not len(data):
+            return data[:, 0], data[:, 1]
+        data = data[data[:, 0] >= data[-1, 0] - seconds]
+        return data[:, 0], data[:, 1]
 
     # recording
 
