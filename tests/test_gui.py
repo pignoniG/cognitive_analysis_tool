@@ -247,7 +247,7 @@ def test_analyse_button_becomes_reanalyse_and_reset_view_is_on_the_plots(app, va
     w.show()
     app.processEvents()
     b = w.plots.reset_button
-    assert b.isVisible() and b.x() + b.width() > w.plots.width() - 40 and b.y() < 30
+    assert b.isVisible() and b.x() + b.width() > w.plots.width() - 40 and b.y() < 80      # top right, under the time axis
     w.close()
 
 
@@ -580,3 +580,102 @@ def test_the_left_pages_never_scroll_sideways(app):
         scroll = w.pages.widget(i)
         assert scroll.horizontalScrollBar().maximum() == 0, f"page {i} is wider than its column"
     w.close()
+
+
+def test_bars_are_dragged_by_the_handles_under_the_plots_and_not_on_the_plots(app, tmp_path):
+    from conftest import write_varjo_recording
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+
+    from cwtool.trim import Trim
+
+    w = MainWindow()
+    w.resize(1400, 900)
+    w.show()
+    w.open_recording(write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128] * 6, pupil_mm=3.0))
+    assert wait_for(app, lambda: w.result is not None, 60)
+    plots = w.plots
+    w.trim_panel.set_trim(Trim(5.0, 40.0, [(15.0, 20.0)]))
+    plots.set_cursor(10.0)
+    app.processEvents()
+    ids = [g[0] for g in plots.grips()]
+    assert ids == ["cursor", "start", "end", ("band", 0, "a"), ("band", 0, "b"), ("band", 0, "mid")]
+    # nothing on the plots themselves can be dragged
+    assert not any(line.movable for line in plots.cursors) and not plots._start_line.movable
+    assert not plots._end_line.movable and not plots._exclusion_shades[0][0].movable
+    # the handle strip is right under the first plot (pupil diameter), outside the plots; the time axis is repeated above it
+    strip = plots.handles
+    below = plots.mapFromScene(plots.pupil.vb.sceneBoundingRect().bottomLeft()).y()
+    assert below <= strip.geometry().top() + 1 and strip.geometry().bottom() <= plots.mapFromScene(plots.cw.vb.sceneBoundingRect().topLeft()).y()
+    assert plots.pupil.getAxis("top").isVisible() and plots.pupil.getAxis("top").style["showValues"]
+    assert not plots.cw.getAxis("top").isVisible() and plots.cw.getAxis("bottom").style["showValues"]
+
+    def drag(t_from, dx):
+        x = strip._x(t_from)
+        for kind, px in ((QEvent.MouseButtonPress, x), (QEvent.MouseMove, x + dx), (QEvent.MouseButtonRelease, x + dx)):
+            event = QMouseEvent(kind, QPointF(px, 9), QPointF(px, 9), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+            {QEvent.MouseButtonPress: strip.mousePressEvent, QEvent.MouseMove: strip.mouseMoveEvent,
+             QEvent.MouseButtonRelease: strip.mouseReleaseEvent}[kind](event)
+
+    seen = []
+    plots.cursor_changed.connect(seen.append)
+    drag(10.0, 60)
+    assert plots.cursor_time() > 11.0 and seen                                   # the video follows the handle
+    drag(5.0, 40)
+    assert plots._current_trim().start > 5.5                                      # the export start moved
+    drag(40.0, -40)
+    assert plots._current_trim().end < 39.5
+    drag(17.5, 40)                                                                # the middle of the band moves all of it
+    a, b = plots._exclusion_shades[0][0].getRegion()
+    assert a > 15.5 and b - a == pytest.approx(5.0)
+    w.close()
+
+
+def test_a_recording_opens_on_its_whole_span_even_when_the_sensor_plots_were_reset_just_before(app, tmp_path):
+    """Opening a recording clears the sensor plots, then (with the video analysis cached) shows the result in the same
+    turn of the event loop: the clearing must not bring back the empty 0-1 s view afterwards."""
+    from conftest import write_varjo_recording
+    from cwtool import devices, pipeline
+    from cwtool.params import Parameters, VideoSettings
+    from cwtool.video import analyse_video
+
+    rec = devices.load(write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128, 64, 200, 90, 128] * 6, pupil_mm=3.0))
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec),
+                          frame_times=rec.scene_frame_times)
+    result = pipeline.run(rec, video, Parameters())
+    w = MainWindow()
+    w.resize(1400, 900)
+    w.show()
+    app.processEvents()
+    w.plots.set_sensors([])                      # what opening a recording does first
+    w.plots.show_result(result)                  # the cached analysis: no event loop in between
+    for _ in range(5):
+        app.processEvents()
+    lo, hi = float(result.time[0]), float(result.time[-1])
+    for plot in w.plots._plots:
+        x0, x1 = plot.vb.viewRange()[0]
+        assert x1 - x0 > 0.95 * (hi - lo), x1 - x0
+    # a restore queued before the view was fitted is dropped, whatever span it holds
+    before = w.plots.pupil.vb.viewRange()[0]
+    w.plots._restore_x([0.0, 1.0], w.plots._view_changes - 1)
+    assert w.plots.pupil.vb.viewRange()[0] == before
+    w.close()
+
+
+def test_the_restore_button_sits_right_under_the_last_block_of_its_pill(app):
+    from cwtool.gui.param_panel import ParameterPanel
+
+    panel = ParameterPanel()
+    panel.resize(420, 900)
+    panel.show()
+    app.processEvents()
+    for index, button in enumerate(panel.reset_buttons):
+        panel.pills._chosen(index)
+        panel.pills._buttons[index].setChecked(True)
+        app.processEvents()
+        page = panel.pills._stack.widget(index)
+        blocks = [c for c in page.children() if hasattr(c, "geometry") and c is not button and c.isWidgetType()
+                  and c.isVisible()]
+        last = max(b.geometry().bottom() for b in blocks)
+        assert 0 <= button.geometry().top() - last <= 24, (index, button.geometry().top() - last)   # not pushed to the bottom
+    panel.close()

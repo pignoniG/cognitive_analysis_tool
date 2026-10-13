@@ -56,7 +56,7 @@ step length, so a sequence played with 10 s steps is found even though the built
 eye tracking was lost have no analysed colour and are left out of the score; the status bar says how much of the
 sequence fell in such gaps.
 
-The overlay turns on and the start is set. Adjust it by dragging the grey line if needed.
+The overlay turns on and the start is set. Adjust it by dragging its handle under the plots if needed.
 
 ## 2. Fit the light sensitivity
 

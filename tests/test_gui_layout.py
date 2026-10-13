@@ -161,5 +161,5 @@ def test_a_missing_lux_log_flags_the_data_tab(app, tmp_path):
     w.open_recording(write_neon_recording(tmp_path / "nolux", GRAYS, FRAME_TIMES))
     assert wait_for(app, lambda: w.result is not None and w.recording.lux_values is None)
     assert w.rail._buttons[0].property("alert") is True and "●" in w.rail._buttons[0].text()
-    assert not w.lux_box.isHidden()                                           # a glasses recording: lux log buttons
+    assert "no readings found" in w.sensors_label.text()                       # the lux log is one of the sensor inputs
     w.close()

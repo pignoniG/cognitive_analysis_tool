@@ -281,6 +281,7 @@ class ParameterPanel(QWidget):
         self._video.changed.connect(self.video_settings_changed)
 
         self.dynamics_section = Collapsible("Dynamics", self._dynamics)
+        self.reset_buttons: list[QPushButton] = []      # one under each pill's last block
         self.pills = Pills()
         for (title, _), form in zip(PAGES, self._pages):
             page = QWidget()
@@ -289,15 +290,17 @@ class ParameterPanel(QWidget):
             page_layout.addWidget(form)
             if title == "Participant":
                 page_layout.addWidget(self.dynamics_section)
+            # the button sits right under the last block of its pill, not at the foot of the tab
+            button = QPushButton("Restore this group's defaults")
+            button.setToolTip("Put the settings of this pill back to their default values")
+            button.clicked.connect(self.reset_current)
+            page_layout.addWidget(button)
+            self.reset_buttons.append(button)
             page_layout.addStretch(1)
             self.pills.add(title, page)
-        self.reset_button = QPushButton("Restore this group's defaults")
-        self.reset_button.setToolTip("Put the settings of the pill that is open back to their default values")
-        self.reset_button.clicked.connect(self.reset_current)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.pills, 1)
-        layout.addWidget(self.reset_button)
 
         # A line at the top of the lux sensor group saying which route the luminance takes.
         _, lux_form, _ = next(b for f in self._forms for b in f._boxes if "lux_use_video" in b[2])
@@ -361,10 +364,10 @@ class ParameterPanel(QWidget):
         for form in (*self._forms, self._video):
             form.hide_fields(hidden)
         self.route_label.setText(
-            "Route: L = sensor average × (gaze weighted / whole frame) relative luminance from the video, using "
+            "Luminance: L = sensor average × (gaze weighted / whole frame) relative luminance from the video, using "
             "the Fixation weight. It follows where the gaze looks; on a uniform view the ratio only adds noise, "
             "so turn it off there."
-            if params.lux_use_video else "Route: L = sensor average, the video is not used.")
+            if params.lux_use_video else "Luminance: L = sensor average, the video is not used.")
         # One switch: the dynamics settings apply only with it on (the delay always applies).
         for name in DYNAMICS_SWITCHED:
             self._dynamics._editors[name].setEnabled(params.dynamics)

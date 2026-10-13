@@ -222,17 +222,19 @@ def test_compute_hrv_shows_the_table_and_the_beats_and_the_export_uses_them(app,
 
     # the plots of the heart rate and of the moving RMSSD, with their checkboxes under the plots (RMSSD on by default)
     assert not w.hrv_bar.isHidden() and not w.hr_check.isChecked() and w.rmssd_check.isChecked()
-    titles = [p.titleLabel.text for p in w.plots._sensor_plots]
+    titles = list(w.plots._sensor_labels)
     assert titles[-1] == "RMSSD (ms), moving 30 s window" and len(titles) == 2
+    assert w.plots._sensor_plots[-1].titleLabel.text is None or not w.plots._sensor_plots[-1].titleLabel.isVisible()   # no title: the axis label says it
+    assert w.plots._sensor_plots[-1].getAxis("left").labelText == "RMSSD (ms)"
     w.hr_check.setChecked(True)
-    assert [p.titleLabel.text for p in w.plots._sensor_plots][-2:] == ["Heart rate (bpm)", titles[-1]]
+    assert list(w.plots._sensor_labels)[-2:] == ["Heart rate (bpm)", titles[-1]]
     w.rmssd_check.setChecked(False)
     w.hr_check.setChecked(False)
     assert len(w.plots._sensor_plots) == 1                                    # only the ECG signal
     w.hr_check.setChecked(True)
     w.rmssd_check.setChecked(True)
     w.rmssd_window.setValue(20.0)                                             # the window is in the title
-    assert wait_for(app, lambda: w.plots._sensor_plots[-1].titleLabel.text == "RMSSD (ms), moving 20 s window")
+    assert wait_for(app, lambda: w.plots._sensor_labels[-1] == "RMSSD (ms), moving 20 s window")
     assert w.hrv_series.window == 20.0
     # the red points and the table follow the export range without rebuilding the plots
     kept = list(w.plots._sensor_plots)
@@ -307,11 +309,14 @@ def test_one_logger_folder_gives_a_glasses_recording_its_lux_log_and_its_sensor_
     logs = tmp_path / "logs"
     write_session(logs / "2026-10-01_07-00-00", epoch=start - 9000)                # an earlier session, with its own lux.csv
     write_session(logs / "2026-10-01_09-00-00", epoch=start)                        # the recording's session
-    assert not w.lux_box.isHidden() and w.sensors == []
+    assert "lux sensor: no readings" in w.sensors_label.text() and w.sensors == []     # one box for the lux log and the sensors
+    assert not hasattr(w, "lux_box")
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", staticmethod(lambda *a, **k: str(logs)))
     w.choose_sensors()                                                              # the one chooser, in the sensor box
     assert wait_for(app, lambda: w.recording.lux_values is not None and len(w.sensors) == 2, timeout=60)
     assert len(w.recording.lux_values) > 10                                         # the lux log of the matching session
+    assert "lux sensor: " in w.sensors_label.text() and "readings (" in w.sensors_label.text()
+    assert "shimmer" in w.sensors_label.text()                                      # listed with the other sensors
     assert all(s.path.parent.name == "2026-10-01_09-00-00" for s in w.sensors)
     assert w.forget_logs_action.isEnabled() and w._logs_folder == logs
     # forgetting it: the recording's own folder again (no lux, no sensors)
@@ -345,3 +350,32 @@ def test_the_sensor_signals_can_be_switched_from_under_the_plots(app, window):
     assert not [a for a in w.signals_button.menu().actions() if a.text() == "shimmer: accel_ln_x"][0].isChecked()
     w.remove_sensors()
     assert w.signals_button.isHidden()
+
+
+def test_recent_recordings_are_listed_in_the_file_menu(app, window, tmp_path):
+    w, folder, tmp = window
+    w._fill_recent_menu()
+    names = [a.text() for a in w.recent_menu.actions() if a.text() and "Clear" not in a.text()]
+    assert len(names) == 1 and names[0].startswith("rec")                      # the recording opened by the fixture
+    other = write_varjo_recording(tmp / "second", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0)
+    w.open_recording(other)
+    assert wait_for(app, lambda: w.recording.folder == other and w.result is not None, 60)
+    assert w._recent_recordings()[0] == str(other) and len(w._recent_recordings()) == 2    # newest first
+    w.recent_menu.actions()                                                      # (filled when the menu is shown)
+    w._fill_recent_menu()
+    assert w.recent_menu.actions()[0].toolTip() == str(other)
+    w.recent_menu.actions()[-1].trigger()                                        # Clear the list
+    assert w._recent_recordings() == []
+
+
+def test_a_remembered_logger_folder_without_a_matching_session_says_so(app, window, monkeypatch):
+    w, folder, tmp = window
+    start = w.recording.epoch_start + float(w.recording.time[0])
+    logs = tmp / "logs"
+    write_session(logs / "2026-10-01_05-00-00", epoch=start - 20000)                # a session of another time
+    w._logs_folder = logs                         # remembered earlier (setting it now would ask about this recording)
+    other = write_varjo_recording(tmp / "later", [128, 255, 0, 128, 64, 200, 90, 128], pupil_mm=3.0)
+    w.open_recording(other)
+    assert wait_for(app, lambda: w.recording.folder == other and w.result is not None, 60)
+    assert wait_for(app, lambda: "No session in" in w.sensors_label.text())
+    assert w.sensors == []

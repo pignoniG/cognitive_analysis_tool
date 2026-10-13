@@ -380,9 +380,13 @@ def test_the_shimmer_dialog_offers_a_sampling_rate():
 
     app = QApplication.instance() or QApplication([])
     d = AddSourceDialog("shimmer", set(), found=[("Shimmer3-873A", "00-06-66-b9-87-3a")])
-    assert d.source().sampling_rate is None                           # the default leaves the device as it is
-    index = d.rate.findText("256 Hz", Qt_MatchStartsWith())
-    d.rate.setCurrentIndex(index)
+    assert d.source().sampling_rate == 256.0                          # the default is fit for the ECG
+    assert "Fit for" in d.rate_note.text()
+    d.rate.setCurrentIndex(d.rate.findText("51.2 Hz", Qt_MatchStartsWith()))
+    assert "Too coarse" in d.rate_note.text() and d.source().sampling_rate == 51.2          # warned when it is chosen
+    d.rate.setCurrentIndex(0)
+    assert d.source().sampling_rate is None and "stays as the device has it" in d.rate_note.text()
+    d.rate.setCurrentIndex(d.rate.findText("256 Hz", Qt_MatchStartsWith()))
     source = d.source()
     assert source.sampling_rate == 256.0 and source.port == "00-06-66-b9-87-3a"
 

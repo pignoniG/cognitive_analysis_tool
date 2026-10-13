@@ -9,10 +9,10 @@ The window has the controls on the left, the plots on the right, and the video p
 | Area | Contents |
 |---|---|
 | Rail (far left) | Four tabs: **Data**, **Params**, **Calibrate**, **Export** (Ctrl+1 to Ctrl+4). A red dot under a tab's name says it needs attention, for example **Data** when a glasses recording has no lux readings |
-| Tab page | **Data**: the recording, the lux log (glasses), the scene video and its analysis settings, the sensor data. **Params**: the parameters, in pills (below). **Calibrate**: numbered steps. **Export**: the export range and the Export button |
+| Tab page | **Data**: the recording, the scene video and its analysis settings, and the sensor data (the lux log of glasses, the Shimmer, the EmotiBit). **Params**: the parameters, in pills (below). **Calibrate**: numbered steps. **Export**: the export range and the Export button |
 | Video preview | Under the page, 16:9, following the cursor. **Values** shows the colours and luminance measured at the cursor, **Pop out** moves it to a window of its own, **Hide** (or **P**) gives its room back to the page. Drag the divider above it to resize |
 | Status strip | One line over the plots: ΔPD RMS and SD, the light left in ΔPD, the expected pupil at the display's black and white points (display devices) or where the luminance comes from (with the lux sensor: its median luminance × the median video ratio and its 10th–90th percentile range), the pupil scale and offset applied, sampling rates and the share of the recording in gaps. A red **⚠ N warnings** button on its right opens the list |
-| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis, with the imported sensor signals under them. They use the whole width of the window; the checkboxes under them switch each plot on and off (pupil diameter and ΔPD, and the RMSSD once computed, are on at first) |
+| Plots | Measured vs expected pupil, luminance, the video ratio (lux sensor with the video only) and ΔPD, sharing the time axis, with the imported sensor signals under them. They use the whole width of the window; the drop-downs under them switch each plot on and off (pupil diameter and ΔPD, and the RMSSD once computed, are on at first) |
 
 The last tab, pill, preview state and sizes are remembered between sessions.
 
@@ -25,14 +25,15 @@ The last tab, pill, preview state and sizes are remembered between sessions.
 | **Signal** | the pupil signal (scale, alignment, offset, time lag, gaps, artefacts) and ΔPD (window, smoothing) |
 
 A dot after a pill's name means something in it differs from the defaults. **Restore this group's defaults** (under
-the pills, with a confirmation) puts the open pill's settings back. **Load…**, **Save** and **Save as…** at the top
+the last block of the pill, with a confirmation) puts the open pill's settings back. **Load…**, **Save** and **Save as…** at the top
 of the tab are the participant's parameter file.
 
 ## Menus
 
 **File**
 
-- **Open recording…**: choose a recording folder. The device is detected automatically.
+- **Open recording…** (Ctrl+O): choose a recording folder. The device is detected automatically. **Open recent** lists the
+  last ten recordings (newest first); **Clear the list** empties it.
 - **Logger folder… (lux and sensor data)**: the [sensor logger](logger.md)'s recordings folder, or one of its sessions.
   The logger writes the lux log (`lux.csv`) and the Shimmer and EmotiBit files of a recording into one session folder,
   so one folder serves both: the session that overlaps the recording is found by its time, the lux log is read from it
@@ -71,8 +72,9 @@ technical details under **Show Details…**. An analysis error appears once per 
 
 ## Sensor data (optional)
 
-Files from the [sensor logger](logger.md), the Shimmer's ECG and the EmotiBit's EDA, PPG and motion, can be put next
-to the pupil data. They are not used by the analysis; they let you see heart and skin responses against ΔPD, and
+The Sensor data box holds everything the [sensor logger](logger.md) recorded: the lux log (for a glasses recording, where
+it is one of the sensor inputs: the box says how many readings it has, or that none were found), the Shimmer's ECG and
+the EmotiBit's EDA, PPG and motion. They can be put next to the pupil data. They are not used by the analysis; they let you see heart and skin responses against ΔPD, and
 export everything for one participant as a single package.
 
 - **Logger folder…** (or **File → Logger folder…**): choose the logger's recordings folder, or one session. The
@@ -95,8 +97,8 @@ export everything for one participant as a single package.
   select the row to read it. The table follows the [export range](#export-range) as you edit it, since only the windows
   are worked out again, not the beats. The button then reads *Recompute HRV*; importing other sensor data or opening
   another recording forgets the result. The beats are found by NeuroKit2 (`pip install "cwtool[hrv]"`).
-- **Heart rate variability plots**: two plots join the others under ΔPD, on the same time axis and cursor, switched by
-  the checkboxes **Heart rate** (off at first) and **RMSSD** (on) under the plots: the heart rate (bpm) from the trusted intervals, and the
+- **Heart rate variability plots**: two plots join the others under ΔPD, on the same time axis and cursor, switched in the
+  **Heart rate variability** drop-down under the plots (**Heart rate**, off at first, and **RMSSD**, on): the heart rate (bpm) from the trusted intervals, and the
   RMSSD (ms) of a moving window (30 s, changed in the box next to them; the first point is one window after the first
   beat). Red points on the RMSSD curve mark windows in which more than 10 % of the intervals were not trusted, and a gap
   is a window with too few trusted intervals. These plots are a preview and are not exported; the table is. They follow
@@ -110,10 +112,10 @@ analysis and the plots always use the whole recording (the model needs the histo
 decides what is written by **Export results…**, for every file at once (results, lux, sensors, events).
 
 - **Start at / End at**: leave out everything before or after a time. **Cursor** takes the time of the red cursor.
-  Both are drawn on the plots as dashed lines you can drag.
+  Both are drawn on the plots as dashed lines, with a handle under the plots to drag (see **Handles** below).
 - **Left out**: any number of segments in between, drawn as grey bands. **Leave out from cursor** adds 10 s at the
   cursor to adjust; **Leave out calibration** leaves out the calibration sequence while its overlay is shown. Drag a
-  band by its body or edges on the pupil plot, or double-click a row (or **Edit…**) to type the times. Bands dragged
+  band by the handles under the plots (its two edges and its middle), or double-click a row (or **Edit…**) to type the times. Bands dragged
   over each other merge.
 - Times are those of the plots' axis (`timestamp_relative` in the exports).
 - The range is saved next to the recording (`cwtool_trim.json`) and comes back when it is opened again; clearing it
@@ -168,9 +170,9 @@ of the gaze circle and the background.
 
 ## Plots
 
-- **Which plots are shown**: the checkboxes under the plots (**Pupil diameter**, **Luminance**, **Video ratio**, **ΔPD**,
-  and **Heart rate** and **RMSSD** once the HRV is computed). At first the pupil diameter, ΔPD and RMSSD are on. The
-  video ratio can only be ticked on the lux route with the video. **Sensor signals** under them is a menu with the same
+- **Which plots are shown**: three drop-downs under the plots. **Plots**: **Pupil diameter**, **Luminance**, **Video
+  ratio**, **ΔPD**. **Heart rate variability** (once computed): **Heart rate** and **RMSSD**, with the window of the RMSSD. At first the pupil diameter, ΔPD and RMSSD are on. The
+  video ratio can only be ticked with a lux sensor and the scene video. **Sensor signals** is the third, with the same
   choice as the list in the Data tab. The plots that remain share the height, and the time axis is on the last one.
 - **Time axis**: the view fits the whole recording when it opens and follows it while you change parameters. Drag with
   the left mouse button (or the middle one) to **pan** in time, or swipe sideways; **right-click** to zoom out; the
@@ -185,7 +187,11 @@ of the gaze circle and the background.
 - **Reset view** (the four-arrows button in the top right corner of the plots, **View** menu, Ctrl+0, or a double-click on the
   plots) shows the whole recording again. The calibration overlay, events and reference lines never stretch the
   value axes.
-- The dark orange bar marks the current video frame; its time is shown at its top. Click on either plot to move it, or drag it to
+- **Handles**: the bars you can move in time (the current video frame, the export start and end, the edges and middle of
+  a left-out band, the calibration start) each have a handle in the strip under the first plot (the pupil diameter), two short vertical segments in the
+  bar's colour. The time axis is repeated above that plot, so the handles can be read against it. Drag the handle; the bar follows. The bars themselves cannot be dragged, so a drag on the plots is always a
+  pan or a zoom.
+- The dark orange bar marks the current video frame; its time is shown at its top. Click on either plot to move it, or drag its handle to
   scrub the video: the preview follows while dragging, skipping frames if decoding cannot keep up. **◀ Frame / Frame ▶**
   in the preview move it frame by frame.
 - **Luminance** (second plot): the luminance the model uses, in cd/m². With a lux sensor the sensor's average is drawn
@@ -209,7 +215,7 @@ See [Participant calibration](calibration.md) for the procedure.
   so they place the sequence in the recording (the start and the overlay are set; a run played for another recording
   is reported as outside it).
 - **Find in recording**: locates the sequence in the analysed video and adapts its step length.
-- **Show sequence overlay**: shades each step in its colour on the pupil plot; drag the grey line to move it.
+- **Show sequence overlay**: shades each step in its colour on the pupil plot; drag its handle under the plots to move it.
 - **Start**: the sequence start in seconds.
 - **ΔPD RMS in sequence**: how well the model fits within the sequence, the value to minimise when calibrating
   by hand.

@@ -7,8 +7,8 @@ from functools import partial
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QPointF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QToolButton
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen
+from PySide6.QtWidgets import QToolButton, QWidget
 
 from cwtool import calibration, palette
 from cwtool.gui.icons import pixmap
@@ -107,8 +107,80 @@ class TimeViewBox(pg.ViewBox):
         self._manual()
 
 
+class HandleStrip(QWidget):
+    """The strip under the plots with the handles of everything that can be dragged in time: the current frame, the
+    start and end of the export, an excluded band (its two edges and its middle) and the calibration start. A handle is
+    two short vertical segments in the colour of its bar, under the bar's place on the time axis. Dragging is only
+    possible here, so that a drag on the plots themselves is always a pan or a zoom.
+
+    The strip draws what :meth:`ResultPlots.grips` lists and reports a drag to :meth:`ResultPlots.grip_moved`."""
+
+    HEIGHT = 18
+    GRAB_PX = 9          # how close (pixels) the pointer must be to a handle to take it
+
+    def __init__(self, plots: "ResultPlots"):
+        super().__init__(plots)
+        self.plots = plots
+        self._held = None        # (grip id, time offset between the pointer and the handle)
+        self.setMouseTracking(True)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedHeight(self.HEIGHT)
+
+    def _x(self, t: float) -> float | None:
+        """Pixel (of this strip) of time ``t``, None before the plots are laid out."""
+        vb = self.plots.time_view()
+        if vb is None or vb.width() <= 0:
+            return None
+        return float(self.plots.mapFromScene(vb.mapViewToScene(QPointF(t, 0.0))).x())
+
+    def _time(self, x: float) -> float:
+        vb = self.plots.time_view()
+        return float(vb.mapSceneToView(self.plots.mapToScene(int(round(x)), 0)).x())
+
+    def _nearest(self, x: float):
+        best = None
+        for grip, t, _ in self.plots.grips():
+            gx = self._x(t)
+            if gx is not None and abs(gx - x) <= self.GRAB_PX and (best is None or abs(gx - x) < best[0] - 0.5):
+                best = (abs(gx - x), grip, t)
+        return best
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        for grip, t, colour in self.plots.grips():
+            x = self._x(t)
+            if x is None or not -4 <= x <= self.width() + 4:
+                continue
+            pen = QPen(QColor(*colour), 2.2)
+            pen.setCapStyle(Qt.RoundCap)
+            painter.setPen(pen)
+            for dx in (-2.5, 2.5):
+                painter.drawLine(QPointF(x + dx, 3), QPointF(x + dx, self.height() - 3))
+
+    def mousePressEvent(self, event) -> None:
+        near = self._nearest(event.position().x())
+        if near is not None and event.button() == Qt.LeftButton:
+            self._held = (near[1], near[2] - self._time(event.position().x()))
+            event.accept()
+        else:
+            event.ignore()
+
+    def mouseMoveEvent(self, event) -> None:
+        x = event.position().x()
+        if self._held is not None:
+            self.plots.grip_moved(self._held[0], self._time(x) + self._held[1])
+        else:
+            self.setCursor(Qt.SizeHorCursor if self._nearest(x) is not None else Qt.ArrowCursor)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._held is not None:
+            self._held = None
+            self.plots.grip_released()
+
+
 class ResultPlots(pg.GraphicsLayoutWidget):
-    """Stacked plots sharing the time axis: pupil, luminance, the video ratio (lux route only) and ΔPD.
+    """Stacked plots sharing the time axis: pupil, luminance, the video ratio (with a lux sensor only) and ΔPD.
     The calibration sequence start is a draggable vertical line on the pupil plot.
 
     The view follows the data (:meth:`fit_to_data`) until the user pans or zooms; after
@@ -131,6 +203,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self._shown = {"pupil": True, "lum": False, "ratio": False, "cw": True}    # which of the four the user wants
         self._ratio_available = False          # the video ratio exists only on the lux route with the video
         self._y_sources: dict = {}             # plot -> [(time, values, trim %)] the value axis is fitted to
+        self._view_changes = 0                 # counts fits and moves by the user: a late restore of the view must not undo them
         self._y_zoomed: set = set()            # the plots whose value axis the user zoomed: it stays as they set it
         self._zoom_mode = False
         self._sensor_plots: list = []
@@ -227,7 +300,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
         self._event_items: list = []
         self._sequence_items: list = []
-        self.sequence_line = pg.InfiniteLine(angle=90, movable=True,
+        self.sequence_line = pg.InfiniteLine(angle=90, movable=False,
                                              pen=pg.mkPen((90, 90, 90), width=2),
                                              label="calibration start",
                                              labelOpts={"position": 0.95, "color": (60, 60, 60)})
@@ -240,27 +313,26 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         # the video; the time is shown at the top of the pupil plot.
         red = palette.rgb(palette.CURSOR)
         self._moving_cursor = False
-        self.cursors = [pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(red, width=2),
+        self.cursors = [pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(red, width=2),
                                         hoverPen=pg.mkPen(red, width=4)) for _ in self._plots]
         self.cursors[0].label = pg.InfLineLabel(self.cursors[0], text="{value:.2f} s", position=0.97,
                                                 anchors=[(0, 0), (0, 0)], color=red,
                                                 fill=pg.mkBrush(255, 255, 255, 200))
         for plot, line in zip(self._plots, self.cursors):
             line.setZValue(20)                  # above the curves and overlays, so it can always be grabbed
-            line.setCursor(pg.QtCore.Qt.SizeHorCursor)
             plot.addItem(line, ignoreBounds=True)
             line.sigPositionChanged.connect(self._cursor_dragged)
         self.scene().sigMouseClicked.connect(self._clicked)
+        self.handles = HandleStrip(self)
 
     def resizeEvent(self, event) -> None:
-        """Keep the reset-view button in the top right corner."""
+        """Keep the buttons and the handles where they belong."""
         super().resizeEvent(event)
         if not hasattr(self, "reset_button"):     # resized while the base class is being built
             return
         self.reset_button.adjustSize()
         self.zoom_button.adjustSize()
-        self.reset_button.move(self.width() - self.reset_button.width() - 12, 8)
-        self.zoom_button.move(self.reset_button.x() - self.zoom_button.width() - 8, 8)
+        self._place_handles()
 
     @staticmethod
     def _button_icon(name: str) -> QIcon:
@@ -279,7 +351,15 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         for plot in self._plots:
             plot.vb.set_zoom_mode(self._zoom_mode)
 
+    def _handles_changed(self, *_) -> None:
+        """Draw the handles again (something they follow moved, or the plots were laid out again)."""
+        if hasattr(self, "handles"):
+            self._place_handles()
+            self.handles.update()
+
     def _watch_box(self, plot) -> None:
+        plot.vb.sigRangeChanged.connect(self._handles_changed)
+        plot.vb.sigResized.connect(self._handles_changed)
         plot.vb.sigValueZoomed.connect(self._value_zoomed)
         plot.vb.sigValueReset.connect(self._value_reset)
         plot.vb.set_zoom_mode(self._zoom_mode)
@@ -297,6 +377,58 @@ class ResultPlots(pg.GraphicsLayoutWidget):
                 self._y_zoomed.discard(plot)
                 self._fit_y(plot)
 
+    # The handles under the plots (HandleStrip): what can be dragged, and what a drag does
+
+    def time_view(self):
+        """The view box of the last plot shown: its place on the screen gives the time axis of the handles."""
+        shown = [p for key, p in zip(self.PLOT_KEYS, self._base_plots) if self.plot_shown(key)] + self._sensor_plots
+        return shown[-1].vb if shown else None
+
+    def grips(self) -> list:
+        """``(id, time, (r, g, b))`` of every handle: the current frame, the start and end of the export, the edges and
+        middle of each excluded band, and the calibration start while its overlay is shown."""
+        cursor = palette.rgb(palette.CURSOR)
+        edge = (60, 60, 60)
+        grips = [("cursor", self._cursor_time, cursor)]
+        if self._start_line is not None:
+            grips.append(("start", float(self._start_line.value()), edge))
+        if self._end_line is not None:
+            grips.append(("end", float(self._end_line.value()), edge))
+        for k, regions in enumerate(self._exclusion_shades):
+            a, b = regions[0].getRegion()
+            grips += [(("band", k, "a"), a, edge), (("band", k, "b"), b, edge), (("band", k, "mid"), (a + b) / 2, edge)]
+        if self._sequence_visible:
+            grips.append(("sequence", self._sequence_start, (90, 90, 90)))
+        return grips
+
+    def grip_moved(self, grip, t: float) -> None:
+        """A handle was dragged to time ``t``: move its bar, which reports the change as a drag on the plots did."""
+        if grip == "cursor":
+            self.set_cursor(t)
+            self.cursor_changed.emit(t)
+        elif grip == "start" and self._start_line is not None:
+            self._start_line.setValue(t)
+        elif grip == "end" and self._end_line is not None:
+            self._end_line.setValue(t)
+        elif grip == "sequence":
+            self.sequence_line.setValue(t)
+        elif isinstance(grip, tuple) and grip[0] == "band" and grip[1] < len(self._exclusion_shades):
+            region = self._exclusion_shades[grip[1]][0]
+            a, b = region.getRegion()
+            if grip[2] == "a":
+                a = min(t, b)
+            elif grip[2] == "b":
+                b = max(t, a)
+            else:
+                a, b = a + (t - (a + b) / 2), b + (t - (a + b) / 2)
+            region.setRegion((a, b))
+        self.handles.update()
+
+    def grip_released(self) -> None:
+        """A handle was let go: bands dragged over each other are merged."""
+        if self._exclusion_shades:
+            self._drag_finished()
+
     def cursor_time(self) -> float:
         """Time (s) of the red cursor."""
         return self._cursor_time
@@ -310,6 +442,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
                 line.setValue(t)
         finally:
             self._moving_cursor = False
+        self._handles_changed()
 
     def _cursor_dragged(self, line) -> None:
         if self._moving_cursor:
@@ -345,6 +478,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
 
     def _moved_by_user(self, *_) -> None:
         self._follow = False
+        self._view_changes += 1
 
     def _apply_x_limits(self) -> None:
         """Keep the time axis of every plot inside the recording: it can be zoomed in and moved along the recording, but
@@ -360,6 +494,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         """Show all the recording: its time span, and the value axes fitted to the data. The view then follows parameter
         changes again."""
         self._follow = True
+        self._view_changes += 1
         self._y_zoomed.clear()
         t = self._data[0]
         if t is None:
@@ -399,7 +534,11 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             margin = 0.08 * (hi - lo)
             plot.setYRange(lo - margin, hi + margin, padding=0)
 
-    def _restore_x(self, view) -> None:
+    def _restore_x(self, view, changes: int) -> None:
+        """Put back the time span the plots showed before new plots were built, unless the view was fitted or moved
+        since (a recording that opened meanwhile has its own span)."""
+        if changes != self._view_changes:
+            return
         try:
             self.pupil.setXRange(*view, padding=0)
         except RuntimeError:     # the widget is gone
@@ -447,7 +586,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             self.white_line.setValue(r.expected_white)
 
     def set_lux_route(self, sensor: bool, ratio: bool) -> None:
-        """Show the sensor curve (lux route) and make the video ratio plot available (lux route with the video)."""
+        """Show the sensor curve (with a lux sensor) and make the video ratio plot available (lux sensor with the video)."""
         self.sensor_curve.setVisible(sensor)
         self._ratio_available = ratio
         self._apply_rows()
@@ -455,7 +594,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     # Which of the four plots are shown (the others are hidden and their room goes to the rest)
 
     def ratio_available(self) -> bool:
-        """Whether the video ratio plot has anything to show (lux route with the video)."""
+        """Whether the video ratio plot has anything to show (lux sensor with the video)."""
         return self._ratio_available
 
     def plot_shown(self, key: str) -> bool:
@@ -474,6 +613,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             self.ci.layout.setRowStretchFactor(row, self._stretch[row] if on else 0)
             self.ci.layout.setRowMaximumHeight(row, 16777215 if on else 0)
         self._arrange_axes()
+        self._handles_changed()
 
     def show_events(self, events) -> None:
         """Shade the events (phases of the experiment) on every plot."""
@@ -520,7 +660,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             plot = self.addPlot(row=4 + i, col=0, viewBox=box)
             self._watch_box(plot)
             plot.getAxis("left").setWidth(AXIS_WIDTH)
-            plot.setLabel("left", options.get("axis") or short_label(label))
+            plot.setLabel("left", options.get("axis") or short_label(label), **{"font-size": "8pt"})
+            plot.setToolTip(label)                       # the whole name; the axis label is the short one
             plot.setXLink(self.pupil)
             plot.showGrid(x=True, y=True, alpha=0.2)
             plot.setClipToView(True)
@@ -530,7 +671,6 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             plot.vb.sigRangeChangedManually.connect(self._moved_by_user)
             plot.hideButtons()
             plot.disableAutoRange()   # the sensor files reach a little past the recording: they do not set the view
-            plot.setTitle(label, size="8pt")
             curve = plot.plot(*peak_decimate(t, v), pen=pg.mkPen(options.get("colour", (40, 90, 150)), width=1.2),
                               connect="finite")
             weak = pg.ScatterPlotItem(*(options.get("weak") or ([], [])), symbol="o", size=6, pen=pg.mkPen(None),
@@ -539,10 +679,9 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             plot.addItem(weak, ignoreBounds=True)
             self._series_items[label] = (curve, weak, plot)
             self._set_y_source(plot, [(t, v, 0.5)])     # without the outermost 0.5 % of the values
-            line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(red, width=2),
+            line = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(red, width=2),
                                    hoverPen=pg.mkPen(red, width=4))
             line.setZValue(20)
-            line.setCursor(pg.QtCore.Qt.SizeHorCursor)
             line.setValue(self._cursor_time)
             line.sigPositionChanged.connect(self._cursor_dragged)
             plot.addItem(line, ignoreBounds=True)
@@ -558,7 +697,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self._draw_beats()
         self._apply_x_limits()
         self.pupil.setXRange(*view, padding=0)      # new plots must not move the time axis the others show
-        QTimer.singleShot(0, partial(self._restore_x, view))
+        QTimer.singleShot(0, partial(self._restore_x, view, self._view_changes))
 
     def update_series(self, label: str, t, v, weak=None) -> bool:
         """Replace the data of the sensor plot titled ``label`` (and its red points) without rebuilding the plots, and
@@ -605,14 +744,47 @@ class ResultPlots(pg.GraphicsLayoutWidget):
                     self._beat_items.append((plot, item))
 
     def _arrange_axes(self) -> None:
-        """The time axis (values and label) is on the last plot of the stack that is shown."""
+        """The time axis (values and label) is on the last plot of the stack that is shown, and again above the first one,
+        under which the handles of the bars are (its bottom axis is as tall as the strip of the handles)."""
         shown = [p for key, p in zip(self.PLOT_KEYS, self._base_plots) if self.plot_shown(key)] + self._sensor_plots
         if not shown:
             return
+        first, last = shown[0], shown[-1]
         for plot in self._plots:
-            last = plot is shown[-1]
-            plot.getAxis("bottom").setStyle(showValues=last)
-            plot.getAxis("bottom").setLabel("Time (s)" if last else "")
+            bottom, top = plot.getAxis("bottom"), plot.getAxis("top")
+            bottom.setStyle(showValues=plot is last)
+            bottom.setLabel("Time (s)" if plot is last else "")
+            top.enableAutoSIPrefix(False)
+            if plot is first:
+                plot.showAxis("top", True)
+                top.setStyle(showValues=True)
+                plot.setLabel("top", "Time (s)")
+                # room for the handles under the plot (and for the time axis too when this is the only plot)
+                bottom.setHeight(HandleStrip.HEIGHT + (44 if plot is last else 0))
+            else:
+                plot.showAxis("top", False)
+                bottom.setHeight(None)
+        self._place_handles()
+
+    def _place_handles(self) -> None:
+        """Put the strip of the handles under the first plot that is shown (at the foot of its bottom axis)."""
+        if not hasattr(self, "handles"):      # still being built
+            return
+        shown = [p for key, p in zip(self.PLOT_KEYS, self._base_plots) if self.plot_shown(key)] + self._sensor_plots
+        if not shown:
+            self.handles.hide()
+            return
+        axis = shown[0].getAxis("bottom")
+        bottom = self.mapFromScene(axis.sceneBoundingRect().bottomLeft()).y()
+        self.handles.show()
+        self.handles.setGeometry(0, int(bottom) - HandleStrip.HEIGHT, self.width(), HandleStrip.HEIGHT)
+        self.handles.raise_()
+        # the buttons sit in the top right corner of the first plot, under its time axis
+        corner = self.mapFromScene(shown[0].vb.sceneBoundingRect().topRight())
+        self.reset_button.move(corner.x() - self.reset_button.width() - 8, corner.y() + 6)
+        self.zoom_button.move(self.reset_button.x() - self.zoom_button.width() - 6, corner.y() + 6)
+        self.reset_button.raise_()
+        self.zoom_button.raise_()
 
     # Export range: where the export starts and ends and what it leaves out (cwtool.trim.Trim)
 
@@ -644,7 +816,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
                 shade = pg.LinearRegionItem((-self.FAR, trim.start), movable=False, brush=brush, pen=pg.mkPen(None))
                 self._add_trim_item(plot, shade, -15)
                 self._start_shades.append(shade)
-            self._start_line = pg.InfiniteLine(trim.start, angle=90, movable=True, pen=edge, label="export starts",
+            self._start_line = pg.InfiniteLine(trim.start, angle=90, movable=False, pen=edge, label="export starts",
                                                labelOpts={"position": 0.9, "color": (60, 60, 60)})
             self._start_line.sigPositionChanged.connect(self._edge_moved)
             self._add_trim_item(self.pupil, self._start_line, 15)
@@ -653,19 +825,20 @@ class ResultPlots(pg.GraphicsLayoutWidget):
                 shade = pg.LinearRegionItem((trim.end, self.FAR), movable=False, brush=brush, pen=pg.mkPen(None))
                 self._add_trim_item(plot, shade, -15)
                 self._end_shades.append(shade)
-            self._end_line = pg.InfiniteLine(trim.end, angle=90, movable=True, pen=edge, label="export ends",
+            self._end_line = pg.InfiniteLine(trim.end, angle=90, movable=False, pen=edge, label="export ends",
                                              labelOpts={"position": 0.9, "color": (60, 60, 60)})
             self._end_line.sigPositionChanged.connect(self._edge_moved)
             self._add_trim_item(self.pupil, self._end_line, 15)
         for k, (a, b) in enumerate(trim.exclude):
             regions = []
             for plot in self._plots:   # the pupil plot's region can be dragged; the others follow it
-                region = pg.LinearRegionItem((a, b), movable=plot is self.pupil, brush=brush, pen=edge)
+                region = pg.LinearRegionItem((a, b), movable=False, brush=brush, pen=edge)
                 self._add_trim_item(plot, region, 12 if plot is self.pupil else -14)
                 regions.append(region)
             regions[0].sigRegionChanged.connect(partial(self._exclusion_moved, k))
             regions[0].sigRegionChangeFinished.connect(self._drag_finished)
             self._exclusion_shades.append(regions)
+        self._handles_changed()
 
     def _current_trim(self) -> Trim:
         start = float(self._start_line.value()) if self._start_line is not None else None
@@ -691,6 +864,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
     def _emit_dragged(self) -> None:
         self._trim = self._current_trim()
         self.trim_dragged.emit(self._trim)
+        self._handles_changed()
 
     def _drag_finished(self, *_) -> None:
         # Segments dragged over each other merge: draw the normalised ones, after this signal has returned.
@@ -705,6 +879,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         if sequence is not None:
             self._sequence = sequence
         self._draw_sequence()
+        self._handles_changed()
 
     def _draw_sequence(self) -> None:
         for item in self._sequence_items:
@@ -734,15 +909,17 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         for region, step in zip(self._sequence_items, self._sequence.steps):
             region.setRegion((self._sequence_start + step.start, self._sequence_start + step.end))
         self.sequence_start_changed.emit(self._sequence_start)
+        self._handles_changed()
 
 
 DECIMATED_BINS = 1500
 
 
-def short_label(label: str, limit: int = 13) -> str:
+def short_label(label: str, limit: int = 20) -> str:
     """The text of a plot's title cut to what fits beside a short plot as an axis label: after the sensor's name, with an
     ellipsis."""
     text = label.split(": ", 1)[-1]
+    text = {"exg_ads1292r_1_ch1_24bit": "ECG lead II", "exg_ads1292r_1_ch2_24bit": "ECG lead I"}.get(text, text)
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 

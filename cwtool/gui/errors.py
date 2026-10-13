@@ -53,8 +53,8 @@ GESTURES = (
     ("Zoom around the pointer", "mouse wheel (zooms in time)"),
     ("Zoom out", "right-click on a plot (also fits the value axis to the data again)"),
     ("Show everything", "the Reset view button, double-click on a plot, or Ctrl+0"),
-    ("Move the video cursor", "click on a plot, or drag the red bar"),
-    ("Move the calibration start or the export range", "drag its line or band on the plots"),
+    ("Move the video cursor", "click on a plot, or drag its handle (under the plots)"),
+    ("Move the calibration start or the export range", "drag the handles under the plots (the bars themselves do not move)"),
 )
 SHORTCUTS = (
     ("Ctrl+O", "Open a recording"),

@@ -108,6 +108,9 @@ SHIMMER_RATES = (("As set on the device", None),
                  ("512 Hz (ECG, clinical grade)", 512.0))
 
 
+DEFAULT_SHIMMER_RATE = 256.0      # the lowest rate fit for heart rate variability
+
+
 class AddSourceDialog(QDialog):
     """Settings of a new source: ``kind`` is lux, shimmer, emotibit or simulated."""
 
@@ -129,6 +132,11 @@ class AddSourceDialog(QDialog):
         self.rate.setToolTip("Sets the Shimmer's sampling rate when connecting; its ECG chips are set to match. "
                              "Heart rate variability needs 256 Hz or more. The setting stays on the device "
                              "until it is switched off.")
+        self.rate.setCurrentIndex(next(i for i, (_, hz) in enumerate(SHIMMER_RATES) if hz == DEFAULT_SHIMMER_RATE))
+        self.rate_note = QLabel()
+        self.rate_note.setWordWrap(True)
+        self.rate.currentIndexChanged.connect(self._rate_changed)
+        self._rate_changed()
         if kind in ("lux", "shimmer"):
             if kind == "lux":
                 self.port.addItem("Automatic", None)
@@ -145,6 +153,7 @@ class AddSourceDialog(QDialog):
             form.addRow("Serial port" if kind == "lux" else "Serial port (Bluetooth or USB dock)", self.port)
             if kind == "shimmer":
                 form.addRow("Sampling rate", self.rate)
+                form.addRow(self.rate_note)
                 form.addRow(self.set_clock)
         if kind == "emotibit":
             for device, streams in (found or {}).items():  # the devices streaming over LSL right now
@@ -155,6 +164,19 @@ class AddSourceDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _rate_changed(self, *_) -> None:
+        """Tell what the chosen rate is good for: below 256 Hz the ECG cannot give heart rate variability."""
+        hz = self.rate.currentData()
+        if hz is None:
+            text, colour = "The rate stays as the device has it. Heart rate variability needs 256 Hz or more.", "gray"
+        elif hz < 256:
+            text, colour = ("Too coarse for heart rate variability (it needs 256 Hz or more); fine for movement and "
+                            "skin conductance.", palette.WARNING)
+        else:
+            text, colour = "Fit for the ECG and heart rate variability.", "gray"
+        self.rate_note.setText(text)
+        self.rate_note.setStyleSheet(f"color: {colour};")
 
     def source(self):
         """The sensor source the dialog's choices describe."""
