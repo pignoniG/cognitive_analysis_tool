@@ -1124,6 +1124,15 @@ is revised; they remain in the git history of this file.
   83.4 and RMSSD 52.1 ms, against 83.8 and 51.7 for `cwtool.hrv`. On the same beats the measures agree (SDNN, RMSSD,
   pNN50, SD1 to the rounding), except SD2 (116 against 124 ms, other definition) and LF and HF (5 to 12 %, other
   Welch settings and detrending). NeuroKit2's Kubios correction (`signal_fixpeaks`) did not remove the artefact.
+- **Review against Pham et al. (2021, Sensors 21(12):3998), the NeuroKit2 HRV review and tutorial (13 October 2026):**
+  our preprocessing and detection match the tutorial's (`ecg_clean`, then `ecg_peaks`, default methods) and the
+  measures follow it. Changed after the review: windows of 10 to 30 s are accepted for RMSSD (the first version said
+  everything under 60 s was rough), the spectrum needs 1 minute instead of 2 (LF is flagged below 2), and CV, MAD,
+  pNN20, SD1/SD2, normalised LF and HF and LnHF are reported (the paper asks for absolute and normalised forms). Added
+  to the docs: HF follows breathing, LF is not a sympathetic index, LF/HF is not a sympathovagal balance, absolute
+  spectral values depend on the method, and the change from a baseline is what carries information. Not adopted: VLF,
+  ULF, geometric, entropy, fractal and time-frequency measures (they need long recordings), and RSA from a respiration
+  signal (the unit's respiration channel is not recorded).
 - **Not done:** a clinical ECG with annotated beats or Kubios as a second reference; a recording with a task and
   movement (the artefact handling beyond the first seconds is untested); one lead only; untrusted intervals are left
   out, not repaired; the thresholds of the trust rule (30 % of the local median) are plausible values, not tuned.

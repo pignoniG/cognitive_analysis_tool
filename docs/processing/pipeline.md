@@ -138,7 +138,7 @@ The expected pupil is still computed through such stretches, so its filters run 
 | Black and white point | expected pupil at `l_min` and `l_max` (display and relative camera modes only) | `run` |
 | Warnings | experimental reader, missing lux data, saturation, baseline events not found, implausible pupil | `prepare`, `run` |
 | Event means | mean ΔPD (mm and SD units) inside each event | `event_means` |
-| Files | `<name>_pupil.csv`, `<name>_cw.csv`, `<name>_events.csv`, `<name>_params.json` (+ `<name>_plot.pdf`) | `export`, `plot.plot_result` |
+| Files | `<name>_pupil.csv`, `<name>_cw.csv`, `<name>_events.csv`, `<name>_params.json` (+ `<name>_plot.pdf`; with sensor data also the sensor files and, for a Shimmer's ECG, `<name>_<sensor>_hrv.csv` and `_beats.csv`, see [Heart rate variability](hrv.md)) | `export`, `plot.plot_result` |
 
 See [Output files](../reference/outputs.md) for the columns.
 

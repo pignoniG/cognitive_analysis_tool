@@ -33,7 +33,8 @@ One recording is analysed at a time. A new device needs only a reader module; th
   sequence overlay and the participant calibration fit.
 - `cwtool`: a command-line tool for batch processing.
 - `cwtool-logger`: a Qt app that records the lux sensor, a Shimmer and an EmotiBit, with experiment events
-  ([Sensor logger](usage/logger.md)).
+  ([Sensor logger](usage/logger.md)). The Shimmer's ECG can be recorded at a rate fit for
+  [heart rate variability](processing/hrv.md), which the export computes next to ΔPD.
 - `tools/`: the original command-line lux sensor logger and experiment event logger.
 
 ## Where to start

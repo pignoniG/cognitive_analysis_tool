@@ -138,7 +138,15 @@ def test_measures_of_known_intervals():
     res = hrv.window_metrics("w", 0, 60, 60, np.cumsum(np.nan_to_num(alt, nan=1.0)), alt, np.isfinite(alt))
     assert res.rmssd == pytest.approx(200.0) and res.pnn50 == pytest.approx(100.0)
     assert res.sd1 == pytest.approx(200.0 / np.sqrt(2), rel=0.02) and res.mean_nn == pytest.approx(1000.0, rel=0.01)
-    assert np.isnan(res.lf) and any("2 minutes" in x for x in res.notes)                   # 60 s: no spectrum
+    assert np.isfinite(res.lf) and np.isfinite(res.hf) and any("few cycles" in x for x in res.notes)   # 60 s: a spectrum
+    assert res.pnn20 == pytest.approx(100.0)
+    three = np.r_[np.nan, np.tile([0.9, 1.0, 1.1], 20)]                      # the median 1000 ms, the median deviation 100 ms
+    mad = hrv.window_metrics("w", 0, 60, 60, np.cumsum(np.nan_to_num(three, nan=1.0)), three, np.isfinite(three))
+    assert mad.madnn == pytest.approx(1.4826 * 100.0, rel=0.01)
+    assert res.cvnn == pytest.approx(res.sdnn / res.mean_nn)
+    assert res.sd2 == pytest.approx(0.0, abs=1e-6) and np.isnan(res.sd1_sd2)          # alternating: all on the anti-diagonal
+    assert mad.sd1_sd2 == pytest.approx(mad.sd1 / mad.sd2) and mad.cvnn == pytest.approx(mad.sdnn / mad.mean_nn)
+    assert res.lfn + res.hfn == pytest.approx(1.0) and res.lnhf == pytest.approx(np.log(res.hf))
 
 
 def test_untrusted_intervals_do_not_enter_and_the_differences_skip_them():
@@ -157,14 +165,21 @@ def test_the_spectrum_puts_breathing_in_hf_and_slow_waves_in_lf():
         assert (hf > 5 * lf) if high == "hf" else (lf > 5 * hf)
     # a modulation of ±50 ms at 0.25 Hz has a power of 50²/2 ms² (all in HF)
     assert hf < 50 ** 2 / 2 * 1.5 and lf > 50 ** 2 / 2 * 0.5
-    assert all(np.isnan(v) for v in hrv.spectrum(times[:50], rr[:50] * 1000.0))     # too short
+    assert all(np.isnan(v) for v in hrv.spectrum(times[:30], rr[:30] * 1000.0))     # 30 s: too short
 
 
 def test_a_short_window_is_flagged_and_has_no_spectrum():
     t, mv, _ = synthetic_ecg(rr_series(50))
     results, beats = hrv.analyse(to_sensor(t, mv), EPOCH + 0.3, [("whole", 0.0, 50.0)])
     r = results[0]
-    assert np.isnan(r.lf) and any("short window" in n for n in r.notes) and 55 < r.mean_hr < 65
+    assert np.isnan(r.lf) and np.isnan(r.hfn) and any("RMSSD, pNN50 and SD1 are usable" in n for n in r.notes)
+    assert 55 < r.mean_hr < 65 and np.isfinite(r.rmssd)
+    # the notes follow the window length (Pham et al. 2021): under 30 s, under 1 min, under 2 min, and enough
+    def notes_for(seconds):
+        return " ".join(hrv.window_metrics("w", 0, seconds, seconds, np.arange(100.0), np.r_[np.nan, np.ones(99)],
+                                           np.r_[False, np.ones(99, bool)]).notes)
+    assert "even RMSSD is rough" in notes_for(20) and "need minutes" in notes_for(45)
+    assert "few cycles" in notes_for(90) and notes_for(300) == ""
 
 
 def test_a_low_sampling_rate_gets_a_note():
@@ -194,11 +209,13 @@ def test_windows_and_the_trim_decide_which_intervals_count():
 def test_the_files_have_the_measures_and_the_beats(tmp_path):
     t, mv, _ = synthetic_ecg(rr_series(130))
     sensor = to_sensor(t, mv)
-    results, beats = hrv.analyse(sensor, EPOCH + 0.3, [("recording", 0.0, 130.0), ("Task", 20.0, 80.0)])
+    results, beats = hrv.analyse(sensor, EPOCH + 0.3, [("recording", 0.0, 130.0), ("Task", 20.0, 45.0)])
     summary, listing = hrv.write_files(results, beats, tmp_path, "rec_shimmer", EPOCH + 0.3)
     rows = list(csv.DictReader(open(summary)))
     assert [r["window"] for r in rows] == ["recording", "Task"] and float(rows[0]["mean_hr_bpm"]) == pytest.approx(60, abs=3)
-    assert rows[0]["lf_ms2"] != "" and rows[1]["lf_ms2"] == ""            # the spectrum needs 120 s: only the whole recording
+    assert rows[0]["lf_ms2"] != "" and rows[1]["lf_ms2"] == ""            # the spectrum needs a minute: only the whole recording
+    assert float(rows[0]["lfn"]) + float(rows[0]["hfn"]) == pytest.approx(1.0, abs=0.002) and rows[1]["lnhf"] == ""
+    assert {"cvnn", "madnn_ms", "pnn20_percent", "sd1_sd2"} <= set(rows[0]) and rows[1]["rmssd_ms"] != ""
     beat_rows = list(csv.DictReader(open(listing)))
     assert len(beat_rows) == len(beats.device) and beat_rows[0]["rr_ms"] == "" and beat_rows[1]["rr_trusted"] == "1"
     assert float(beat_rows[1]["timestamp_unix"]) - float(beat_rows[1]["timestamp_relative"]) == pytest.approx(EPOCH + 0.3)

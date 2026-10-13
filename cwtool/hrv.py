@@ -9,9 +9,11 @@ The steps, each a function of this module:
    maximum of the band-passed ECG nearby and refined below one sample by a parabola.
 3. :func:`classify_intervals`: the time between beats, and which of them to trust: not across a gap, not outside
    ±30 % of the local median (a missed or an extra beat).
-4. :func:`window_metrics`: time domain (mean heart rate, SDNN, RMSSD, pNN50), Poincaré (SD1, SD2) and frequency domain
-   (LF 0.04–0.15 Hz, HF 0.15–0.4 Hz, from the interval series resampled at 4 Hz) of a window, from the trusted
-   intervals only.
+4. :func:`window_metrics`: the measures of a window from the trusted intervals only, after Pham et al. (2021, Sensors
+   21(12):3998): time domain (mean heart rate, SDNN, CV, MAD, RMSSD, pNN50, pNN20), Poincaré (SD1, SD2) and frequency
+   domain (LF 0.04–0.15 Hz, HF 0.15–0.4 Hz, absolute, normalised and LnHF, from the interval series resampled at 4 Hz).
+   The window length decides what is meaningful: RMSSD from about 30 s, the spectrum from 1 minute, LF only with
+   some minutes; each result carries a note saying so.
 5. :func:`analyse`: all of it for the whole recording and for each event, respecting an export trim.
 
 The ECG needs a high sampling rate: with 51.2 Hz (the Shimmer's usual rate) the R peak is known to ±10 ms, the same
@@ -48,8 +50,10 @@ RR_TOLERANCE = 0.30                       # an interval this far from the local 
 RR_LIMITS_S = (0.25, 2.5)                 # s, outside which an interval cannot be (240 to 24 bpm)
 LF_BAND, HF_BAND = (0.04, 0.15), (0.15, 0.40)   # Hz
 TACHOGRAM_RATE = 4.0                      # Hz, the interval series is resampled at this rate for the spectrum
-MIN_SPECTRUM_S = 120.0                    # s of trusted intervals needed for LF and HF
-SHORT_WINDOW_S = 60.0                     # s, below which the metrics are flagged as of a short window
+MIN_SPECTRUM_S = 60.0                     # s of window needed for LF and HF (Pham et al. 2021: at least one minute)
+LF_CYCLES_S = 120.0                       # s: LF (0.04 Hz, 25 s a cycle) covers fewer than five cycles in less than this
+SHORT_WINDOW_S = 30.0                     # s: below it even RMSSD is rough (10 to 30 s is the least reported as usable)
+SDNN_WINDOW_S = 60.0                      # s: SDNN and SD2 hold the slow variation too and need minutes
 MAX_GAP_S = 0.5                           # s: a shorter gap in the stream (lost packets) is bridged by interpolation, a longer
                                           # one ends the stretch of the recording that is analysed together
 MIN_AMPLITUDE = 0.35                      # of the median R amplitude: a smaller deflection is not a beat (a T wave, noise)
@@ -88,11 +92,18 @@ class HrvResult:
     sdnn: float = math.nan             # ms
     rmssd: float = math.nan            # ms
     pnn50: float = math.nan            # % of successive differences above 50 ms
+    pnn20: float = math.nan            # % of successive differences above 20 ms
+    cvnn: float = math.nan             # SDNN / mean NN (a ratio: comparable across heart rate baselines)
+    madnn: float = math.nan            # ms, 1.4826 × the median absolute deviation of the intervals (robust to outliers)
     sd1: float = math.nan              # ms, Poincaré
     sd2: float = math.nan              # ms
+    sd1_sd2: float = math.nan
     lf: float = math.nan               # ms²
     hf: float = math.nan               # ms²
     lf_hf: float = math.nan
+    lfn: float = math.nan              # LF / (LF + HF): normalised, less dependent on the method and on total power
+    hfn: float = math.nan              # HF / (LF + HF)
+    lnhf: float = math.nan             # natural logarithm of HF (ms²), the usual estimator of vagal tone
     notes: list = field(default_factory=list)
 
 
@@ -262,7 +273,7 @@ _integrate = getattr(np, "trapezoid", None) or np.trapz   # renamed in NumPy 2
 def spectrum(times: np.ndarray, nn: np.ndarray) -> tuple[float, float]:
     """(LF, HF) power in ms² of an interval series: ``nn`` (ms) at beat times ``times`` (s), resampled at
     :data:`TACHOGRAM_RATE` Hz with a cubic spline, detrended, and estimated by Welch's method."""
-    if len(nn) < 10 or times[-1] - times[0] < MIN_SPECTRUM_S / 2:
+    if len(nn) < 10 or times[-1] - times[0] < 0.8 * MIN_SPECTRUM_S:
         return math.nan, math.nan
     grid = np.arange(times[0], times[-1], 1.0 / TACHOGRAM_RATE)
     series = CubicSpline(times, nn)(grid)
@@ -290,22 +301,33 @@ def window_metrics(label: str, start: float, end: float, seconds: float, times_r
     result.mean_nn = float(nn.mean())
     result.mean_hr = 60000.0 / result.mean_nn
     result.sdnn = float(nn.std(ddof=1))
+    result.cvnn = result.sdnn / result.mean_nn
+    result.madnn = float(1.4826 * np.median(np.abs(nn - np.median(nn))))
     pair = ok[1:] & ok[:-1]                                  # two intervals in a row, both trusted
     diff = (rr[1:] - rr[:-1])[pair] * 1000.0
     if len(diff) >= 2:
         result.rmssd = float(np.sqrt(np.mean(diff ** 2)))
         result.pnn50 = float(100.0 * np.mean(np.abs(diff) > 50.0))
+        result.pnn20 = float(100.0 * np.mean(np.abs(diff) > 20.0))
         result.sd1 = float(np.sqrt(0.5) * diff.std(ddof=1))
         result.sd2 = float(np.sqrt(max(2 * nn.var(ddof=1) - 0.5 * diff.var(ddof=1), 0.0)))
+        if result.sd2 > 0:
+            result.sd1_sd2 = result.sd1 / result.sd2
     if seconds >= MIN_SPECTRUM_S:
         result.lf, result.hf = spectrum(times_rel[ok], nn)
-        if result.hf and math.isfinite(result.hf) and result.hf > 0:
+        if math.isfinite(result.hf) and math.isfinite(result.lf) and result.hf > 0:
             result.lf_hf = result.lf / result.hf
+            result.lfn = result.lf / (result.lf + result.hf)
+            result.hfn = result.hf / (result.lf + result.hf)
+            result.lnhf = float(math.log(result.hf))
     if seconds < SHORT_WINDOW_S:
-        result.notes.append(f"short window ({seconds:.0f} s): the measures are rough; SDNN and the frequency measures "
-                            "need minutes")
-    elif seconds < MIN_SPECTRUM_S:
-        result.notes.append("LF and HF need at least 2 minutes")
+        result.notes.append(f"window of {seconds:.0f} s: even RMSSD is rough below 30 s; SDNN, SD2 and the spectrum "
+                            "mean nothing here")
+    elif seconds < SDNN_WINDOW_S:
+        result.notes.append(f"window of {seconds:.0f} s: RMSSD, pNN50 and SD1 are usable; SDNN and SD2 need minutes and "
+                            "there is no spectrum (it needs one minute)")
+    elif seconds < LF_CYCLES_S:
+        result.notes.append("under 2 minutes LF covers few cycles (one is 25 s): LF and LF/HF are rough; HF is usable")
     if result.artefact_share > 0.1:
         result.notes.append(f"{result.artefact_share:.0%} of the intervals were not trusted (movement, a poor contact?)")
     return result
@@ -356,8 +378,9 @@ def analyse(sensor: Sensor, epoch_start: float, windows, trim: Optional[Trim] = 
 
 
 SUMMARY_COLUMNS = ["window", "start_relative", "end_relative", "kept_seconds", "beats", "trusted_intervals",
-                   "untrusted_percent", "mean_hr_bpm", "mean_nn_ms", "sdnn_ms", "rmssd_ms", "pnn50_percent",
-                   "sd1_ms", "sd2_ms", "lf_ms2", "hf_ms2", "lf_hf", "notes"]
+                   "untrusted_percent", "mean_hr_bpm", "mean_nn_ms", "sdnn_ms", "cvnn", "madnn_ms", "rmssd_ms",
+                   "pnn50_percent", "pnn20_percent", "sd1_ms", "sd2_ms", "sd1_sd2", "lf_ms2", "hf_ms2", "lf_hf",
+                   "lfn", "hfn", "lnhf", "notes"]
 
 
 def _number(v: float, digits: int = 3) -> str:
@@ -378,9 +401,10 @@ def write_files(results: list[HrvResult], beats: Beats, folder: Path, stem: str,
         for r in results:
             w.writerow([r.label, _number(r.start), _number(r.end), _number(r.seconds, 1), r.beats, r.intervals,
                         _number(100 * r.artefact_share, 1), _number(r.mean_hr, 2), _number(r.mean_nn, 1),
-                        _number(r.sdnn, 2), _number(r.rmssd, 2), _number(r.pnn50, 1), _number(r.sd1, 2),
-                        _number(r.sd2, 2), _number(r.lf, 1), _number(r.hf, 1), _number(r.lf_hf, 2),
-                        " | ".join(r.notes)])
+                        _number(r.sdnn, 2), _number(r.cvnn, 4), _number(r.madnn, 2), _number(r.rmssd, 2),
+                        _number(r.pnn50, 1), _number(r.pnn20, 1), _number(r.sd1, 2), _number(r.sd2, 2),
+                        _number(r.sd1_sd2, 3), _number(r.lf, 1), _number(r.hf, 1), _number(r.lf_hf, 2),
+                        _number(r.lfn, 3), _number(r.hfn, 3), _number(r.lnhf, 3), " | ".join(r.notes)])
     listing = folder / f"{stem}_beats.csv"
     rel = beats.unix - epoch_start
     keep = (trim or Trim()).keep_mask(rel, lo, hi)

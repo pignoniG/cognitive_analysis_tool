@@ -65,9 +65,10 @@ the rest are the logger file's own columns, raw as logged: the Shimmer's channel
 For a Shimmer file with an ECG (unless HRV is turned off: *Heart rate variability* in the Export tab, `--no-hrv`; it needs
 NeuroKit2, and without it the manifest says `skipped` and gives the reason).
 `_hrv.csv` has one row per window, the whole recording and each event: `window`, `start_relative`, `end_relative`,
-`kept_seconds`, `beats`, `trusted_intervals`, `untrusted_percent`, `mean_hr_bpm`, `mean_nn_ms`, `sdnn_ms`, `rmssd_ms`,
-`pnn50_percent`, `sd1_ms`, `sd2_ms`, `lf_ms2`, `hf_ms2`, `lf_hf` and `notes` (empty cells where a measure cannot be
-given, for example LF and HF in a window under 2 minutes). `_beats.csv` lists every beat kept by the export range:
+`kept_seconds`, `beats`, `trusted_intervals`, `untrusted_percent`, `mean_hr_bpm`, `mean_nn_ms`, `sdnn_ms`, `cvnn`,
+`madnn_ms`, `rmssd_ms`, `pnn50_percent`, `pnn20_percent`, `sd1_ms`, `sd2_ms`, `sd1_sd2`, `lf_ms2`, `hf_ms2`, `lf_hf`, `lfn`,
+`hfn`, `lnhf` and `notes` (empty cells where a measure cannot be given, for example the spectrum in a window under
+1 minute). `_beats.csv` lists every beat kept by the export range:
 `timestamp_unix`, `timestamp_relative`, `rr_ms` (the interval from the previous beat), `rr_trusted` (1 or 0) and
 `r_amplitude_mv`. The method and its limits are in [Heart rate variability](../processing/hrv.md).
 

@@ -30,16 +30,22 @@ phase can be compared. The code is `cwtool/hrv.py` (no Qt).
    outside 0.25–2.5 s, or is more than 30 % away from the median of the 11 intervals around it. That catches a missed
    beat (an interval twice as long) and an extra one (a short interval and a long one). Untrusted intervals are left
    out, not repaired, and so are the successive differences that involve them.
-5. **Measures** of a window, from the trusted intervals:
+5. **Measures** of a window, from the trusted intervals. The set follows the review and tutorial of Pham et al. (2021,
+   [Sensors 21(12):3998](https://doi.org/10.3390/s21123998)), whose tutorial uses NeuroKit2; the definitions are
+   NeuroKit2's unless noted.
 
    | Measure | Definition |
    |---|---|
    | `mean_hr_bpm`, `mean_nn_ms` | 60000 / mean interval; the mean interval |
-   | `sdnn_ms` | standard deviation of the intervals |
-   | `rmssd_ms` | root mean square of the differences between successive intervals |
-   | `pnn50_percent` | share of successive differences above 50 ms |
-   | `sd1_ms`, `sd2_ms` | Poincaré plot: SD1 = SD of the differences / √2, SD2 = √(2·SDNN² − SD1²) |
-   | `lf_ms2`, `hf_ms2`, `lf_hf` | power of the interval series in 0.04–0.15 Hz and 0.15–0.40 Hz, from the series resampled at 4 Hz (cubic spline), detrended, Welch's method (64 s segments, 50 % overlap); only for windows of at least 120 s |
+   | `sdnn_ms` | standard deviation of the intervals (holds the slow variation too: needs minutes) |
+   | `cvnn` | SDNN / mean interval, a ratio: more stable when conditions or people have different heart rates |
+   | `madnn_ms` | 1.4826 × the median absolute deviation of the intervals: a robust spread, little moved by an outlier |
+   | `rmssd_ms` | root mean square of the differences between successive intervals: the **preferred short-term measure**, vagally mediated and reliable in short windows |
+   | `pnn50_percent`, `pnn20_percent` | share of successive differences above 50 ms and above 20 ms |
+   | `sd1_ms`, `sd2_ms`, `sd1_sd2` | Poincaré plot: SD1 = SD of the differences / √2 (equivalent to RMSSD), SD2 = √(2·SDNN² − SD1²) (like SDNN), and their ratio |
+   | `lf_ms2`, `hf_ms2`, `lf_hf` | power of the interval series in 0.04–0.15 Hz and 0.15–0.40 Hz, from the series resampled at 4 Hz (cubic spline), detrended, Welch's method (64 s segments, 50 % overlap); only for windows of at least 1 minute |
+   | `lfn`, `hfn` | LF / (LF + HF) and HF / (LF + HF): normalised, as the guidelines ask to report both forms (NeuroKit2 divides by the total power, which for these windows is nearly the same; VLF is not estimated, a 25 s … 5 min band needs 5 minutes) |
+   | `lnhf` | natural logarithm of HF (ms²), the usual estimator of vagal tone |
 
 ## Windows
 
@@ -48,15 +54,44 @@ recording. With an [export range](../usage/gui.md#export-range) the beats in the
 interval counts that spans one; `kept_seconds` says how much of the window is left. The first beat of a window has no
 interval (its predecessor is before the window).
 
-How long a window must be is not a software question. Short-term HRV norms (RMSSD, SDNN, LF, HF) are defined for
-about 5 minutes; about 1 minute is often accepted for RMSSD alone, and anything shorter is rough. The result carries
-a note for windows under 60 s (all measures rough) and under 120 s (no LF and HF), and one when more than 10 % of the
-intervals were not trusted.
+### How long a window must be
+
+It follows Pham et al. (2021), who cite studies finding that time-domain measures such as RMSSD are as reliable from
+windows of 10 to 30 s as from 5 minutes, while the frequency measures need at least 1 minute. Each result carries a
+note:
+
+| Window | What the note says |
+|---|---|
+| under 30 s | even RMSSD is rough; SDNN, SD2 and the spectrum mean nothing |
+| 30 s to 1 min | RMSSD, pNN50 and SD1 are usable; SDNN and SD2 need minutes; no spectrum |
+| 1 to 2 min | HF is usable; LF covers few cycles (0.04 Hz is 25 s a cycle), so LF and LF/HF are rough |
+| over 2 min | no note on length |
+
+Also a note when more than 10 % of the intervals were not trusted. Norms published for 5-minute recordings do not
+apply to shorter windows, and short-term values are not comparable to 24-hour ones.
+
+## Reading the numbers
+
+- **RMSSD** (with pNN50, SD1 and HF) reflects the parasympathetic (vagal) modulation of the heart rate and is the
+  measure to prefer in short windows; SDNN is the total variation and depends on the window length.
+- **HF is respiratory sinus arrhythmia**: it follows breathing, and 0.15–0.40 Hz means 9 to 24 breaths a minute.
+  Slower breathing moves the variation into LF, faster breathing out of HF; speech and posture do the same. Interpret
+  HF together with RMSSD, and where it matters control the breathing or record it (the ECG unit's respiration channel
+  is not used here).
+- **LF is not a sympathetic index**: it is shaped by both branches and by the baroreflex, and **LF/HF is not a
+  measure of sympathovagal balance**; do not conclude from it alone.
+- **The absolute spectral values depend on the method** (FFT, Lomb–Scargle, Welch; the window, the detrending): they
+  cannot be compared with other studies' values, only between windows analysed alike, which is why the normalised
+  forms are given as well. Welch on this page differs from NeuroKit2's by 5 to 13 % on the same beats.
+- **Tonic and phasic**: a value in one window says little alone. The change from a baseline phase (a rest event in
+  the event log) to a task phase, the *phasic* HRV, is what relates to load and effort, and its direction depends on
+  the task (Pham et al. 2021, section 15). Put a baseline phase in the protocol.
 
 ## What it does not do
 
-- It does not interpret the numbers. Heart rate and HRV follow movement, posture, speech, breathing rate (HF moves
-  with it), caffeine and the task itself; this is why a baseline phase in the event log matters.
+- It does not interpret the numbers: see above. Heart rate and HRV also follow movement, caffeine and the task itself.
+- It computes no VLF, ULF, geometric (HTI, TINN), entropy, fractal (DFA) or time-frequency measures, nor RSA from a
+  respiration signal; these need long recordings or another signal.
 - It is **not validated against a clinical reference**. It was checked on synthetic ECGs with known beat times and on
   recordings of one person at rest, and compared with NeuroKit2 on a 5-minute recording: the beats agree (296 of the
   297 NeuroKit2 finds, to within 1.1 ± 1.2 ms), and SDNN, RMSSD, pNN50 and SD1 computed from the same beats are the same
@@ -74,3 +109,8 @@ shimmer = next(s for s in loaded if hrv.has_ecg(s))
 results, beats = hrv.analyse(shimmer, epoch_start, [("recording", 0.0, duration)])
 print(results[0].rmssd, results[0].notes)
 ```
+
+## Reference
+
+Pham T., Lau Z. J., Chen S. H. A., Makowski D. (2021). Heart rate variability in psychology: a review of HRV indices
+and an analysis tutorial. *Sensors* 21(12), 3998. [doi:10.3390/s21123998](https://doi.org/10.3390/s21123998)
