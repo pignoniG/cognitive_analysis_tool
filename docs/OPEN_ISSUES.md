@@ -1155,6 +1155,20 @@ is revised; they remain in the git history of this file.
   claim is only the shared principle; (7) Laborde et al. advise not to rely on automatic correction alone and to inspect the ECG:
   the app draws the beats (green circles, red crosses for untrusted intervals) for that, and the first-version `weak ECG`
   note flags a poor signal.
+- **Interpolating the untrusted intervals was tried and not adopted (14 October 2026).** The 205 s stretch (5–210 s) of a
+  recording at rest (256 Hz, 213 beats, 210 trusted intervals; SDNN 68.9, RMSSD 47.6, pNN50 22.7 %) was taken as the truth;
+  200 random sets of healthy intervals were flagged as untrusted (they keep their true value, the estimate must not see it)
+  at 2, 5 and 10 % in runs of 1 to 3, and the measures were made with the intervals left out and with them replaced by
+  monotone cubic interpolation, as Kubios does. Median bias against the truth, in %: at 2 %, RMSSD +0.7 left out and −1.4
+  interpolated, SDNN +0.2 and −0.3, pNN50 −0.4 and −3.5; at 5 %, RMSSD +1.4 and −2.3, SDNN +0.3 and −0.5, pNN50 +0.2 and
+  −7.7. Interpolation does not improve the median accuracy: an interpolated value is smoother than the heart, so RMSSD
+  and pNN50 read low (pNN50 by about 8 % at 5 % replaced), which is what Kubios warns about; leaving the intervals out
+  biases them less. It narrows the spread of RMSSD at 5 % (5th to 95th percentile −9.7 to −1.5 against −18.6 to +3.1,
+  when the interval left out happens to be one of the few large successive differences of the series). The test is
+  lenient (it flags healthy intervals; real artefacts are missed or extra beats with wrong values) and covers one
+  recording of one person. The same recording has 4 real untrusted intervals (1.6 %: Bluetooth losses and a movement
+  artefact) and the two ways differ by less than 0.5 ms in RMSSD. The code therefore still leaves untrusted intervals out
+  of the time-domain measures; the spectrum interpolates its interval series anyway.
 - **Not done:** a clinical ECG with annotated beats or Kubios as a second reference; a recording with a task and
   movement (the artefact handling beyond the first seconds is untested); one lead only; untrusted intervals are left
   out, not repaired; the thresholds of the trust rule (30 % of the local median) are plausible values, not tuned.

@@ -140,7 +140,8 @@ preferred short-term vagal measure, the HF and breathing link, LF and LF/HF not 
 Poincaré relations, the 4 Hz resampled interval series with Welch's method and the use of a baseline phase agree with them.
 The differences are that the Welch segments are 64 s (Kubios used 256 s, so LF is coarse and absolute values are not
 comparable with other software), that Laborde et al. prefer an autoregressive estimate for HF, that untrusted intervals are
-left out rather than interpolated (except in the spectrum), and that the thresholds of the trust rule are chosen on test
+left out rather than interpolated (except in the spectrum; interpolating them was tried on a real recording and read RMSSD
+and pNN50 slightly lower, see [open issue 51](../OPEN_ISSUES.md)), and that the thresholds of the trust rule are chosen on test
 recordings, not taken from a standard. They also advise looking at the ECG, which the beats drawn on the plot are for.
 Details and what is still open are in [open issue 51](../OPEN_ISSUES.md).
 
