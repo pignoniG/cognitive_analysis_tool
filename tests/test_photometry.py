@@ -102,6 +102,7 @@ def test_display_notes_check_the_photometry():
     assert display_notes(0.01, 100.0, varjo.PROFILE) == []
     assert display_notes(0.01, 215.0, varjo.PROFILE) == []                 # within 10 % of 200 cd/m²
     assert "peak luminance" in display_notes(0.01, 250.0, varjo.PROFILE)[0]
+    assert display_notes(0.0, 100.0, varjo.PROFILE) == []                   # a black point of 0 is not a division by zero
     assert "not below" in display_notes(100.0, 100.0, varjo.PROFILE)[0]
     assert "implausibly low" in display_notes(5.0, 100.0, varjo.PROFILE)[0]
 

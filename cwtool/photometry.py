@@ -236,7 +236,7 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     notes = luminance.display_notes(l_min, params.l_max, rec.profile)
     if fit_black:
         ratio = params.l_max / l_min
-        nominal = params.l_max / params.l_min
+        nominal = params.l_max / params.l_min if params.l_min > 0 else float("inf")
         notes.append(f"Fitted black level {l_min:.3g} cd/m² (contrast {ratio:.0f}:1 against {nominal:.0f}:1 "
                      f"nominal); effective black s·Lmin {sens * l_min:.3g}, white s·Lmax {sens * params.l_max:.3g} "
                      "cd/m². Steps too short to dark-adapt make the black look brighter than it is.")

@@ -58,7 +58,7 @@ def display_notes(l_min: float, l_max: float, profile) -> list:
                      "adjustable, but not higher: check the display photometry.")
     if l_min >= l_max:
         notes.append(f"Lmin {l_min:.3g} cd/m² is not below Lmax {l_max:.3g} cd/m².")
-    elif l_max / l_min < MIN_CONTRAST:
+    elif l_min > 0 and l_max / l_min < MIN_CONTRAST:      # a black point of 0 is an unlimited contrast (an OLED black)
         notes.append(f"Contrast Lmax/Lmin is only {l_max / l_min:.3g}:1, implausibly low for this kind of "
                      "display: check Lmin.")
     return notes
