@@ -80,6 +80,9 @@ def test_the_finders_ignore_other_files(tmp_path):
     (tmp_path / "bad.json").write_text("not json")
     (tmp_path / "._run.csv").write_bytes(b"\xb0\x00")
     assert calibration.find_run_file(tmp_path) is None and DisplayPhotometry.find(tmp_path) is None
+    # another log with onset times (the n-back log has them, and sorts after the run file) is not a calibration run
+    (tmp_path / "x__nback_log.csv").write_text("block,n,item,digit,onset_unix_ms\n1,2,1,5,1700000001000\n")
+    assert calibration.find_run_file(tmp_path) is None
     write_run_file(tmp_path / "a_calibration_run_1.csv", EPOCH)
     write_run_file(tmp_path / "b_calibration_run_2.csv", EPOCH)
     assert calibration.find_run_file(tmp_path).name == "b_calibration_run_2.csv"        # the last by name
@@ -94,3 +97,42 @@ def test_the_iris_field_is_for_devices_that_assume_an_iris(tmp_path):
     assert "iris_diameter" not in unused_parameters(rec, Parameters())
     rec = devices.load(write_varjo_recording(tmp_path / "b", [128] * 4))               # no iris in the file
     assert "iris_diameter" in unused_parameters(rec, Parameters())
+
+
+def test_the_log_is_aligned_to_the_video_in_the_window_and_in_the_export(app, tmp_path):
+    """A Varjo recording whose visual log is 0.3 s behind its video: the window aligns it when the video is ready, moves the
+    events and the sequence start, and the export says so; the switch undoes it."""
+    from cwtool import devices
+    colours = [0, 255, 0, 200, 0, 120, 255, 0, 90, 180, 0, 255]
+    folder = write_varjo_recording(tmp_path / "rec", colours, seconds_per_level=5.0, fps=30, pupil_mm=3.0)
+    epoch = devices.load(folder).epoch_start
+    rows = ["Event,Start Time,End Time,Duration (s),Start (unix s),End (unix s)"]
+    rows += [f"step,a,b,5,{epoch + 5.0 * i + 0.3:.3f},0" for i in range(len(colours))]
+    (folder / "x__visual_log.csv").write_text("\n".join(rows) + "\n")
+    (folder / "x_event_log.csv").write_text("Event,Start Time,End Time,Duration (s),Start (unix s),End (unix s)\n"
+                                            f"Task,2026-01-01T00:00:00,2026-01-01T00:00:10,10,{epoch + 10.3:.3f},{epoch + 20.3:.3f}\n")
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.result is not None)
+        assert w.log_alignment is not None and w.log_alignment.offset == pytest.approx(-0.3, abs=0.04)
+        assert "log aligned to the video" in w.video_label.text()
+        assert w.recording.epoch_start == pytest.approx(epoch + 0.3, abs=0.04)
+        assert w._raw_recording.epoch_start == epoch and w.recording is not w._raw_recording
+        assert w.recording.events and w.recording.events[0].start == pytest.approx(10.0, abs=0.04)
+        # exported: the alignment is in the package's description and the events are on the video's clock
+        import json
+        paths = pipeline_export(w, tmp_path / "out")
+        info = json.loads(next(p for p in paths if p.name.endswith("_export.json")).read_text())
+        assert info["log alignment"]["n"] >= 8 and info["time"]["unix time of time zero"] == pytest.approx(epoch + 0.3, abs=0.04)
+        # the switch undoes it
+        w.align_check.setChecked(False)
+        assert w.log_alignment is None and w.recording is w._raw_recording
+        assert w.recording.events[0].start == pytest.approx(10.3, abs=0.01)
+    finally:
+        w.close()
+
+
+def pipeline_export(w, out):
+    from cwtool import pipeline
+    return pipeline.export(w.result, w.recording, w.params_panel.params(), out, hrv=False)

@@ -1215,3 +1215,23 @@ is revised; they remain in the git history of this file.
 - **Proposal:** measure the iris of each participant in the protocol; compare the Varjo pupil with a second device (the Neon)
   on the same participant to see whether the scale of 12 mm is too large or too small.
 - **Status:** open (needs data).
+
+### 54. The Varjo video shows the picture 0.34 s before the presenter's log says it changed
+
+- **Where:** `cwtool/alignment.py`, `docs/processing/log-alignment.md`.
+- **Seen (10 November 2026):** on the first VR run of the validation task, in 156 of the 185 logged changes of the picture
+  (the others had no clear change in the video) the video changes 0.338 s before the logged onset: the calibration part (31 changes)
+  0.338 s with a spread of 4 ms, the 25 minutes of session (75 changes) 0.338 s with a spread of 7 ms, no drift (below 0.1 ms per
+  minute). The fitted pupil latency, measured against the video, is 0.23 s (14 constriction onsets, median 0.27 s), which is
+  physiological, so the video and the pupil agree with each other and it is the log that is late. The page's own clock drifted by
+  14 ms against the computer's wall clock over the run (`page_vs_wall_ms`), which does not explain it.
+- **Now:** the offset is measured from the changes of the picture in each recording and the log's clock is moved onto the
+  video's (Varjo only; a switch in the window, `--no-align-log` on the command line); the offset and its uncertainty are in the
+  export.
+- **Not known:** the cause (the Varjo's conversion of its timestamps to Unix time, the capture's start, or the time the page logs);
+  whether it is the same on other runs, headsets and computers; whether the logger's sensor files, written on the computer's clock,
+  need the same shift (they are moved with the log's clock, which assumes that the logger and the presenter share the computer).
+- **Proposal:** measure it on every Varjo run (it costs nothing); a full-field flash at the start and the end of the task would give
+  an unambiguous check; find the cause with a photodiode or a second camera on the headset display.
+- **Status:** open (needs data).
+

@@ -82,6 +82,8 @@ class Recording:
     # lower bound. None when the device has no such limit or the file does not say.
     censored_left: Optional[np.ndarray] = None
     censored_right: Optional[np.ndarray] = None
+    # How the presenter's log was aligned to the video (:class:`cwtool.alignment.LogAlignment` as a dictionary), when it was
+    log_alignment: Optional[dict] = None
 
     def __post_init__(self) -> None:
         n = len(self.time)

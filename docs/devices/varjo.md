@@ -61,6 +61,12 @@ the longest), and what the tracker limits.
   ratio of the two (11.0 mm against 12.0 gives ×0.917). It is left at 0 (not measured) by default, and ignored by a
   device that measures the pupil itself ([open issue 53](../OPEN_ISSUES.md)).
 
+## Time
+
+The presenter's log is on the computer's clock and the video shows when the picture changed: on the first run the video was 0.34 s
+ahead of the log. The window aligns them from the changes of the picture
+([Aligning the log to the video](../processing/log-alignment.md), [open issue 54](../OPEN_ISSUES.md)).
+
 ## Gaze
 
 The capture shows the **left eye's view**. The combined gaze projected to that view is used by default; the left

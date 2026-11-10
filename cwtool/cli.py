@@ -7,7 +7,7 @@ import math
 import sys
 from pathlib import Path
 
-from cwtool import devices, pipeline, sensors
+from cwtool import alignment, devices, pipeline, sensors
 from cwtool.params import DeviceMismatch, DisplayPhotometry, Parameters, VideoSettings
 from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video
@@ -40,6 +40,8 @@ def main(argv: list[str] | None = None) -> int:
                          "timestamp_relative. Without --start, --end and --exclude, the trim saved by the "
                          "app with the recording is used")
     ap.add_argument("--reanalyse", action="store_true", help="ignore the cached video analysis")
+    ap.add_argument("--no-align-log", action="store_true",
+                    help="do not move the presenter's log (events, sensors, Unix times) onto the video's clock (Varjo)")
     ap.add_argument("--workers", type=int, default=0, help="parallel video chunks (default: one per CPU core)")
     ap.add_argument("--plot", action="store_true", help="save a PDF plot (needs matplotlib)")
     args = ap.parse_args(argv)
@@ -67,6 +69,14 @@ def main(argv: list[str] | None = None) -> int:
                               frame_times=rec.scene_frame_times)
         print()
         video.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze)
+
+    if alignment.applicable(rec) and not args.no_align_log:
+        found_alignment, why = alignment.find(rec, video)
+        if found_alignment is not None:
+            rec = alignment.align(rec, found_alignment)
+            print(found_alignment.summary())
+        elif not why.startswith("no presenter log"):
+            print(f"log not aligned: {why}", file=sys.stderr)
 
     result = pipeline.run(rec, video, params)
     print(f"ΔPD RMS: {result.cw_rms:.3f} mm, SD: {result.cw_sd:.3f} mm "

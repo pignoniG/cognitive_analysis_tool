@@ -810,6 +810,7 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         "delta_pd_sd_mm": sd,
         "sensors": sensor_info,
         "tracking quality": quality.assess(rec).as_dict(),
+        "log alignment": rec.log_alignment,
         "files": [q.name for q in paths] + [p.name],
         "cwtool": __version__,
     }, indent=2))

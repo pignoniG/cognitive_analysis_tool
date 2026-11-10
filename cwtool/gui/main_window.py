@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayo
                                QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget,
                                QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
-from cwtool import __version__, calibration, devices, hrv, palette, pipeline, quality, sensors
+from cwtool import __version__, alignment, calibration, devices, hrv, palette, pipeline, quality, sensors
 from cwtool.fit import fit_calibration
 from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
@@ -54,6 +54,7 @@ class MainWindow(QMainWindow):
         self.resize(1400, 900)
         self._settings = QSettings("cwtool", "cwtool")
         self.recording = None
+        self._raw_recording, self.log_alignment, self._alignment_message = None, None, ""   # as read, and how it was aligned
         self.video = None
         self.result = None
         self._task: Task | None = None
@@ -196,8 +197,17 @@ class MainWindow(QMainWindow):
         self.cancel_button.clicked.connect(self.cancel_task)
         buttons.addWidget(self.analyse_button)
         buttons.addWidget(self.cancel_button)
+        self.align_check = QCheckBox("Align the presenter's log to the video")
+        self.align_check.setChecked(self._settings.value("align_log", True, type=bool))
+        self.align_check.setToolTip("The presenter logs when it changed the picture on its computer's clock; the video shows when it "
+                                    "did. The offset between them (0.34 s on a first Varjo run) is found from the changes and the "
+                                    "log's clock is moved onto the video's: the events, the logger's sensor files and the exported "
+                                    "Unix times then fall where the pupil is")
+        self.align_check.toggled.connect(self._align_toggled)
+        self.align_check.hide()
         video_layout.addWidget(self.video_label)
         video_layout.addWidget(self.progress)
+        video_layout.addWidget(self.align_check)
         video_layout.addLayout(buttons)
         self.camera_button = QPushButton("Calibrate camera from lux")
         self.camera_button.setToolTip("For recordings made with a fixed camera exposure and a lux log: find the "
@@ -819,6 +829,8 @@ class MainWindow(QMainWindow):
         previous_device = self._params_device
         self._params_note = None
         self.recording, self.video, self.result = rec, None, None
+        self._raw_recording, self.log_alignment, self._alignment_message = rec, None, ""
+        self.align_check.setVisible(alignment.applicable(rec))
         if previous_device and previous_device != rec.device:
             self._forget_params_of(previous_device, rec.device)
         self._remember_recording(rec.folder)
@@ -892,9 +904,46 @@ class MainWindow(QMainWindow):
 
     def _video_ready(self, video: VideoResult, how: str) -> None:
         self.video = video
-        self.video_label.setText(f"{self.recording.scene_video.name}: {len(video.time)} samples ({how})")
+        self._apply_alignment()
         self.recompute()
         self._update_state()
+
+    def _video_text(self) -> str:
+        text = f"{self.recording.scene_video.name}: {len(self.video.time)} samples"
+        if self.log_alignment is not None:
+            return f"{text}<br>{self.log_alignment.summary()}"
+        if self.align_check.isVisible() and self.align_check.isChecked() and self._alignment_message \
+                and not self._alignment_message.startswith("no presenter log"):
+            return f"{text}<br>log not aligned: {self._alignment_message}"
+        return text
+
+    def _apply_alignment(self) -> None:
+        """Find how far the presenter's log is from the video and move the log's clock onto the video's (or back, when the
+        switch is off): the recording is then the aligned copy of the one that was read, so that the events, the logger's
+        sensor files and the exported Unix times follow."""
+        raw = self._raw_recording
+        if raw is None or self.video is None:
+            return
+        al, message = None, ""
+        if self.align_check.isChecked() and alignment.applicable(raw):
+            al, message = alignment.find(raw, self.video)
+        self.log_alignment, self._alignment_message = al, message
+        aligned = alignment.align(raw, al) if al is not None else raw
+        if aligned is not self.recording:
+            self.recording = aligned
+            self.plots.show_events(aligned.events)
+            if self.sensors:
+                self._show_sensors()
+            if aligned.luminance_source == "display":
+                self._place_from_folder(aligned)
+        self.video_label.setText(self._video_text())
+
+    def _align_toggled(self, on: bool) -> None:
+        self._settings.setValue("align_log", on)
+        if self.video is not None:
+            self._apply_alignment()
+            self.recompute()
+            self._update_state()
 
     def _video_settings_edited(self) -> None:
         if self.recording is not None:

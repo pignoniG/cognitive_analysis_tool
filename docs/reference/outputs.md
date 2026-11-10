@@ -83,7 +83,7 @@ The parameters used, loadable as a participant file.
 
 What the package holds, for whoever receives it: the recording and device, the meaning of the time columns and the
 Unix time of time zero, the trim (or `null`), the seconds kept, which SD was used for `delta_pd_sd` and its value, each
-sensor file with its source, columns and row count (and, for an ECG, its HRV files, the sampling rate, the gain and the notes), the list of files and the version of `cwtool`.
+sensor file with its source, columns and row count (and, for an ECG, its HRV files, the sampling rate, the gain and the notes), the tracking quality (`tracking quality`), how the presenter's log was aligned to the video (`log alignment`, `null` when it was not: see [Aligning the log to the video](../processing/log-alignment.md); with it, the Unix time of time zero is on the presenter's computer clock), the list of files and the version of `cwtool`.
 
 ### `<name>_plot.pdf`
 

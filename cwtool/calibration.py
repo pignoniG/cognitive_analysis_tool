@@ -274,7 +274,7 @@ RUN_FILE_MAX_BYTES = 2_000_000       # a run file is a few kilobytes; larger CSV
 
 
 def find_run_file(folder: str | Path) -> Path | None:
-    """The calibration presenter's run file in a recording's folder (a CSV with an ``onset_unix_ms`` column), or None. With
+    """The calibration presenter's run file in a recording's folder (a CSV with ``onset_unix_ms`` and colour columns), or None. With
     several, the last by name: they are named by date. Hidden files and large ones are skipped."""
     folder = Path(folder)
     if not folder.is_dir():
@@ -288,7 +288,9 @@ def find_run_file(folder: str | Path) -> Path | None:
                 header = next((r for r in csv.reader(f) if r and not r[0].lstrip().startswith("#")), [])
         except (OSError, UnicodeDecodeError):
             continue
-        if "onset_unix_ms" in [h.strip().lower() for h in header]:
+        names = [h.strip().lower() for h in header]
+        # the colour columns tell a calibration run from another log with onset times (the n-back log has them too)
+        if "onset_unix_ms" in names and {"r", "g", "b"} <= set(names):
             found.append(path)
     return found[-1] if found else None
 

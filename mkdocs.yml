@@ -76,6 +76,7 @@ nav:
       - Pupil signal: processing/pupil-signal.md
       - Expected pupil model: processing/model.md
       - ΔPD and alignment: processing/delta-pd.md
+      - Aligning the log to the video: processing/log-alignment.md
       - Calibration fit: processing/calibration-fit.md
       - Heart rate variability: processing/hrv.md
   - Reference:
