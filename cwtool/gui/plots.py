@@ -244,6 +244,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         for p in self._plots:
             self._watch_box(p)
         self.pupil.vb.sigXRangeChanged.connect(self._fit_y_all)    # the value axes show the data of the time span in view
+        self.cw.vb.sigRangeChanged.connect(self._place_event_labels)
+        self.cw.vb.sigResized.connect(self._place_event_labels)
         self.pupil.setLabel("left", "Pupil diameter (mm)")
         self.cw.setLabel("left", "ΔPD (mm)")
         self.lum.setLabel("left", "Luminance (cd/m²)")
@@ -301,6 +303,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.cw.addItem(pg.InfiniteLine(angle=0, pos=0, pen=pg.mkPen((120, 120, 120), width=1)), ignoreBounds=True)
 
         self._event_items: list = []
+        self._event_labels: list = []          # (start, label) in time order, laid out by _place_event_labels
         self._sequence_items: list = []
         self.sequence_line = pg.InfiniteLine(angle=90, movable=False,
                                              pen=pg.mkPen((90, 90, 90), width=2),
@@ -627,7 +630,8 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         for plot, item in self._event_items:
             plot.removeItem(item)
         self._event_items = []
-        for e in events:
+        self._event_labels = []
+        for e in sorted(events, key=lambda e: e.start):
             for plot in self._plots:
                 region = pg.LinearRegionItem((e.start, e.end), movable=False,
                                              brush=pg.mkBrush(*palette.rgb(palette.EVENT), 35), pen=pg.mkPen(None))
@@ -638,6 +642,30 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             label.setPos(e.start, 0)
             self.cw.addItem(label, ignoreBounds=True)
             self._event_items.append((self.cw, label))
+            self._event_labels.append((e.start, label))
+        self._place_event_labels()
+
+    EVENT_LABEL_ROWS = 3
+
+    def _place_event_labels(self, *_) -> None:
+        """Lay the event names out so that none overlaps another: each goes on the first of a few rows whose last name has
+        ended, and is hidden when no row is free (zooming in makes room) or when it is out of view."""
+        if not self._event_labels:
+            return
+        vb = self.cw.vb
+        (x0, x1), width = vb.viewRange()[0], vb.width()
+        if width <= 0 or x1 <= x0:
+            return
+        per_s = width / (x1 - x0)
+        ends = [-np.inf] * self.EVENT_LABEL_ROWS
+        for start, label in self._event_labels:
+            x, w = (start - x0) * per_s, label.boundingRect().width()
+            row = None if x + w < 0 or x > width else next(
+                (r for r in range(self.EVENT_LABEL_ROWS) if ends[r] + 4 <= x), None)
+            label.setVisible(row is not None)
+            if row is not None:
+                label.setAnchor((0, -row))               # a row down is one text height lower
+                ends[row] = x + w
 
     # Sensor signals (the logger's Shimmer and EmotiBit files), one plot each under ΔPD
 
