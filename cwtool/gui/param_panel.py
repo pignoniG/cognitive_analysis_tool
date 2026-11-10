@@ -15,6 +15,9 @@ from cwtool.params import Parameters, VideoSettings, unused_parameters
 # name: (label, min, max, step, decimals, tooltip)
 NUMBERS = {
     "age": ("Age (years)", 1, 120, 1, 0, "Participant age"),
+    "iris_diameter": ("Iris diameter (mm)", 0, 20, 0.1, 1,
+                      "The participant's measured horizontal visible iris diameter; 0 = not measured. The Varjo gives the "
+                      "pupil as a ratio to a fixed iris of about 12 mm: this rescales it to the participant's own"),
     "l_min": ("Lmin (cd/m²)", 0, 1000, 0.1, 3, "Panel black point"),
     "l_max": ("Lmax (cd/m²)", 0.1, 100000, 50, 1, "Panel white point"),
     "sensitivity": ("Light sensitivity (×)", 0.001, 1000, 0.1, 3,
@@ -90,7 +93,7 @@ TEXTS = {
     "baseline_events": ("Baseline events", "Comma-separated event labels used by alignment 'baseline'"),
 }
 
-PARTICIPANT_GROUPS = [("Participant", ["age", "eyes", "eye"])]
+PARTICIPANT_GROUPS = [("Participant", ["age", "iris_diameter", "eyes", "eye"])]
 LIGHT_GROUPS = [
     ("Display photometry (datasheet)", ["l_min", "l_max", "gamma"]),
     ("Participant light response", ["sensitivity", "gain_r", "gain_g", "gain_b", "fixation_weight"]),

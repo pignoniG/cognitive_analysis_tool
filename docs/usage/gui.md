@@ -236,7 +236,9 @@ See [Participant calibration](calibration.md) for the procedure.
   20-step staircase used before October 2026), a CSV, or a run file saved by
   the [calibration presenter](calibration-tool.md). A run file's onset times are on the presenting computer's clock,
   so they place the sequence in the recording (the start and the overlay are set; a run played for another recording
-  is reported as outside it).
+  is reported as outside it). A run file saved in the recording's folder is found when the recording is opened and
+  loaded and placed the same way, and so is a display photometry file saved there (a `.json` written by *Save display
+  photometry*).
 - **Find in recording**: locates the sequence in the analysed video and adapts its step length.
 - **Show sequence overlay**: shades each step in its colour on the pupil plot; drag its handle under the plots to move it.
 - **Start**: the sequence start in seconds.

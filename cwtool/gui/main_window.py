@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayo
                                QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget,
                                QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
-from cwtool import __version__, calibration, devices, hrv, palette, pipeline, sensors
+from cwtool import __version__, calibration, devices, hrv, palette, pipeline, quality, sensors
 from cwtool.fit import fit_calibration
 from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
@@ -831,6 +831,7 @@ class MainWindow(QMainWindow):
             f"{rec.measured_rate:.0f} Hz<br>camera {prof.field_of_view[0]:.0f}° × {prof.field_of_view[1]:.0f}°, "
             f"adapting field {prof.field_area:,.0f} deg², pupil {prof.pupil_unit} {scale}"
             f"<br>video: {video}<br>events: {len(rec.events)}"
+            + "".join(f"<br>{line}" for line in quality.assess(rec).lines())
 )
         self.plots.clear_result()
         self.plots.show_events(rec.events)
@@ -842,11 +843,16 @@ class MainWindow(QMainWindow):
         remembered = self._settings.value(f"display_photometry/{rec.device}", "")
         if on_display and remembered and Path(remembered).exists() and Path(remembered) != self._display_path:
             self.load_display(Path(remembered), quiet=True)   # the last photometry used with this device
+        in_folder = DisplayPhotometry.find(rec.folder) if on_display else None
+        if in_folder is not None and in_folder != self._display_path:
+            self.load_display(in_folder, quiet=True)           # one saved with the recording is the one for it
         if not on_display:
             self.sequence_check.setChecked(False)
         # Without a display there is no calibration sequence, but the dynamics still apply.
         with_lux = rec.luminance_source == "lux_sensor" and rec.lux_values is not None
         self._show_sequence_controls("display" if on_display else ("lux" if with_lux else "none"))
+        if on_display:
+            self._place_from_folder(rec)
         self.preview.set_recording(rec, self.params_panel.video_settings())
         self._params_device = rec.device
         if getattr(self, "_params_baseline", None) is None:
@@ -1114,6 +1120,19 @@ class MainWindow(QMainWindow):
         self._settings.setValue("last_sequence", path)
         self.set_sequence(sequence)
         self._place_from_run(path, sequence)
+
+    def _place_from_folder(self, rec) -> None:
+        """A calibration run file the presenter saved with the recording gives the sequence and where it starts: use them
+        without asking, as the manual "Load sequence" does for a run file."""
+        path = calibration.find_run_file(rec.folder)
+        if path is None:
+            return
+        try:
+            sequence = calibration.load_sequence(path)
+        except Exception:
+            return                                   # not a usable run file: the manual steps are still there
+        self.set_sequence(sequence)
+        self._place_from_run(str(path), sequence)
 
     def _place_from_run(self, path: str, sequence: calibration.Sequence) -> None:
         """A run file from the calibration presenter carries the onset of each step on the computer's clock:

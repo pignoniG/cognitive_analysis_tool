@@ -15,6 +15,7 @@ from scipy.signal import savgol_filter
 from cwtool import __version__, luminance, model
 from cwtool import hrv as hrv_module
 from cwtool import lux as lux_module
+from cwtool import quality
 from cwtool.params import Parameters
 from cwtool.recording import Recording
 from cwtool.trim import Trim
@@ -51,6 +52,10 @@ class Result:
     # How much light is left in ΔPD (see :func:`light_leakage`); NaN when the luminance barely varies.
     leak_slope: float = float("nan")  # mm of ΔPD per tenfold luminance
     leak_r2: float = float("nan")     # share of ΔPD's variance explained by log luminance and its recent change
+    # Pupil samples the tracker reports at its ceiling (the pupil is at least that large): their share of the analysed
+    # grid, and per ΔPD window whether most of it was at the ceiling (None: the device reports no ceiling)
+    censored_fraction: float = 0.0
+    cw_censored: Optional[np.ndarray] = None
 
 
 def _odd(n: int, minimum: int = 3) -> int:
@@ -294,11 +299,34 @@ class Prepared:
     mode: str = "display"
     lux_average: Optional[np.ndarray] = None     # cd/m², the sensor's average luminance (lux route)
     video_ratio: Optional[np.ndarray] = None     # Y_w / Y_frame (lux route with the video)
+    censored: Optional[np.ndarray] = None        # True where the pupil is at the tracker's ceiling (a lower bound)
 
     @property
     def photometric(self) -> bool:
         """The luminance comes from the Lmin/Lmax mapping, so Lmin and Lmax have expected pupils."""
         return self.mode in ("display", "camera, relative")
+
+
+def iris_factor(profile, params: Parameters) -> float:
+    """The multiplier on the device's pupil scale for the participant's measured iris: a device that reports the pupil as a
+    ratio to an iris it does not measure (the Varjo) assumes one, and the pupil in mm is that ratio times the participant's
+    own. 1 when no iris was measured or the device measures the pupil itself."""
+    if params.iris_diameter > 0 and profile.assumed_iris:
+        return params.iris_diameter / profile.assumed_iris
+    return 1.0
+
+
+def ceiling_mask(rec: Recording, eyes: list, eye: str) -> Optional[np.ndarray]:
+    """True at the samples whose pupil, as used (``eye``: "left", "right" or "both"), the tracker reports at its ceiling;
+    None for a device without one."""
+    flags = [rec.censored_left, rec.censored_right]
+    if all(f is None for f in flags):
+        return None
+    mask = np.zeros(len(rec.time), dtype=bool)
+    for k, name in enumerate(("left", "right")):
+        if flags[k] is not None and eye in ("both", name):
+            mask |= np.isfinite(eyes[k]) & np.asarray(flags[k], dtype=bool)
+    return mask
 
 
 def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
@@ -321,7 +349,8 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
     scale = None
     eyes = [np.asarray(rec.pupil_left, dtype=float), np.asarray(rec.pupil_right, dtype=float)]
     if profile.pupil_scale is not None:
-        scale = profile.pupil_scale * params.pupil_correction
+        factor = iris_factor(profile, params)
+        scale = profile.pupil_scale * params.pupil_correction * factor
         for k, raw in enumerate(eyes):
             with np.errstate(invalid="ignore"):
                 bad = (raw * scale < PUPIL_RANGE_MM[0]) | (raw * scale > PUPIL_RANGE_MM[1])
@@ -330,6 +359,9 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
                                          params.artefact_padding), np.nan, raw)
     raw = combine_eyes(eyes[0], eyes[1], params.eye)
     time, pupil, valid = resample(rec.time, raw, fs, params.max_gap)
+    at_ceiling = ceiling_mask(rec, eyes, params.eye)
+    if at_ceiling is not None:
+        at_ceiling = np.interp(time, rec.time, at_ceiling.astype(float)) > 0.5
     smooth = savgol_filter(pupil, _odd(fs / 2 + 1), 2)
     fast = savgol_filter(pupil, _odd(fs / 4 + 1, 9), 6)
     smooth[~valid] = np.nan
@@ -338,6 +370,12 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
     order = np.argsort(video.time)
     vt = video.time[order] - params.timelag
     notes = []
+    if params.iris_diameter > 0:
+        if profile.assumed_iris:
+            notes.append(f"The pupil is scaled ×{iris_factor(profile, params):.3f} for the measured iris of "
+                         f"{params.iris_diameter:g} mm ({profile.name} assumes {profile.assumed_iris:.1f} mm).")
+        else:
+            notes.append(f"The measured iris diameter is not used: {profile.name} measures the pupil itself.")
     lux_average = video_ratio = None
     if rec.luminance_source == "lux_sensor" and rec.lux_values is not None and len(rec.lux_values) >= 2:
         # Pignoni et al. 2021, eq. 5-8: the sensor gives the average luminance of the view; the
@@ -402,7 +440,7 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
     valid = valid & known
     smooth[~valid] = np.nan
     fast[~valid] = np.nan
-    return Prepared(time, fs, smooth, fast, valid, lum, scale, notes, mode, lux_average, video_ratio)
+    return Prepared(time, fs, smooth, fast, valid, lum, scale, notes, mode, lux_average, video_ratio, at_ceiling)
 
 
 # Lux readings (about 10 Hz) further apart than this (s) leave the luminance unknown between them.
@@ -543,6 +581,7 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         notes.insert(0, f"Experimental support for {profile.name}: the reader has not been checked on a real "
                         "recording yet; check the pupil, gaze and timing before relying on the results.")
     notes += rec.notes
+    notes += quality.assess(rec).notes()
     if profile.luminance_source == "display":
         notes += luminance.display_notes(params.l_min, params.l_max, profile)
     expected = expected_pupil(prep.luminance, fs, params, profile.field_area)
@@ -568,6 +607,11 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
         smooth = savgol_filter(interp_nan(cw), min(_odd(params.cw_smoothing * 2), _odd(len(cw) - 2)), 1)
         cw = np.where(good, smooth, np.nan)
 
+    cw_censored, censored_fraction = None, 0.0
+    if prep.censored is not None:
+        censored_fraction = float(prep.censored[valid].mean()) if valid.any() else 0.0
+        cw_censored = (window_means(prep.censored.astype(float), window_n) > 0.5)[: len(cw_time)]
+
     log_lum = np.log10(np.maximum(prep.luminance, 1e-4))
     change = log_lum - model.lowpass(log_lum, fs, LEAK_CHANGE_TAU)
     leak_cw = np.where(step_windows(log_lum, fs, window_n)[: len(cw)], np.nan, cw)
@@ -589,7 +633,8 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
                   pupil_scale=scale, rate=fs, measured_rate=rec.measured_rate,
                   gap_fraction=float(1 - valid.mean()), warnings=notes, luminance_mode=prep.mode,
                   luminance_sensor=prep.lux_average, luminance_ratio=prep.video_ratio,
-                  fixation_weight=params.fixation_weight, leak_slope=leak_slope, leak_r2=leak_r2)
+                  fixation_weight=params.fixation_weight, leak_slope=leak_slope, leak_r2=leak_r2,
+                  censored_fraction=censored_fraction, cw_censored=cw_censored)
 
 
 def luminance_route(r: Result) -> Optional[dict]:
@@ -688,9 +733,13 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
     p = out_dir / f"{rec.name}_cw.csv"
     with open(p, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["timestamp_unix", "timestamp_relative", "delta_pd_mm", "delta_pd_sd"])
-        for t, v in zip(result.cw_time[keep_cw], result.cw[keep_cw]):
-            w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}", f"{v / sd:.6f}"])
+        ceiling = result.cw_censored
+        w.writerow(["timestamp_unix", "timestamp_relative", "delta_pd_mm", "delta_pd_sd"]
+                   + (["at_tracker_ceiling"] if ceiling is not None else []))
+        flags = ceiling[keep_cw] if ceiling is not None else [None] * int(keep_cw.sum())
+        for t, v, c in zip(result.cw_time[keep_cw], result.cw[keep_cw], flags):
+            w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}", f"{v / sd:.6f}"]
+                       + ([int(c)] if ceiling is not None else []))
     paths.append(p)
     step()
 
@@ -760,6 +809,7 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         "delta_pd_sd": "recording" if not trim.active else "kept data",
         "delta_pd_sd_mm": sd,
         "sensors": sensor_info,
+        "tracking quality": quality.assess(rec).as_dict(),
         "files": [q.name for q in paths] + [p.name],
         "cwtool": __version__,
     }, indent=2))

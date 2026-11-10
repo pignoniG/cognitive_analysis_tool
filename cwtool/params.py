@@ -38,6 +38,9 @@ class Parameters:
 
     # Participant / Watson & Yellott
     age: float = 25.0
+    # The participant's measured horizontal visible iris diameter (mm), for a device that reports the pupil as a ratio
+    # to an iris it does not measure (the Varjo: pupil = ratio × a fixed 12 mm). 0: not measured, the device's value.
+    iris_diameter: float = 0.0
     eyes: int = 2
     eye: str = "both"                    # pupil used: "left", "right" or "both"
 
@@ -231,6 +234,21 @@ class DisplayPhotometry:
         Path(path).write_text(json.dumps({"kind": self.KIND, **asdict(self)}, indent=2))
 
     @classmethod
+    def find(cls, folder: str | Path) -> Path | None:
+        """A display photometry file in ``folder`` (a small JSON file of this kind), or None; the last by name if several."""
+        folder = Path(folder)
+        found = []
+        for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+            if path.name.startswith(".") or path.stat().st_size > 20_000:
+                continue
+            try:
+                if json.loads(path.read_text(encoding="utf-8")).get("kind") == cls.KIND:
+                    found.append(path)
+            except (OSError, ValueError, AttributeError):
+                continue
+        return found[-1] if found else None
+
+    @classmethod
     def load(cls, path: str | Path) -> "DisplayPhotometry":
         """Read a photometry JSON file; raises ValueError for another kind of file."""
         data = json.loads(Path(path).read_text())
@@ -254,6 +272,8 @@ def unused_parameters(rec, params: Parameters) -> set[str]:
     unused = set()
     if not rec.circular_scene:
         unused.add("field_radius")
+    if not rec.profile.assumed_iris:
+        unused.add("iris_diameter")           # only a device that assumes an iris can use the participant's
     if rec.luminance_source != "lux_sensor":
         return unused | set(_LUX) | set(_CAMERA)
     if rec.lux_values is not None and len(rec.lux_values) >= 2:

@@ -1176,3 +1176,42 @@ is revised; they remain in the git history of this file.
   recording with a task; add the ECG and the detected beats as a plot in the app so the detection can be checked by
   eye.
 - **Status:** open (needs data).
+
+### 52. The Varjo pupil stops at a ratio of 0.5 in one recording, and not in another
+
+- **Where:** `cwtool/devices/varjo.py` (`ceiling_found`, `CEILING_RATIO`), `cwtool/quality.py`, `cwtool/photometry.py`,
+  `cwtool/fit.py`.
+- **Seen (10 November 2026):** one VR run (a 26-minute recording with the full calibration, one participant). In both eyes the
+  pupil/iris ratio rises normally to 0.48, ends at 0.50 and has almost nothing above 0.52 (left eye: 5 samples between 0.52
+  and 0.54 against 3000 in the bin below; right eye: 45 against 2000). In mm, with the fixed 12 mm iris, the values pile up
+  at 5.8 to 6.0 mm and end near 6.2. It is 0.8 % (left) and 1.3 % (right) of all samples, 2 to 3 % in the calibration, and all
+  of it in 4 of the 34 steps (the black ones, which follow bright steps and last 8 s), where the model expects 6.9 mm. A
+  September 2026 sample reached 6.4 to 7.7 mm (ratios 0.52 to 0.62), so the cap is not universal.
+- **Now:** the reader looks for the pile-up and the cliff in each recording and only then marks the samples at or above 0.49
+  as at the ceiling; the quality report and the notes say how many; the light response fit and the dynamics fit take a step
+  that ended at the ceiling as a lower bound (the model is only required to be at least as large as measured there);
+  `<name>_cw.csv` has an `at_tracker_ceiling` column. On a synthetic staircase whose dark steps are clipped at 5 mm, one capped
+  step moves the fitted sensitivity from 3.0 (true) to 5.9 when taken as measured, and to 3.3 as a lower bound. On the real
+  recording the fit does not change: the fitted model already predicts at least the capped value there, so the ceiling
+  was not what limited the fit (the ΔPD of the session, whose pupil stays between 2 and 5.5 mm, is unaffected).
+- **Not known:** whether the cap is the tracker's, Varjo Base's or the pupil model's; why it is absent in the September
+  sample (a Varjo Base version, the participant, the lighting); whether it is exactly 0.5 for every eye and participant. The
+  detection thresholds (0.47 to 0.52 against 0.52 to 0.62) come from these two recordings.
+- **Proposal:** look for it in every new Varjo recording; ask Varjo; give the calibration a dim lowest level instead of black,
+  so that the pupil stays below the ceiling (see the calibration redesign).
+- **Status:** open (needs data).
+
+### 53. The Varjo's pupil in mm is the ratio times a constant iris
+
+- **Where:** `cwtool/devices/varjo.py` (`assumed_iris`), `cwtool/pipeline.py` (`iris_factor`), `Parameters.iris_diameter`.
+- **Seen (10 November 2026):** in the same recording the iris columns hold one value (12.05 mm left, 12.02 mm right) and the
+  pupil in mm equals the ratio times it exactly. So the absolute pupil is as accurate as the participant's iris is
+  close to 12 mm (the spread of the population's horizontal visible iris diameter is about ±10 %, with the direction
+  unknown for any participant), and the iris cannot be used to see the headset slip.
+- **Now:** a participant parameter `iris_diameter` (mm, 0 = not measured) rescales the pupil by it divided by the assumed iris,
+  for a device that gives the assumed iris (the Varjo, when its iris column is constant). It changes the amplitude of the
+  pupil, not its offset (the alignment re-centres it), so it also changes the fitted sensitivity. Not checked: a measured
+  iris against the tracker's pupil on a real participant, or the method of measuring the iris (ruler or photograph).
+- **Proposal:** measure the iris of each participant in the protocol; compare the Varjo pupil with a second device (the Neon)
+  on the same participant to see whether the scale of 12 mm is too large or too small.
+- **Status:** open (needs data).

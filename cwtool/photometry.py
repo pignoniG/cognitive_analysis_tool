@@ -46,6 +46,7 @@ PRIOR_GAMMA = 0.2
 SENSITIVITY_RANGE = (1e-3, 1e3)
 GAIN_RANGE = (0.05, 20.0)
 BLACK_RANGE = (1e-4, 10.0)     # cd/m², Lmin when it is fitted
+CENSORED_STEP = 0.5            # share of a step's end at the tracker's ceiling above which its level is a lower bound
 
 
 @dataclass
@@ -61,6 +62,7 @@ class StepLevel:
     uncertainty: float       # mm
     settled: bool            # False: still dilating at its end after a darker step, so short of steady state
     colour: np.ndarray       # (G, 3) mean weighted linear colour per gamma of the video's grid
+    censored: bool = False   # True: most of the step's end was at the tracker's ceiling, so `measured` is a lower bound
 
 
 @dataclass
@@ -135,7 +137,11 @@ def step_levels(rec: Recording, video: VideoResult, params: Parameters, start: f
         if inside.sum() < MIN_STEP_SAMPLES or not colour.any():
             continue
         value, se, settled = step_level(prep.time[inside], mm[inside], after_darker)
-        levels.append(StepLevel(step.label, step.rgb, a, b, value, se, settled, weighted[colour].mean(axis=0)))
+        at_end = False
+        if prep.censored is not None:
+            tail = np.flatnonzero(inside)[int((1 - TAIL) * inside.sum()):]       # the samples the level is taken from
+            at_end = bool(prep.censored[tail].mean() >= CENSORED_STEP)
+        levels.append(StepLevel(step.label, step.rgb, a, b, value, se, settled, weighted[colour].mean(axis=0), at_end))
     return levels
 
 
@@ -160,7 +166,13 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
     area = rec.profile.field_area
     m = np.array([lv.measured for lv in levels])
     sigma = np.hypot([lv.uncertainty for lv in levels], NOISE_MM)
+    cens = np.array([lv.censored for lv in levels])
     gains0 = np.asarray(params.gains, dtype=float)
+
+    def one_sided(res):
+        """Residuals measured − expected, where a step at the tracker's ceiling only says the pupil is at least `measured`:
+        a model above it is no error."""
+        return np.where(cens & (res <= 0), 0.0, res)
 
     def unpack(x):
         """Free values x = [log s, (log gains ×3), (log Lmin), (d), (gamma)] -> (s, gains, l_min, d, gamma)."""
@@ -184,7 +196,7 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
         """Residuals of the steps' pupils (in units of their uncertainty), plus the priors on the gains and the gamma.
         """
         sens, gains, l_min, d, gamma = unpack(x)
-        r = [(m - (_expected(levels, params, area, sens, gains, gamma, l_min) + d)) / sigma]
+        r = [one_sided(m - (_expected(levels, params, area, sens, gains, gamma, l_min) + d)) / sigma]
         if fit_gains:
             r.append(np.log(gains) / PRIOR_LOG_GAIN)
         if fit_gamma:
@@ -255,6 +267,9 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
                      "bright ones, would make the fit more reliable.")
     if len(levels) < len(sequence.steps):
         notes.append(f"{len(sequence.steps) - len(levels)} steps had too little pupil data and were skipped.")
+    if cens.any():
+        notes.append(f"{int(cens.sum())} of {len(levels)} steps ended at the tracker's ceiling (the pupil is larger than it "
+                     "can report): the fit only requires the model's pupil there to be at least as large as measured.")
 
     fitted = replace(params, sensitivity=float(sens), gamma=float(gamma), l_min=float(l_min))
     if fit_offset:
@@ -267,8 +282,8 @@ def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, s
         l_min=float(l_min), l_max=float(params.l_max), steps=levels,
         expected_before=before, expected_after=after, measured_after=measured_after,
         uncertainty_after=np.array([lv.uncertainty for lv in levels]),
-        rms_before=float(np.sqrt(np.mean((m + before_offset - before) ** 2))),
-        rms_after=float(np.sqrt(np.mean((measured_after - after) ** 2))), notes=notes)
+        rms_before=float(np.sqrt(np.mean(one_sided(m + before_offset - before) ** 2))),
+        rms_after=float(np.sqrt(np.mean(one_sided(measured_after - after) ** 2))), notes=notes)
 
 
 # ---------------------------------------------------------------------------------------------------

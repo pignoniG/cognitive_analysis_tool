@@ -56,6 +56,7 @@ not in participant files.
 
 | Name | Default | Meaning |
 |---|---|---|
+| `iris_diameter` | 0 mm | the participant's measured horizontal visible iris diameter, for a device that gives the pupil as a ratio to an iris it assumes (Varjo: about 12 mm); the pupil is rescaled by the ratio of the two. 0: not measured. Ignored by a device that measures the pupil itself |
 | `pupil_correction` | 1 | participant multiplier on the device's pupil scale, set by hand and never fitted: one sequence does not determine it (it trades off with the sensitivity and the black point) |
 | `alignment` | recording | offset mode: `recording`, `baseline`, `fixed`, `none` |
 | `baseline_events` | Riposo, Rest, Baseline | event labels used by `baseline` alignment |

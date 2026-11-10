@@ -40,6 +40,27 @@ estimate the pupil scale: one sequence does not determine it, and the dark-adapt
 the September 2026 sample) bounds it to about 0.9–1.2, so the device's scale is used. A participant correction
 (`pupil_correction`) can be set by hand ([open issue 1](../OPEN_ISSUES.md)).
 
+## Tracking quality, the ceiling and the iris
+
+The Recording box shows a short quality report (the export keeps it as `tracking quality` in `<name>_export.json`): the
+share of samples with a pupil in each eye and in at least one, the dropouts (blinks shorter than 0.5 s, longer losses and
+the longest), and what the tracker limits.
+
+- **A ceiling on large pupils.** The pupil is the tracker's pupil/iris ratio times an iris. On one recording with dark
+  calibration steps the ratio rose normally to 0.48 and then stopped at 0.50 in both eyes (6.0 mm of a 12 mm iris), with
+  almost nothing above 0.52; another sample reached 0.52 to 0.62. So the reader looks for the cap in each recording
+  (a pile-up between 0.47 and 0.52 and almost nothing between 0.52 and 0.62) and only then marks the samples at or above
+  0.49 as *at the ceiling*: the pupil is at least that large there. Those samples are a lower bound: the calibration
+  fits (light response and dynamics) only require the model to be at least as large as measured on a step that ended
+  at the ceiling, ΔPD is not reliable in those stretches (`at_tracker_ceiling` in `<name>_cw.csv`), and a note says how
+  much of the recording is affected ([open issue 52](../OPEN_ISSUES.md)).
+- **The iris is a constant.** The iris columns hold one value (12.0 mm in the sample) and the pupil in mm is exactly the
+  ratio times it, so the pupil is only as accurate as that iris is for the participant (the population spread is about
+  ±10 %). Measure the participant's horizontal visible iris diameter (a ruler against the eye, or a photograph with a
+  scale) and enter it as *Iris diameter* in the Participant parameters (`iris_diameter`): the pupil is rescaled by the
+  ratio of the two (11.0 mm against 12.0 gives ×0.917). It is left at 0 (not measured) by default, and ignored by a
+  device that measures the pupil itself ([open issue 53](../OPEN_ISSUES.md)).
+
 ## Gaze
 
 The capture shows the **left eye's view**. The combined gaze projected to that view is used by default; the left

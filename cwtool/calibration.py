@@ -270,6 +270,29 @@ def run_start_unix(path: str | Path) -> float | None:
         return None
 
 
+RUN_FILE_MAX_BYTES = 2_000_000       # a run file is a few kilobytes; larger CSVs are not read to look for one
+
+
+def find_run_file(folder: str | Path) -> Path | None:
+    """The calibration presenter's run file in a recording's folder (a CSV with an ``onset_unix_ms`` column), or None. With
+    several, the last by name: they are named by date. Hidden files and large ones are skipped."""
+    folder = Path(folder)
+    if not folder.is_dir():
+        return None
+    found = []
+    for path in sorted(folder.glob("*.csv")):
+        if path.name.startswith(".") or path.stat().st_size > RUN_FILE_MAX_BYTES:
+            continue
+        try:
+            with open(path, newline="", encoding="utf-8") as f:
+                header = next((r for r in csv.reader(f) if r and not r[0].lstrip().startswith("#")), [])
+        except (OSError, UnicodeDecodeError):
+            continue
+        if "onset_unix_ms" in [h.strip().lower() for h in header]:
+            found.append(path)
+    return found[-1] if found else None
+
+
 def scaled(sequence: Sequence, factor: float) -> Sequence:
     """The sequence with every step's timing multiplied by ``factor``."""
     if abs(factor - 1.0) < 1e-6:

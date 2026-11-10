@@ -58,6 +58,18 @@ COLUMNS = {
     "right_iris": ("right_iris_diameter_in_mm", 42),
 }
 
+# The pupil/iris ratio a tracker may stop at: on one recording with dark steps it rose normally to 0.48 and ended at
+# 0.50 (about 6.0 mm of the fixed 12 mm iris), with almost nothing above 0.52, in both eyes; another sample (September 2026)
+# reached ratios of 0.52 to 0.62. So the cap is not assumed: it is looked for in each recording (:func:`ceiling_found`), and
+# only then is a sample at or above CEILING_RATIO a lower bound of the pupil (open issue 52).
+CEILING_RATIO = 0.49
+CAP_BAND = (0.47, 0.52)          # ratios where a cap shows as a pile-up
+ABOVE_BAND = (0.52, 0.62)        # ratios a capped recording does not reach
+CAP_MIN_SAMPLES = 100            # samples in the pile-up band below which nothing can be said
+CAP_ABOVE_SHARE = 0.02           # a cap: samples above it are at most this share of those at it
+# An iris column that varies less than this (mm) over the recording is a constant, not a measurement.
+IRIS_CONSTANT_MM = 0.05
+
 # Tracking statuses above this are valid (Varjo Base writes 0 = lost, 2 = tracked).
 MIN_STATUS = 1
 
@@ -79,6 +91,16 @@ def pupil_scale(left_iris: np.ndarray, right_iris: np.ndarray) -> float:
     if len(iris) and float(np.median(iris)) > IRIS_DIAMETER_MM:
         return DIAMETER_SCALE
     return RADIUS_SCALE
+
+
+def ceiling_found(ratio: np.ndarray) -> bool:
+    """Whether the pupil/iris ratios of a recording show a cap: many samples just below CAP_BAND's top and almost none above.
+    A recording whose pupil never gets that large, or whose ratios go beyond, has none to speak of."""
+    ratio = np.asarray(ratio, dtype=float)
+    ratio = ratio[np.isfinite(ratio)]
+    at = int(((ratio >= CAP_BAND[0]) & (ratio < CAP_BAND[1])).sum())
+    above = int(((ratio >= ABOVE_BAND[0]) & (ratio < ABOVE_BAND[1])).sum())
+    return at >= CAP_MIN_SAMPLES and above <= CAP_ABOVE_SHARE * at
 
 
 def detect(folder: Path) -> bool:
@@ -126,7 +148,20 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
             ok = tracked[eye] & (d > 0)  # the plausible range is checked in mm by the pipeline
         return np.where(ok, d, np.nan)
 
-    scale = pupil_scale(col("left_iris")[tracked["left"]], col("right_iris")[tracked["right"]])
+    iris = {eye: col(f"{eye}_iris")[tracked[eye]] for eye in ("left", "right")}
+    scale = pupil_scale(iris["left"], iris["right"])
+    all_iris = np.concatenate(list(iris.values()))
+    all_iris = all_iris[np.isfinite(all_iris) & (all_iris > 0)]
+    # A constant iris means the pupil in mm is the ratio times that constant: a participant's own iris can rescale it.
+    fixed_iris = float(np.median(all_iris)) * scale if len(all_iris) and np.ptp(all_iris) < IRIS_CONSTANT_MM else None
+
+    def ratios(eye: str, size: np.ndarray):
+        """The eye's pupil/iris ratio where it has a pupil (NaN elsewhere); None when the file has no ratio column."""
+        i = index.get(f"{eye}_pupil_iris_diameter_ratio")
+        if i is None:
+            return None
+        ratio = np.array([_number(r[i]) if i < len(r) else float("nan") for r in rows])
+        return np.where(np.isfinite(size), ratio, np.nan)
 
     prefix = {"right": "right", "combined": "combined"}.get(gaze_eye, "left")
     px, py = col(f"{prefix}_x"), col(f"{prefix}_y")
@@ -143,17 +178,30 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
     stamp = gaze_file.stem.replace("varjo_gaze_output_", "")[:19]
     utc_offset = utc_offset_from_name(stamp, "%Y-%m-%d_%H-%M-%S", epoch_start)
 
+    pupil_left, pupil_right = pupil("left"), pupil("right")
+    ratio_left, ratio_right = ratios("left", pupil_left), ratios("right", pupil_right)
+    known = [r for r in (ratio_left, ratio_right) if r is not None]
+    capped = bool(known) and ceiling_found(np.concatenate(known))
+
+    def at_ceiling(ratio):
+        if not capped or ratio is None:
+            return None
+        with np.errstate(invalid="ignore"):
+            return np.isfinite(ratio) & (ratio >= CEILING_RATIO)
+
     return Recording(
         name=folder.name,
-        profile=replace(PROFILE, pupil_scale=scale),
+        profile=replace(PROFILE, pupil_scale=scale, assumed_iris=fixed_iris),
         folder=folder,
         time=time,
         epoch_start=epoch_start,
-        pupil_left=pupil("left"),
-        pupil_right=pupil("right"),
+        pupil_left=pupil_left,
+        pupil_right=pupil_right,
         gaze=gaze,
         scene_video=_find(folder, "varjo_capture_"),
         events=read_event_log(folder, epoch_start, utc_offset),
+        censored_left=at_ceiling(ratio_left),
+        censored_right=at_ceiling(ratio_right),
     )
 
 

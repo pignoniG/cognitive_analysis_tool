@@ -36,6 +36,7 @@ One row per ΔPD window (default 0.2 s).
 | `timestamp_unix`, `timestamp_relative` | s | window centre |
 | `delta_pd_mm` | mm | ΔPD |
 | `delta_pd_sd` | SD | ΔPD / SD of ΔPD over the recording |
+| `at_tracker_ceiling` | 0 or 1 | only when the device reports a ceiling on large pupils (Varjo, when the recording shows one): 1 where most of the window was at the ceiling, so the pupil is larger than measured and ΔPD is not reliable |
 
 ### `<name>_events.csv`
 

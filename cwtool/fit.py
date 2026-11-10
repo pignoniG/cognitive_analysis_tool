@@ -88,6 +88,8 @@ class _Problem:
         if self.use.sum() < 10:
             raise ValueError("Not enough valid pupil samples inside the calibration window")
         self.measured = measured[self.use]
+        # samples at the tracker's ceiling say only that the pupil is at least this large (see ``solve``)
+        self.censored = prep.censored[seg][self.use] if prep.censored is not None else np.zeros(self.use.sum(), bool)
 
     def expected(self, delay: float, attack: Optional[float], release: Optional[float],
                  transient: float = 0.0, escape: float = 2.0) -> np.ndarray:
@@ -101,7 +103,9 @@ class _Problem:
         measured + b ≈ expected, in the measured pupil's own scale; otherwise it is 0."""
         e = self.expected(delay, attack, release, transient, escape)
         b = float(np.mean(e - self.measured)) if self.fit_offset else 0.0
-        return float(np.sqrt(np.mean((self.measured + b - e) ** 2))), b
+        r = self.measured + b - e
+        r = np.where(self.censored & (r <= 0), 0.0, r)      # a model above a lower bound is no error
+        return float(np.sqrt(np.mean(r ** 2))), b
 
 
 def _best_delay(problem: _Problem, attack, release, transient, escape, step: float) -> float:

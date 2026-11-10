@@ -33,6 +33,10 @@ class DeviceProfile:
     # Peak luminance the manufacturer claims for the display (cd/m²); the display's white point cannot be
     # much above it, but can be below, since brightness is adjustable.
     max_luminance: Optional[float] = None
+    # The iris diameter (mm) the reader's millimetre values assume, when the device reports the pupil as a ratio to an
+    # iris it does not measure (the Varjo's pupil is that ratio times a fixed 12 mm): a participant's measured iris
+    # (``Parameters.iris_diameter``) then rescales the pupil. None: the device measures the pupil itself.
+    assumed_iris: Optional[float] = None
 
     @property
     def field_area(self) -> float:
@@ -74,6 +78,10 @@ class Recording:
     lux_values: Optional[np.ndarray] = None  # lux
     events: list[Event] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)   # reader's warnings, shown with every result
+    # Samples whose pupil the tracker reports at its ceiling (True): the true size is at least that large, so the value is a
+    # lower bound. None when the device has no such limit or the file does not say.
+    censored_left: Optional[np.ndarray] = None
+    censored_right: Optional[np.ndarray] = None
 
     def __post_init__(self) -> None:
         n = len(self.time)
