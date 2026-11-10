@@ -83,6 +83,13 @@ def test_sensor_files_are_found_read_and_cut(tmp_path):
     # without a manifest the files are found by their first column
     (session / "session.json").unlink()
     assert [p.name for p, _ in sensors.find_sensor_files(session)] == ["emotibit.csv", "shimmer.csv"]
+    # macOS's companion files (._x.csv, binary) on a drive it does not format must not break the scan or be taken
+    (session / "._shimmer.csv").write_bytes(b"\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X        \xb0\x00")
+    assert [p.name for p, _ in sensors.find_sensor_files(session)] == ["emotibit.csv", "shimmer.csv"]
+    from cwtool.devices.common import find
+    (session / "._event_log.csv").write_bytes(b"\xb0\x00")
+    (session / "x_event_log.csv").write_text("a\n")
+    assert find(session, "event_log").name == "x_event_log.csv"
     # a file that is no sensor file is refused
     (tmp_path / "x.csv").write_text("a,b\n1,2\n")
     with pytest.raises(ValueError):

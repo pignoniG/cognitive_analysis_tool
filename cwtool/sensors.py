@@ -140,12 +140,12 @@ def find_sensor_files(folder: Path) -> list[tuple[Path, str]]:
             found = []
     if not found and folder.is_dir():
         for path in sorted(folder.glob("*.csv")):
-            if path.stem in NOT_SENSORS:
+            if path.stem in NOT_SENSORS or path.name.startswith("."):      # ._x.csv: macOS's companion files on drives it does not format
                 continue
             try:
-                with open(path, newline="") as f:
+                with open(path, newline="", encoding="utf-8") as f:
                     first = next(csv.reader(f), [""])
-            except OSError:
+            except (OSError, UnicodeDecodeError):
                 continue
             if first and first[0].strip() == TIME_COLUMN:
                 found.append((path, ""))

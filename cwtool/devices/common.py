@@ -14,8 +14,9 @@ from cwtool.recording import Event
 
 
 def find(folder: Path, name: str) -> Path | None:
-    """First file in ``folder`` whose name contains ``name`` (as the 1.x reader did)."""
-    matches = sorted(p for p in folder.iterdir() if p.is_file() and name in p.name)
+    """First file in ``folder`` whose name contains ``name`` (as the 1.x reader did). Hidden files are left out: macOS
+    writes ``._<name>`` companions next to every file on a drive it does not format, and one would sort first."""
+    matches = sorted(p for p in folder.iterdir() if p.is_file() and name in p.name and not p.name.startswith("."))
     return matches[0] if matches else None
 
 
