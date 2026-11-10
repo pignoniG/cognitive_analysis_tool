@@ -631,14 +631,15 @@ class ResultPlots(pg.GraphicsLayoutWidget):
             plot.removeItem(item)
         self._event_items = []
         self._event_labels = []
-        for e in sorted(events, key=lambda e: e.start):
+        for i, e in enumerate(sorted(events, key=lambda e: e.start)):
+            shade, text = palette.event_colours(i)               # alternating, so a name is tied to its stretch
             for plot in self._plots:
                 region = pg.LinearRegionItem((e.start, e.end), movable=False,
-                                             brush=pg.mkBrush(*palette.rgb(palette.EVENT), 35), pen=pg.mkPen(None))
+                                             brush=pg.mkBrush(*palette.rgb(shade), 45), pen=pg.mkPen(None))
                 region.setZValue(-20)
                 plot.addItem(region, ignoreBounds=True)
                 self._event_items.append((plot, region))
-            label = pg.TextItem(e.label, color=palette.rgb(palette.EVENT_TEXT), anchor=(0, 0))
+            label = pg.TextItem(e.label, color=palette.rgb(text), anchor=(0, 0))
             label.setPos(e.start, 0)
             self.cw.addItem(label, ignoreBounds=True)
             self._event_items.append((self.cw, label))

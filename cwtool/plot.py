@@ -23,8 +23,8 @@ def plot_result(result: Result, rec: Recording, trim: Trim | None = None):
     ax.plot(result.cw_time, result.cw, color=palette.DELTA_PD, lw=1, label="ΔPD")
     ax.axhline(result.expected_black, color=palette.EXPECTED, ls=":", lw=1)
     ax.axhline(result.expected_white, color=palette.EXPECTED, ls=":", lw=1)
-    for e in rec.events:
-        ax.axvspan(e.start, e.end, alpha=0.12, color=palette.EVENT)
+    for i, e in enumerate(sorted(rec.events, key=lambda e: e.start)):
+        ax.axvspan(e.start, e.end, alpha=0.15, color=palette.event_colours(i)[0], lw=0)
     if trim is not None and trim.active and len(result.time):
         for a, b in trim.left_out_spans(float(result.time[0]), float(result.time[-1])):
             ax.axvspan(a, b, color="0.5", alpha=0.25, lw=0)

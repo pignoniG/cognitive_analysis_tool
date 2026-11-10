@@ -15,7 +15,15 @@ WARNING = RED           # warning text
 CURSOR = ORANGE_4       # current frame bar
 EVENT = ORANGE_1        # event shading
 EVENT_TEXT = ORANGE_3   # event labels
+# Events alternate between two colours (shading and name) so a name is easy to tie to its stretch of the plot
+EVENT_ALT = "#2E86AB"
+EVENT_ALT_TEXT = "#1F5F7A"
 ACCENT = ORANGE_3       # selection, focus and checked controls in the app
+
+
+def event_colours(index: int) -> tuple[str, str]:
+    """(shading, text) colour of the ``index``-th event: the two sets alternate."""
+    return (EVENT, EVENT_TEXT) if index % 2 == 0 else (EVENT_ALT, EVENT_ALT_TEXT)
 
 
 def rgb(colour: str) -> tuple[int, int, int]:
