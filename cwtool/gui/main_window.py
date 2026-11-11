@@ -20,7 +20,7 @@ from cwtool import __version__, alignment, calfit, calibration, devices, hrv, pa
 from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.icons import icon, tinted
-from cwtool.gui.side_panel import PreviewHolder, Rail, Step
+from cwtool.gui.side_panel import breakable, PreviewHolder, Rail, Step
 from cwtool.gui.trim_panel import TrimPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
@@ -818,10 +818,10 @@ class MainWindow(QMainWindow):
         prof = rec.profile
         scale = f"×{prof.pupil_scale:g}" if prof.pupil_scale else "scale fitted"
         self.recording_label.setText(
-            f"<b>{rec.name}</b><br>{rec.device}, {len(rec.time)} samples, {duration:.1f} s, "
+            f"<b>{breakable(rec.name)}</b><br>{rec.device}, {len(rec.time)} samples, {duration:.1f} s, "
             f"{rec.measured_rate:.0f} Hz<br>camera {prof.field_of_view[0]:.0f}° × {prof.field_of_view[1]:.0f}°, "
             f"adapting field {prof.field_area:,.0f} deg², pupil {prof.pupil_unit} {scale}"
-            f"<br>video: {video}<br>events: {len(rec.events)}"
+            f"<br>video: {breakable(video)}<br>events: {len(rec.events)}"
             + "".join(f"<br>{line}" for line in quality.assess(rec).lines())
 )
         self.plots.clear_result()
@@ -888,7 +888,7 @@ class MainWindow(QMainWindow):
         self._update_state()
 
     def _video_text(self) -> str:
-        text = f"{self.recording.scene_video.name}: {len(self.video.time)} samples"
+        text = f"{breakable(self.recording.scene_video.name)}: {len(self.video.time)} samples"
         if self.log_alignment is not None:
             return f"{text}<br>{self.log_alignment.summary()}"
         if self.align_check.isVisible() and self.align_check.isChecked() and self._alignment_message \
@@ -1148,7 +1148,8 @@ class MainWindow(QMainWindow):
         if not keep_base:
             self._base_sequence = sequence
         self.sequence = sequence
-        self.sequence_label.setText(f"{sequence.name}: {len(sequence.steps)} steps, {sequence.duration:.0f} s")
+        self.sequence_label.setText(f"{breakable(sequence.name)}: {len(sequence.steps)} steps, {sequence.duration:.0f} s")
+        self.sequence_label.setToolTip(sequence.name)
         self._sequence_changed()
 
     # The set-up checklist at the top of the Data tab

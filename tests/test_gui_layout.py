@@ -265,3 +265,30 @@ def test_the_black_and_white_points_are_legend_entries_only_where_they_are_defin
                     and not np.isfinite(w.result.expected_black))
     assert wait_for(app, lambda: "Expected at white point" not in names())
     w.close()
+
+
+def test_a_long_file_name_does_not_widen_the_side_panel(app):
+    """A run file's name is one long word of underscores: unbroken it widened the Calibrate page past its column and pushed
+    the buttons out of sight."""
+    from PySide6.QtWidgets import QScrollArea
+    from cwtool import calibration
+    w = MainWindow()
+    w.resize(1200, 800)
+    w.show()
+    name = "P01_vr_setA_2026-11-10_15-27-25__calibration_run_P01_vr_setA_2026-11-10_15-27-25.csv"
+    w.set_sequence(calibration.Sequence((calibration.Step(0.0, 8.0, (0, 0, 0), "Black"),), name))
+    w.step_fit.set_summary("Applied: light sensitivity ×3.36, latency 0.21 s, ΔPD RMS in sequence 0.703 mm")
+    w.rail.set_current(2)
+    app.processEvents()
+    area = w.step_sequence.parentWidget()
+    while area is not None and not isinstance(area, QScrollArea):
+        area = area.parentWidget()
+    assert area.widget().minimumSizeHint().width() <= area.viewport().width()
+    # the label can break the name: its longest unbreakable piece is far narrower than the column's minimum (470 px)
+    import re
+    from PySide6.QtGui import QFontMetrics
+    fm = QFontMetrics(w.sequence_label.font())
+    pieces = re.split(r"[\s\u200b]+", w.sequence_label.text())
+    assert max(fm.horizontalAdvance(p) for p in pieces) < 250 < fm.horizontalAdvance(name)
+    assert w.sequence_label.toolTip() == name                                 # the whole name stays readable
+    w.close()

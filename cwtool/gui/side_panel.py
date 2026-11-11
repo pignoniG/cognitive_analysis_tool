@@ -138,6 +138,17 @@ class Pills(QWidget):
         return self._stack.widget(index)
 
 
+BREAK = "\u200b"     # a zero-width space: a place where a word-wrapped label may break a line
+
+
+def breakable(name: str) -> str:
+    """A file name that a word-wrapped label can break after its ``_``, ``-`` and ``.``: unbroken, a long name is one word
+    as wide as itself, and widens the whole side panel past its column."""
+    for ch in "_-.":
+        name = name.replace(ch, ch + BREAK)
+    return name
+
+
 class Step(QFrame):
     """A numbered, collapsible step with a one-line result under its title once it has been done."""
 
