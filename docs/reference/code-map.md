@@ -71,8 +71,8 @@ Lux Sensor/             lux logger firmware and 3D-printable mount
 | `pipeline.export(result, rec, params, folder, trim=, sensors=)` | the export package: CSVs, sensor files, parameters, manifest; trimmed |
 | `sensors.load_sensors(folder, epoch_start, duration)` | the logger's sensor files, cut to a recording |
 | `calibration.locate(time, rgb, sequence, gamma)` | find the calibration sequence |
-| `photometry.fit_light_response(rec, video, params, start, sequence)` | participant fit, step 1: light response |
-| `fit.fit_calibration(rec, video, params, start, end, sequence=...)` | participant fit, step 2: latency and dynamics |
+| `calfit.fit_calibration(rec, video, params, start, sequence)` | participant fit: light response and timing together, on the pupil's time course (every device) |
+| `photometry.fit_light_response(...)`, `fit.fit_calibration(...)`, `photometry.fit_lux_response(...)` | the earlier step-level fits, kept for comparison |
 | `pipeline.calibrate_camera(rec, video, params)` | full-scale luminance of a fixed-exposure scene camera |
 | `logger.Logger().add(source)` / `.start_recording(folder)` / `.stop_recording()` | record sensors into a session folder |
 

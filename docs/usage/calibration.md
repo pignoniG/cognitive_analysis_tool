@@ -1,16 +1,15 @@
 # Participant calibration
 
-Individual differences in pupil size, light sensitivity and response speed, and the imperfectly known photometry
-of a headset's display, limit how well the expected pupil matches the measured one. For the Varjo XR-4 each
-participant watches a full-field **calibration sequence**, which is used in two automatic fits:
+Individual differences in pupil size, light sensitivity and response speed, and the imperfectly known luminance of a
+headset's display, limit how well the expected pupil matches the measured one. Each participant watches a full-field
+**calibration sequence**, and one automatic fit, on the pupil's time course over the sequence, sets together:
 
-1. **Light sensitivity**: how strongly this participant's pupil responds to the display's light, and to its red,
-   green and blue channels.
-2. **Latency and dynamics**: response latency, dilation and constriction speed.
+1. **The light response**: how strongly this participant's pupil responds to the display's light, and to its red, green
+   and blue channels (with glasses and a lux sensor: to the sensor's luminance, and the pupil offset).
+2. **The timing**: the response latency, and how fast the pupil dilates and constricts.
 
-Both start from the **display photometry**: the headset's nominal black and white luminance and gamma, which you
-provide (e.g. from the datasheet) and keep in their own file. The fits are saved in the participant's parameter
-file and applied to their other recordings.
+No photometry of the display is needed: the fitted values are effective for the headset model and its settings (below).
+The fit is saved in the participant's parameter file and applied to their other recordings with the same device.
 
 ## The sequence
 
@@ -36,16 +35,18 @@ milliseconds if the header says `ms`) and `r`/`red`, `g`/`green`, `b`/`blue` col
 `label`; or four unlabelled columns time, R, G, B. Colours may be 0–255 or 0–1. Each step lasts until the next
 starts; the last uses its duration, or the median step length.
 
-## 0. Display photometry (once per headset and settings)
+## 0. Display photometry (optional)
 
-In **Display photometry (datasheet)** enter the headset's black luminance (**Lmin**), white luminance (**Lmax**) and
-**gamma**, then **File → Save display photometry…**. The file is remembered for that device and loaded
-automatically with its recordings; load another one with **File → Load display photometry…** if the headset's
-settings or firmware change.
+The analysis maps the video's colours onto a luminance with the display's black (**Lmin**), white (**Lmax**) and
+**gamma**. Their nominal values (Lmax 100 cd/m², a 10000:1 contrast, gamma 2.2) are enough: the calibration fit cannot
+tell a dimmer headset from a less sensitive participant, or the display's primaries from the eye's colour weighting, so
+it absorbs whatever the nominal values get wrong into the participant's sensitivity and colour weights. Those are then
+*effective* values, valid for this headset model and its settings.
 
-These values do not have to be exact. The sequence cannot tell a dimmer headset from a less sensitive participant,
-so any error common to all participants ends up in each participant's light sensitivity (see below). What matters
-is using the same display photometry for all participants and recordings made with the same headset settings.
+What matters is to use the same values for all participants and recordings with the same headset. To use measured
+values instead, enter them in **Display photometry** and **File → Save display photometry…**: the file is remembered for
+that device, and a photometry file saved in a recording's folder is loaded with it. Compare sensitivities only between
+participants calibrated with the same values.
 
 ## 1. Locate the sequence
 
@@ -58,72 +59,55 @@ sequence fell in such gaps.
 
 The overlay turns on and the start is set. Adjust it by dragging its handle under the plots if needed.
 
-## 2. Fit the light sensitivity
+## 2. Fit the calibration
 
-Click **1. Fit light sensitivity** (tick *Also fit gamma* only if the datasheet gamma clearly fails). For every step
-the fit takes the pupil's level at the end of the step (the mean of its last 30 %) and finds the values that make
-the model match them:
+Click **Fit the calibration**. The fit compares the expected pupil with the measured one, sample by sample over the
+sequence, and finds together:
 
 | Parameter | Determined by |
 |---|---|
 | **Light sensitivity** | where along the grey steps the pupil stops shrinking |
-| **Red/green/blue weight** | the size of the responses to the colour steps, relative to the greys |
-| **Gamma** (optional) | the spacing of the grey steps |
-| **Black level** (optional) | the pupil on the black steps, with the white held at its nominal value |
+| **Red/green/blue weight** (display) | the size of the responses to the colour steps, relative to the greys |
+| **Latency** | the constriction onsets at the brightening steps (reported with their spread), else the whole fit |
+| **Dilation and constriction τ** | how fast the pupil follows each step (*Include the time constants*, on by default) |
+| **Pupil offset** (lux sensor) | the level of the measured pupil against the model |
 
-The pupil offset is not fitted: with the sensitivity and the display's black and white free, an offset would hide an error of them. It stays the value set by hand.
-The black level needs steps long enough to dark-adapt: with short steps the black looks brighter than it is, and the fit reports the contrast it implies against the nominal one.
+Options: *Also fit the transient constriction after brightening* (off by default: on the first Varjo run it explained
+the slow dilation after the black steps instead, and made the session's ΔPD worse), and on a display *Also fit gamma* and
+*Also fit the black level*, which the sequence rarely determines. A step that is still dilating at its end, or a step at the
+tracker's ceiling, is simply part of the curve (or a lower bound): it does not need to settle.
 
-The result window plots the level of each step in its colour against the model before and after, with the
-sensitivity's 95 % interval and warnings (e.g. when steps were still dilating at their end, or when the sensitivity
-is weakly determined). **Apply** sets the values.
+The result window gives the fit error before and after, the ΔPD RMS in the sequence, the fitted values with the
+sensitivity's 95 % interval, and warnings (a weakly determined sensitivity, a value at the end of its range, a poor
+correlation, constrictions that started before the change). **Apply** sets the values, and switches the dynamics on.
 
-A sensitivity of 2 means this participant's pupil responds to the display as the standard observer would to twice
-the luminance, or equally that the display is twice as bright as its photometry says. Compare sensitivities only
-between participants calibrated with the same display photometry.
-
-## 3. Fit latency and dynamics
-
-Click **2. Fit latency and offset** (tick *Include dynamics (time constants and transient)* to fit the
-dilation and constriction time constants together with the constriction beyond the steady state after brightening
-steps and its re-dilation, and turn the dynamics on).
-The latency is measured from the constriction onsets at the sequence's brightening steps (the result reports it with
-its spread); the rest is fitted on the sequence window, and the ΔPD RMS before and after is reported. Applying it
-sets:
-
-- `delay` (latency),
-- with dynamics: `dynamics` = on, `attack` and `release` (dilation and constriction time constants), `transient` and
-  `escape`,
-
-If a value ends on a search limit, a warning explains it: usually the light sensitivity fit needs another look
-(sequence start, display photometry).
+A sensitivity of 2 means this participant's pupil responds to the display as the standard observer would to twice the
+nominal luminance, or equally that the display is twice as bright as its nominal values say.
 
 !!! note "The pupil scale is not fitted"
     `pupil_correction`, the multiplier on the device's pupil scale, stays the value you set (1 by default). One
     sequence does not determine it: it trades off with the light sensitivity and the black point, and a fitted value
     far from 1 was not evidence of a wrong scale ([open issue 1](../OPEN_ISSUES.md)). Set it by hand when there is a
-    reason, such as a known-size reference or a device whose millimetres are known to be off. See
-[Calibration fit](../processing/calibration-fit.md) for how it works.
+    reason, such as a known-size reference, or enter the participant's measured iris on the Varjo
+    ([Varjo](../devices/varjo.md)).
+
+See [Calibration fit](../processing/calibration-fit.md#the-fit-on-the-time-course) for how it works.
 
 ## Glasses with a lux sensor
 
-Pupil Core, Neon and Glasses 3 have no display photometry, so the two fits above are not available. With a lux log
-(and the presenter played on the computer that recorded the tracker), **Load sequence…** takes the presenter's run
-file, which places the sequence, and **Fit sensitivity and offset** fits the light sensitivity and the pupil offset
-on it: see [Calibration fit](../processing/calibration-fit.md#glasses-with-a-lux-sensor). Check first that the sensor
-sees the screen: a sensor dominated by room light barely follows the steps, and the fit says so.
+Pupil Core, Neon and Glasses 3 have no display: the light comes from the lux sensor (distributed with the scene video).
+With a lux log (and the presenter played on the computer that recorded the tracker), **Load sequence…** takes the
+presenter's run file, which places the sequence, and **Fit the calibration** fits the light sensitivity, the pupil offset,
+the latency and the time constants on it (*Also fit the fixation weight* adds the gaze circle's weight, for a scene
+where the gaze area and the background differ). Check first that the sensor sees the screen: a sensor dominated by room
+light barely follows the steps, and the fit says so.
 
-## 4. Save
+## 3. Save
 
 **File → Save parameters as…** and name the file after the participant. Load it with their other recordings, or
 pass it to `cwtool --params` (with the display photometry file as `--display`). Participant files do not contain the display photometry, so loading one keeps the
 display photometry currently in use. (Files from before this change still carry Lmin, Lmax and gamma; loading them
 reproduces their original results.)
-
-!!! warning "Light sensitivity first"
-    The latency fit takes the light response as given. Running it first makes the latency and time constants absorb
-    luminance errors: on the April 2026 Varjo sample, default settings gave a latency of 0 s, which is not
-    physiological.
 
 !!! tip "Adjusting by hand"
     Every fitted value stays editable. Watching the expected curve against the measured one and the **ΔPD RMS in

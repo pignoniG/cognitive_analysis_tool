@@ -142,17 +142,17 @@ The expected pupil is still computed through such stretches, so its filters run 
 
 See [Output files](../reference/outputs.md) for the columns.
 
-## 9. Participant calibration (Varjo)
+## 9. Participant calibration
 
-Run on the participant's calibration sequence, in this order ([Calibration fit](calibration-fit.md),
-[Participant calibration](../usage/calibration.md)). The display photometry is taken as given throughout.
+Run on the participant's calibration sequence ([Calibration fit](calibration-fit.md),
+[Participant calibration](../usage/calibration.md)), for a display device and for glasses with a lux sensor. The display's
+nominal photometry is a starting point: the fit's values are effective for the device.
 
 | # | Step | Details | Code |
 |---|---|---|---|
 | 9.1 | Locate the sequence | change points (> 8 code values, ≥ 0.3 s apart) in the gaze circle colour; candidate starts scored by the relative RMS colour error in linear light with one gain per channel, skipping 0.5 s after each change; step length rescaled if the recording's steps differ; at least half of the window must have analysed video. The app rejects matches with an error above 35 % | `calibration.locate` |
-| 9.2 | Light response | level per step = mean of the measured raw pupil over its last 30 % (after `delay` + 0.1 s), colour = mean weighted linear colour after 0.5 s; weighted least squares of measured ≈ WY(s · L(gains, γ, Lmin)) (+ d) over log s, log gains (optionally γ, log Lmin with Lmax held, and d), weak priors on gains (SD 1.5 in log) and γ (0.2), none on s; five starting sensitivities; the pupil scale is not fitted. Sets `sensitivity`, `gain_r/g/b` (mean 1), with the options `gamma`, `l_min`, `pupil_offset` −d | `photometry.fit_light_response` |
-| 9.3 | Latency | median constriction onset at brightening steps (20–50 % line back to the pre-change level; constrictions ≥ 0.3 mm; onsets < 0.1 s excluded; at least 3), minus the onset bias of the model's constriction shape for each candidate τ. Otherwise fitted | `fit.onset_latency`, `fit.latency_from_onset` |
-| 9.4 | Dynamics, offset | Nelder–Mead over log `attack` (0.3–30 s), log `release` (0.05–5 s) and optionally (the app: whenever it fits the dynamics) log `transient` (0.01–3 mm) and log `escape` (0.3–30 s); a transient at its lower limit is set to 0; the window has 30 s of pre-roll; the pupil scale and, by default, the offset are not fitted (with `fit_offset` the offset is the mean of expected − measured, and `alignment` = fixed is set) | `fit.fit_calibration` |
+| 9.2 | Latency | median constriction onset at brightening steps (20–50 % line back to the pre-change level; constrictions ≥ 0.3 mm; onsets < 0.1 s excluded; at least 3), minus the onset bias of the model's constriction shape for each candidate τ; with fewer onsets the latency is fitted in 9.3 | `fit.onset_latency`, `fit.latency_from_onset` |
+| 9.3 | Light response and timing | on a 50 Hz grid over the sequence (30 s before it for the filters): measured (lightly smoothed) ≈ delay, attack/release filter of WY(s · L) (+ d), with L built as the analysis builds it for the route; bounded least squares over log s, log gains (display; prior SD 1.5 around 1), d (lux, fixed exposure), log `attack` (0.3–30 s), log `release` (0.05–5 s), and on request log `transient`/`escape`, gamma (prior SD 0.2), log Lmin, fixation weight; samples at the tracker's ceiling one-sided; residuals weighted as 2 independent samples per second; four starts | `calfit.fit_calibration` |
 
 Glasses without a calibration sequence can still use a camera calibration:
 `pipeline.calibrate_camera` sets `camera_white` from a fixed-exposure recording with a lux log (median of

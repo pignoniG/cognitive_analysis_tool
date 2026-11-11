@@ -74,10 +74,10 @@ technical details under **Show Details…**. An analysis error appears once per 
 
 - **Set-up** (top of the Data tab, for a display device and for glasses with a lux sensor) lists what is still needed
   before the ΔPD can be trusted, with ✓ for what is done and ✗ for what is not. A display device: the display photometry
-  (loaded, or the nominal defaults in use), the calibration sequence (its overlay shown and its start set), the light
-  sensitivity and the latency and offset (each fitted in this session, or from the participant's parameter file). Glasses
-  with a lux sensor: the lux readings, the sequence, and the sensitivity and offset. A ✗ line is a link to where it is
-  done (the logger folder, the display photometry file, or the Calibrate tab).
+  (loaded, or the nominal values, which is fine: the calibration fit absorbs them), the calibration sequence (its overlay
+  shown and its start set) and the calibration fit (in this session, or from the participant's parameter file). Glasses
+  with a lux sensor: the lux readings, the sequence, and the calibration fit. A ✗ line is a link to where it is done (the
+  logger folder or the Calibrate tab).
 - **Parameters belong to a device.** The calibration and the parameters depend on the hardware (optics, camera, light
   sensor, pupil estimate), so they are not carried from one device to another. A parameter file records the device it was
   set for, and loading it for a recording of another device is refused with a message; opening a recording of another
@@ -182,9 +182,9 @@ options keep their values and are still saved in the parameter file:
 | Pupil Core / Neon / Glasses 3 with a lux log | Lmin, Lmax, Scene camera without lux log, scene circle radius |
 | Pupil Core / Neon / Glasses 3 without a lux log | Lux sensor, Calibration sequence, scene circle radius; with camera exposure `auto` the camera full scale and exposure times, with `fixed` Lmin and Lmax |
 
-The **Calibrate** tab depends on the device. A display device (Varjo) has three steps: the sequence, **Fit light
-sensitivity** and **Fit latency and offset**. Glasses with a lux log have the sequence and one fit, **Fit sensitivity
-and offset**, with a note that they have no display photometry (see below). Glasses without a lux log have no steps,
+The **Calibrate** tab has two steps for a display device (Varjo) and for glasses with a lux log: the sequence, and
+**Fit the calibration**, with the options that apply to the device (gamma and the black level on a display, the
+fixation weight with a lux sensor). Glasses without a lux log have no steps,
 only a note saying what the sequence would need; their dynamics are set by hand in Params → Participant. Once a fit
 is applied, its step shows the result under its title. The lux sensor group starts with a line saying how the luminance is made (sensor ×
 video ratio, or sensor only); the video preview shows the same product for the frame at the cursor, and the weights
@@ -244,19 +244,14 @@ See [Participant calibration](calibration.md) for the procedure.
 - **Start**: the sequence start in seconds.
 - **ΔPD RMS in sequence**: how well the model fits within the sequence, the value to minimise when calibrating
   by hand.
-- **Fit light sensitivity** (step 2): the participant's light sensitivity and channel weights (optionally gamma and the display's black level, *Also fit the black level*), with a
-  result window showing each step's steady-state pupil against the model.
-- **Fit latency and offset** (step 3): the participant's timing and dynamics (neither the pupil scale nor the offset is fitted: set
-  *Pupil scale correction* and *Pupil offset* by hand), optionally with the
-  transient constriction after brightening (pupillary escape). Its result shows two errors: the **fit error**, what
-  the fit minimises (measured − expected in the sequence, without an offset), and the ΔPD RMS in the sequence with
-  the current alignment (with alignment 'recording', after the whole recording's median offset).
-- **Also fit the fixation weight** (glasses with a lux log): adds the gaze circle's weight to the fit below; it needs a
-  scene where the gaze area and the background differ.
-- **Fit sensitivity and offset** (glasses with a lux log): the participant's light sensitivity and the pupil offset by
-  least squares on ΔPD over the sequence, with the luminance the analysis builds from the sensor (and the video). The
-  result window gives the RMS before and after, the sensitivity with its interval, the correlation and warnings;
-  Apply also sets the alignment to `fixed` (see [Calibration fit](../processing/calibration-fit.md#glasses-with-a-lux-sensor)).
+- **Fit the calibration** (step 2): the participant's light sensitivity, colour weights (on a display) or pupil offset
+  (with a lux sensor), latency and time constants, fitted together on the pupil's time course over the sequence. Options:
+  *Include the time constants* (on), *Also fit the transient constriction after brightening* (off), *Also fit gamma* and
+  *Also fit the black level* (display), *Also fit the fixation weight* (lux sensor; it needs a scene where the gaze area
+  and the background differ). The result window gives the **fit error** (measured − expected over the sequence, with the
+  best constant offset) before and after, the ΔPD RMS in the sequence from the whole analysis, the values with the
+  sensitivity's 95 % interval, and warnings; Apply sets them (with a lux sensor also the alignment `fixed`, so the offset
+  carries over). See [Calibration fit](../processing/calibration-fit.md#the-fit-on-the-time-course).
 - **Dynamics** (Params → Participant, drop-down): the latency, always applied, and one switch for the rest: dilation and constriction time
   constants, constriction stages, transient and escape τ (greyed out while the switch is off).
 

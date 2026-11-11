@@ -1235,3 +1235,37 @@ is revised; they remain in the git history of this file.
   an unambiguous check; find the cause with a photodiode or a second camera on the headset display.
 - **Status:** open (needs data).
 
+### 55. The light response fit depends on where the sequence is placed, because of the black steps
+
+- **Where:** `cwtool/photometry.py` (`step_levels`, `fit_light_response`), the full calibration sequence (13 of its 34 steps are
+  black and last 8 s).
+- **Seen (11 November 2026):** on the first VR run, with the log aligned to the video (issue 54) the sequence starts at 16.16 s
+  instead of 16.50 s, and the fitted sensitivity goes from 3.75 to 28 (gains 0.22, 0.02, 2.76). Moving the start in steps of 0.1 s
+  shows a jump between 16.16 and 16.30 s (sensitivity 28 and 4.9). Placed 0.34 s late, the colour window of each black step
+  took in the start of the next, brighter step, so the model expected about 5.4 mm for "black", which happened to match the
+  pupil; placed correctly, black is black, the model expects 6.9 mm, and the pupil reaches 5.3 to 5.9 mm in 8 s (it is still
+  dilating, and four steps are at the tracker's ceiling, issue 52). The fit closes the gap by raising the sensitivity, which also
+  raises the effective black. The misplacement was hiding this.
+- **Tried:** taking the steps that are still dilating as lower bounds (as the ceiling steps): sensitivity 18, still driven by the
+  dim colour steps after black, which are more constricted than their luminance predicts (Blue 64: 3.96 mm against 5.2). Leaving
+  the black steps out: sensitivity 4.9 (4.1 to 5.9), gains 1.13, 0.12, 1.75, and the 21 steps fit to 0.26 mm (0.70 with them). In all
+  variants (sensitivity 3.6 to 28) the session's ΔPD is the same: RMS 0.45 to 0.49 mm, replicate block SD 0.23 to 0.26 mm, light
+  left 3 to 6 %. So the sensitivity is not determined by this sequence, and it is not what limits ΔPD in the session.
+- **Not known:** whether the low weight of green (0.02 to 0.12 in every variant) is the eye or the display's primaries (no
+  photometry of the headset per channel).
+- **Now (11 November 2026):** the calibration is fitted as one time course (`cwtool/calfit.py`), for every device: sensitivity,
+  colour weights (display) or offset (lux sensor), latency and time constants together, so a step that has not settled is part of
+  the curve. On the run it no longer moves with the start (sensitivity 3.40 at the aligned start and 3.40 at +0.3 s, with the
+  colour weights; 2.94 and 2.96 without), the dilation τ is 9.5 s, and the session's ΔPD is as good as the best before (RMS 0.48 mm,
+  replicate blocks 0.26 mm apart). With the transient free it went wrong (transient 1 mm, dilation τ 28 s, replicate blocks 0.41 mm
+  apart), so the transient is opt-in. On synthetic data (dilation τ 10 s on 10 s steps) the time course gives a sensitivity of
+  2.98 (true 3.0), the step levels 3.75. The step-level fits remain in the library and are not used by the app.
+- **Display photometry:** not needed for ΔPD and not asked of the user: the fit's values are effective for the headset model and
+  its settings (a dimmer display and a less sensitive participant are the same fit, as are the display's primaries and the
+  eye's colour weighting). The set-up checklist no longer counts the nominal values as missing.
+- **Proposal:** learn the device's effective values from the validation participants (the median colour weights, gamma and black)
+  and ship them as the device's profile, so that a new participant's calibration fits only one or two values; report the spread
+  of ΔPD over the plausible display values; a calibration sequence without black (a dim lowest level), with long holds only where
+  the pupil dilates, and a short grey anchor in every recording.
+- **Status:** partly fixed (the fit); the sequence and the device profile are open.
+

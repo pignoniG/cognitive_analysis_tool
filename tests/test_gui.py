@@ -144,13 +144,13 @@ def test_options_follow_the_recording(app, varjo_folder, tmp_path):
     w.open_recording(write_neon_recording(tmp_path / "lux", GRAYS, FRAME_TIMES, lux=lambda t: 300.0))
     assert wait_for(app, lambda: w.result is not None and w.recording.device == "pupil_neon")
     assert shown("lux_gain") and shown("gamma") and not w.sequence_controls.isHidden()    # the lux fit
-    assert not w.step_lux.isHidden() and w.step_light.isHidden() and w.step_timing.isHidden()
+    assert not w.step_fit.isHidden() and not w.fit_weight_check.isHidden() and w.fit_gamma_check.isHidden()
     assert shown("attack")
     assert not shown("l_max") and not shown("camera_exposure") and not shown("field_radius")
 
     w.open_recording(write_neon_recording(tmp_path / "nolux", GRAYS, FRAME_TIMES))
     assert wait_for(app, lambda: w.result is not None and w.recording.lux_values is None)
-    assert w.sequence_controls.isHidden() and w.step_lux.isHidden()      # no lux log: nothing to fit, a note says why
+    assert w.sequence_controls.isHidden() and w.step_fit.isHidden()      # no lux log: nothing to fit, a note says why
     assert not w.cal_note.isHidden()
     assert shown("camera_exposure") and shown("l_max") and not shown("camera_white") and not shown("lux_gain")
     p = w.params_panel.params()
@@ -213,10 +213,10 @@ def test_light_response_dialog(app):
     dialog.close()
 
 
-def test_light_sensitivity_button_applies_the_fit(app, varjo_folder, monkeypatch):
+def test_the_calibration_fit_applies_the_light_response(app, varjo_folder, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
     from cwtool import calibration
-    from cwtool.gui import photometry_dialog
-    monkeypatch.setattr(photometry_dialog.PhotometryDialog, "exec", lambda self: True)
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.Apply)
     w = MainWindow()
     w.open_recording(varjo_folder)
     assert wait_for(app, lambda: w.result is not None)
@@ -224,11 +224,13 @@ def test_light_sensitivity_button_applies_the_fit(app, varjo_folder, monkeypatch
     w.set_sequence(calibration.Sequence(steps, "test"))
     w.sequence_check.setChecked(True)
     w.sequence_start.setValue(0)
-    assert w.light_button.isEnabled()
+    assert w.fit_button.isEnabled()
     before = w.params_panel.params()
-    w.light_button.click()
+    w.fit_button.click()
     assert wait_for(app, lambda: w.params_panel.params() != before)
-    assert w.params_panel.params().l_max == before.l_max     # the display photometry is not fitted
+    after = w.params_panel.params()
+    assert after.l_max == before.l_max                         # the display photometry is not fitted
+    assert after.dynamics and w.fits_done["calibration"] and "Applied" in w.step_fit.summary.text()
     w.close()
 
 
@@ -383,13 +385,13 @@ def test_glasses_calibration_controls_and_run_file(app, tmp_path):
     w = MainWindow()
     w.recording = rec
     w._show_sequence_controls("lux")
-    assert not w.sequence_controls.isHidden() and not w.step_lux.isHidden()
-    assert w.step_light.isHidden() and w.step_timing.isHidden() and w.find_sequence_button.isHidden()
+    assert not w.sequence_controls.isHidden() and not w.step_fit.isHidden()
+    assert w.fit_gamma_check.isHidden() and not w.fit_weight_check.isHidden() and w.find_sequence_button.isHidden()
     w._show_sequence_controls("display")
-    assert not w.step_light.isHidden() and not w.step_timing.isHidden() and w.step_lux.isHidden()
+    assert not w.step_fit.isHidden() and not w.fit_gamma_check.isHidden() and w.fit_weight_check.isHidden()
     assert not w.find_sequence_button.isHidden()
     w._show_sequence_controls("none")
-    assert w.sequence_controls.isHidden() and w.step_lux.isHidden() and not w.cal_note.isHidden()
+    assert w.sequence_controls.isHidden() and w.step_fit.isHidden() and not w.cal_note.isHidden()
 
     # A presenter run file places the sequence from its onset times on the computer's clock.
     run = tmp_path / "run.csv"

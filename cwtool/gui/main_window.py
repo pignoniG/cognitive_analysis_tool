@@ -16,19 +16,16 @@ from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayo
                                QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget,
                                QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
-from cwtool import __version__, alignment, calibration, devices, hrv, palette, pipeline, quality, sensors
-from cwtool.fit import fit_calibration
+from cwtool import __version__, alignment, calfit, calibration, devices, hrv, palette, pipeline, quality, sensors
 from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.icons import icon, tinted
-from cwtool.gui.photometry_dialog import PhotometryDialog
 from cwtool.gui.side_panel import PreviewHolder, Rail, Step
 from cwtool.gui.trim_panel import TrimPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
 from cwtool.params import DISPLAY_FIELDS, DeviceMismatch, DisplayPhotometry, Parameters
-from cwtool.photometry import fit_light_response, fit_lux_response
 from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video
 
@@ -176,7 +173,7 @@ class MainWindow(QMainWindow):
         self.setup_label.setPalette(link_palette)
         setup_layout.addWidget(self.setup_label)
         self.setup_box.hide()
-        self.fits_done = {"light": False, "timing": False, "lux": False}     # fits applied in this session
+        self.fits_done = {"calibration": False}     # the calibration fit applied in this session
 
         self.own_folder_button = QPushButton("Use the recording's own folder")
         self.own_folder_button.setToolTip(self.forget_logs_action.toolTip())
@@ -352,63 +349,45 @@ class MainWindow(QMainWindow):
         self.step_sequence = Step(1, "Sequence", sequence_content)
         self.sequence_controls = self.step_sequence
 
-        self.fit_gamma_check = QCheckBox("Also fit gamma")
-        self.fit_gamma_check.setToolTip("Fit the display gamma from the spacing of the grey steps (usually "
-                                        "weakly determined; keep the datasheet value unless it clearly fails)")
-        self.fit_black_check = QCheckBox("Also fit the black level (Lmin)")
-        self.fit_black_check.setToolTip("Fit the display's black level with the white held at its nominal value. "
-                                        "Needs steps long enough to dark-adapt; otherwise the black looks "
-                                        "brighter than it is. Compare the contrast with the datasheet's")
-        self.light_button = QPushButton("Fit light sensitivity")
-        self.light_button.setToolTip("Fits the participant's light sensitivity and channel weights from the "
-                                     "steady-state pupil on each step, given the display photometry")
-        self.light_button.clicked.connect(self.fit_light)
-        light_content = QWidget()
-        light_form = QFormLayout(light_content)
-        light_form.setContentsMargins(0, 0, 0, 0)
-        light_form.addRow(self.fit_gamma_check)
-        light_form.addRow(self.fit_black_check)
-        light_form.addRow(self.light_button)
-        self.step_light = Step(2, "Fit light sensitivity", light_content)
-
-        self.fit_dynamics_check = QCheckBox("Include dynamics (time constants and transient)")
+        self.fit_dynamics_check = QCheckBox("Include the time constants (dilation and constriction)")
         self.fit_dynamics_check.setChecked(True)
-        self.fit_dynamics_check.setToolTip("Also fit the dilation and constriction time constants and the "
-                                           "transient constriction after brightening (pupillary escape), and "
-                                           "turn the dynamics on")
-        self.fit_button = QPushButton("Fit latency and offset")
-        self.fit_button.setToolTip("Fits the participant's latency, dilation/constriction time constants and pupil "
-                                   "offset on the sequence. The pupil scale is not fitted (set it by hand). Fit the "
-                                   "light sensitivity first.")
-        self.fit_button.clicked.connect(self.fit_sequence)
-        timing_content = QWidget()
-        timing_form = QFormLayout(timing_content)
-        timing_form.setContentsMargins(0, 0, 0, 0)
-        timing_form.addRow(self.fit_dynamics_check)
-        timing_form.addRow(self.fit_button)
-        self.step_timing = Step(3, "Fit latency and offset", timing_content)
-
+        self.fit_dynamics_check.setToolTip("Also fit how fast the pupil dilates and constricts, and turn the dynamics on")
+        self.fit_dynamics_check.toggled.connect(lambda on: self.fit_transient_check.setEnabled(on))
+        self.fit_transient_check = QCheckBox("Also fit the transient constriction after brightening")
+        self.fit_transient_check.setToolTip("The constriction beyond the steady state after a brightening step and its "
+                                            "re-dilation (pupillary escape). Off by default: on the first Varjo run it "
+                                            "explained the slow dilation after the black steps instead and made the "
+                                            "session's ΔPD worse (open issue 55)")
+        self.fit_gamma_check = QCheckBox("Also fit gamma")
+        self.fit_gamma_check.setToolTip("Fit the display gamma from the spacing of the grey steps (usually weakly "
+                                        "determined; keep the nominal value unless it clearly fails)")
+        self.fit_black_check = QCheckBox("Also fit the black level (Lmin)")
+        self.fit_black_check.setToolTip("Fit the display's effective black, with the white held at its nominal value. "
+                                        "Black steps rarely let the pupil dark-adapt, so it is often poorly determined")
         self.fit_weight_check = QCheckBox("Also fit the fixation weight")
         self.fit_weight_check.setToolTip("Also fit the gaze circle's weight of the weighted colour (open issue 47). It "
                                          "needs a scene where the gaze area and the background differ, such as a "
                                          "screen in a room; on a uniform field it cannot be determined. Check the "
                                          "result on other recordings before relying on it")
-        self.lux_fit_button = QPushButton("Fit sensitivity and offset")
-        self.lux_fit_button.setToolTip("Glasses with a lux sensor: fits the light sensitivity and the pupil offset "
-                                       "by least squares on ΔPD over the sequence, with the luminance the analysis "
-                                       "builds from the sensor (and the video)")
-        self.lux_fit_button.clicked.connect(self.fit_lux)
-        lux_content = QWidget()
-        lux_form = QFormLayout(lux_content)
-        lux_form.setContentsMargins(0, 0, 0, 0)
-        lux_form.addRow(self.fit_weight_check)
-        lux_form.addRow(self.lux_fit_button)
-        self.step_lux = Step(2, "Fit sensitivity and offset", lux_content)
+        self.fit_button = QPushButton("Fit the calibration")
+        self.fit_button.setToolTip("Fits the participant's light sensitivity, colour weights (on a display), latency and "
+                                   "time constants together, on the pupil's time course over the sequence. With a lux "
+                                   "sensor the pupil offset is fitted too. No display photometry is needed: the fitted "
+                                   "values are effective for this device and its settings")
+        self.fit_button.clicked.connect(self.fit_sequence)
+        fit_content = QWidget()
+        fit_form = QFormLayout(fit_content)
+        fit_form.setContentsMargins(0, 0, 0, 0)
+        for check in (self.fit_dynamics_check, self.fit_transient_check, self.fit_gamma_check, self.fit_black_check,
+                      self.fit_weight_check):
+            fit_form.addRow(check)
+        fit_form.addRow(self.fit_button)
+        self.step_fit = Step(2, "Fit the calibration", fit_content)
 
         cal_page = QWidget()
         cal_layout = QVBoxLayout(cal_page)
         cal_layout.addWidget(self.cal_note)
-        for step in (self.step_sequence, self.step_light, self.step_timing, self.step_lux):
+        for step in (self.step_sequence, self.step_fit):
             cal_layout.addWidget(step)
         cal_layout.addStretch(1)
 
@@ -630,17 +609,18 @@ class MainWindow(QMainWindow):
         self.set_sequence(sequence)
 
     def _show_sequence_controls(self, mode: str) -> None:
-        """The calibration steps for a display device (the sequence and both fits), a glasses recording with a lux
-        log (the sequence and the sensitivity and offset fit) or neither (nothing to fit, a note says why)."""
+        """The calibration steps: the sequence and the one fit, for a display device or a glasses recording with a lux log
+        (with the options that apply to each), or neither (nothing to fit, a note says why)."""
         self.step_sequence.setVisible(mode != "none")
         self.find_sequence_button.setVisible(mode == "display")
-        self.step_light.setVisible(mode == "display")
-        self.step_timing.setVisible(mode == "display")
-        self.step_lux.setVisible(mode == "lux")
+        self.step_fit.setVisible(mode in ("display", "lux"))
+        for check in (self.fit_gamma_check, self.fit_black_check):
+            check.setVisible(mode == "display")
+        self.fit_weight_check.setVisible(mode == "lux")
         self.cal_note.setText({
             "lux": "Glasses have no display photometry, so the light comes from the lux sensor. Load the "
-                   "presenter's run file: its onset times place the start. The fit sets the light sensitivity "
-                   "and the pupil offset; set the dynamics by hand (Params, Participant).",
+                   "presenter's run file: its onset times place the start. The fit sets the light sensitivity, "
+                   "the pupil offset, the latency and the time constants together.",
             "none": "The calibration sequence and its fits need the display photometry (Varjo) or a lux sensor "
                     "log (glasses). Set the dynamics by hand in Params, Participant.",
         }.get(mode, ""))
@@ -658,8 +638,7 @@ class MainWindow(QMainWindow):
         self.forget_logs_action.setEnabled(self._logs_for_recording() is not None and not busy)
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
-        self.light_button.setEnabled(self.fit_button.isEnabled())
-        self.lux_fit_button.setEnabled(self.fit_button.isEnabled())
+        self.fit_transient_check.setEnabled(self.fit_dynamics_check.isChecked())
         self.find_sequence_button.setEnabled(self.video is not None and not busy)
         has_lux = has_rec and self.recording.lux_values is not None
         self.camera_button.setVisible(has_rec and self.recording.luminance_source == "lux_sensor")
@@ -1030,95 +1009,43 @@ class MainWindow(QMainWindow):
         self._update_sequence_rms()
         self._update_state()
 
-    def fit_light(self) -> None:
-        """Fit the display photometry (sensitivity, gains, gamma, black level) on the calibration sequence, in the
-        background.
-        """
-        rec, video, params = self.recording, self.video, self.params_panel.params()
-        start, sequence, gamma = self.sequence_start.value(), self.sequence, self.fit_gamma_check.isChecked()
-        black = self.fit_black_check.isChecked()
-
-        def work(progress, cancelled):
-            """Background task: the display photometry fit."""
-            return fit_light_response(rec, video, params, start, sequence, fit_gamma=gamma, fit_black=black)
-
-        self._start_task(work, self._light_done, "Fitting the light response on the calibration sequence…")
-
-    def _light_done(self, fit) -> None:
-        if PhotometryDialog(fit, self).exec():
-            self.params_panel.set_params(fit.params)
-            self.fits_done["light"] = True
-            self.step_light.set_summary(f"Applied: light sensitivity ×{fit.params.sensitivity:.3g}")
-            self._update_state()
-
-    def fit_lux(self) -> None:
-        """Fit the sensitivity and pupil offset of a glasses recording on the calibration sequence, in the background.
-        """
+    def fit_sequence(self) -> None:
+        """Fit the participant's light response and timing together on the calibration sequence, in the background."""
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, sequence = self.sequence_start.value(), self.sequence
-        weight = self.fit_weight_check.isChecked()
+        options = dict(fit_dynamics=self.fit_dynamics_check.isChecked(),
+                       fit_transient=self.fit_transient_check.isChecked() and self.fit_dynamics_check.isChecked())
+        if rec.luminance_source == "display":
+            options.update(fit_gamma=self.fit_gamma_check.isChecked(), fit_black=self.fit_black_check.isChecked())
+        else:
+            options.update(fit_fixation=self.fit_weight_check.isChecked())
 
         def work(progress, cancelled):
-            """Background task: the lux sensor fit."""
-            return fit_lux_response(rec, video, params, start, sequence, fit_fixation=weight)
-
-        self._start_task(work, self._lux_done, "Fitting the light sensitivity and offset on the sequence…")
-
-    def _lux_done(self, fit) -> None:
-        lo, hi = fit.sensitivity_range
-        notes = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {n}</span>" for n in fit.notes)
-        box = QMessageBox(QMessageBox.Question, "Light sensitivity and offset",
-                          f"<b>ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm</b> "
-                          f"(before: the current parameters with their best offset)<br><br>"
-                          f"light sensitivity ×{fit.sensitivity:.3g} (95 % {lo:.3g}–{hi:.3g})<br>"
-                          + (f"fixation weight {fit.fixation_weight:.2f}<br>" if fit.weight_fitted else "") +
-                          f"pupil offset {fit.offset:+.3f} mm &nbsp; correlation with the expected pupil "
-                          f"{fit.correlation:.2f}<br>"
-                          f"{fit.steps} steps with pupil data, {fit.seconds:.0f} s{notes}<br><br>"
-                          f"Apply? Alignment will be set to 'fixed' so the offset carries over to this "
-                          f"participant's other recordings.", QMessageBox.Apply | QMessageBox.Cancel, self)
-        if box.exec() == QMessageBox.Apply:
-            self.params_panel.set_params(fit.params)
-            self.fits_done["lux"] = True
-            self.step_lux.set_summary(f"Applied: sensitivity ×{fit.sensitivity:.3g}, offset {fit.offset:+.3f} mm, "
-                                      f"ΔPD RMS in sequence {fit.rms_after:.3f} mm")
-
-    def fit_sequence(self) -> None:
-        """Fit latency, dynamics and pupil scale on the calibration sequence, in the background."""
-        rec, video, params = self.recording, self.video, self.params_panel.params()
-        start, dynamics = self.sequence_start.value(), self.fit_dynamics_check.isChecked()
-        sequence = self.sequence
-        end = start + sequence.duration
-
-        def work(progress, cancelled):
-            """Background task: the calibration sequence fit."""
-            return fit_calibration(rec, video, params, start, end, fit_dynamics=dynamics, cancelled=cancelled,
-                                   sequence=sequence, fit_transient=dynamics)
+            """Background task: the calibration fit."""
+            return calfit.fit_calibration(rec, video, params, start, sequence, cancelled=cancelled, **options)
 
         self._start_task(work, self._fit_done, "Fitting on the calibration sequence…", cancellable=True)
 
     def _fit_done(self, fit) -> None:
-        dyn = (f"<br>dilation τ {fit.attack:.2f} s, constriction τ {fit.release:.2f} s"
-               if fit.params.dynamics else "")
-        if fit.transient > 0:
-            dyn += f"<br>transient {fit.transient:.2f} mm, escape τ {fit.escape:.2f} s"
+        lo, hi = fit.intervals["sensitivity"]
         notes = "".join(f"<br><span style='color:{palette.WARNING}'>⚠ {n}</span>" for n in fit.notes)
+        offset = ("Alignment is set to 'fixed' so that the offset carries over."
+                  if fit.params.alignment == "fixed" and "pupil_offset" in fit.values else "The pupil offset is not fitted.")
         box = QMessageBox(QMessageBox.Question, "Calibration fit",
-                          f"<b>Fit error: {fit.fit_rms_before:.3f} → {fit.fit_rms_after:.3f} mm</b> (what the fit "
-                          f"minimises: measured − expected in the sequence, without an offset)<br>"
-                          f"ΔPD RMS in sequence with alignment '{fit.params.alignment}': {fit.rms_before:.3f} → "
-                          f"{fit.rms_after:.3f} mm<br><br>"
-                          f"latency {fit.delay:.2f} s{dyn}<br>"
-                          f"(the pupil scale stays ×{fit.pupil_correction:.3g}, as set by hand; the pupil "
-                          f"offset is not fitted)"
-                          f"{notes}<br><br>Apply? These values carry over to this participant's other "
-                          f"recordings.",
+                          f"<b>Fit error: {fit.fit_rms_before:.3f} → {fit.fit_rms_after:.3f} mm</b> (measured − expected "
+                          f"over the sequence, with the best constant offset; correlation {fit.correlation:.2f})<br>"
+                          f"ΔPD RMS in sequence: {fit.rms_before:.3f} → {fit.rms_after:.3f} mm<br><br>"
+                          f"{fit.summary()}<br>light sensitivity 95 %: {lo:.3g}–{hi:.3g}<br>"
+                          f"(the pupil scale stays ×{fit.params.pupil_correction:.3g}, as set by hand. {offset})"
+                          f"{notes}<br><br>Apply? These values carry over to this participant's other recordings "
+                          f"with this device.",
                           QMessageBox.Apply | QMessageBox.Cancel, self)
         if box.exec() == QMessageBox.Apply:
             self.params_panel.set_params(fit.params)
-            self.fits_done["timing"] = True
-            self.step_timing.set_summary(f"Applied: latency {fit.delay:.2f} s, ΔPD RMS in sequence "
-                                         f"{fit.rms_after:.3f} mm")
+            self.fits_done["calibration"] = True
+            self.step_fit.set_summary(f"Applied: light sensitivity ×{fit.values['sensitivity']:.3g}, latency "
+                                      f"{fit.params.delay:.2f} s, ΔPD RMS in sequence {fit.rms_after:.3f} mm")
+            self._update_state()
 
     def calibrate_camera(self) -> None:
         """Calibrate the camera's full-scale luminance against the lux sensor and put it in the parameters."""
@@ -1250,15 +1177,16 @@ class MainWindow(QMainWindow):
         if rec.luminance_source == "display":
             if self._display_path is not None:
                 photometry = (True, f"Display photometry loaded ({self._display_path.name})", "action:display")
-            else:
-                photometry = (False, "Display photometry not loaded: the nominal defaults are used", "action:display")
-            return [photometry, sequence, fit("Light sensitivity", "light"), fit("Latency and offset", "timing")]
+            else:      # optional: the calibration fit absorbs the display's real luminance and primaries
+                photometry = (True, "Display photometry: nominal values (optional, the calibration fit absorbs them)",
+                              "action:display")
+            return [photometry, sequence, fit("Calibration", "calibration")]
         if rec.luminance_source == "lux_sensor":
             if rec.lux_values is not None:
                 lux = (True, f"Lux readings found ({len(rec.lux_values):,})", "action:logs")
             else:
                 lux = (False, "Lux readings not found: choose the logger folder", "action:logs")
-            return [lux, sequence, fit("Sensitivity and offset", "lux")]
+            return [lux, sequence, fit("Calibration", "calibration")]
         return []
 
     def _update_setup(self) -> None:

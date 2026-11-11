@@ -1,8 +1,8 @@
 # Calibration fit
 
-`cwtool/photometry.py`, `cwtool/fit.py` and `cwtool/calibration.py`. Estimates a participant's parameters from
-their calibration sequence, given the display photometry. For the procedure, see
-[Participant calibration](../usage/calibration.md).
+`cwtool/calfit.py` (the fit the app and the command line use), `cwtool/calibration.py` (the sequence), and the earlier
+step-level fits in `cwtool/photometry.py` and `cwtool/fit.py`. Estimates a participant's parameters from their calibration
+sequence. For the procedure, see [Participant calibration](../usage/calibration.md).
 
 ## Locating the sequence
 
@@ -21,7 +21,59 @@ their calibration sequence, given the display photometry. For the procedure, see
 
 The best candidate gives the start and, if rescaled, the new step timing.
 
-## Light sensitivity
+## The fit on the time course
+
+`calfit.fit_calibration`, for every device and every luminance route (a display such as the Varjo, glasses with a lux
+sensor, a fixed-exposure camera, a camera mapped onto Lmin–Lmax).
+
+**What is compared.** The expected pupil (Watson & Yellott at the luminance × the light sensitivity, delayed by the
+latency, then through the dilation and constriction filter) against the measured pupil (lightly smoothed), sample by
+sample over the sequence, on a 50 Hz grid that starts 30 s earlier so the filters have settled. The luminance is built
+exactly as the analysis builds it for the recording's route, from the video's colours (and the lux sensor), so the fit
+sees what the analysis sees.
+
+**What is fitted, together.**
+
+| Value | Display (Varjo) | Lux sensor, fixed-exposure camera |
+|---|---|---|
+| Light sensitivity | yes | yes |
+| Red, green and blue weights | yes (a weak prior around 1, a relative balance with mean 1) | no |
+| Pupil offset | no: the model's level is the sensitivity's | yes: the sensor's luminance is not absolute enough |
+| Latency | from the constriction onsets at the brightening steps (at least 3), else fitted | same |
+| Dilation and constriction τ | with *Include the time constants* (default) | same |
+| Transient and escape τ | only when asked | same |
+| Gamma, the display's black | only when asked | — |
+| Fixation weight | — | only when asked |
+
+**Why on the time course.** The earlier fit took the level at the end of each step as its steady state, and fitted the
+timing afterwards. A step that has not settled by its end, typically a black step after a bright one (the pupil dilates
+with a time constant of several seconds), was then read as a level that is too small, and the sensitivity depended on how
+the steps were cut: on the first Varjo run it went from 3.75 to 28 when the sequence moved by 0.34 s
+([open issue 55](../OPEN_ISSUES.md)). On the time course a step that is still dilating is just part of the curve. On a
+synthetic participant whose pupil dilates with τ 10 s on 10 s steps, the time course gives a sensitivity of 2.98 (true 3.0)
+and τ 10.2 s, the step levels 3.75; moving the start by 0.3 s does not change the result.
+
+**The display's values are effective.** The sensitivity multiplies the luminance and the colour weights the display's
+primaries, so a dimmer headset and a less sensitive participant are the same fit, as are the display's primaries and the
+eye's weighting. No photometry is needed for ΔPD; the nominal Lmin, Lmax and gamma are a starting point, and the fitted
+values hold for this headset model and its settings. Compare sensitivities only between recordings made with the same
+nominal values.
+
+**Lower bounds and noise.** Samples at the tracker's ceiling ([Varjo](../devices/varjo.md)) only require the model to be
+at least as large. Each sample counts as if there were about two independent ones per second, so the priors keep their
+weight against a long sequence. The result gives approximate 95 % intervals from the curvature at the solution, the fit
+error before and after (measured − expected with the best constant offset), the ΔPD RMS in the sequence from the whole
+analysis, and notes: the latency and its onsets, anticipated constrictions, a weakly determined sensitivity, a value at the
+end of its range, a poor correlation, the share at the ceiling.
+
+**The transient is opt-in.** On the first Varjo run, with the transient free, it and a dilation τ at the end of its range
+(28 s) explained the slow dilation after the black steps, and the session's ΔPD got worse (replicate blocks 0.41 mm apart,
+against 0.26 mm without it). Asked for and found below 0.1 mm, it is left off and the rest fitted again.
+
+The sections below describe the earlier fits (`photometry.fit_light_response`, `fit.fit_calibration`,
+`photometry.fit_lux_response`). They remain in the library, for comparison, and are not used by the app.
+
+## Light sensitivity (step levels, earlier)
 
 `photometry.fit_light_response`.
 
@@ -78,7 +130,7 @@ and leaves the predictions unchanged.
 **Real recording** (Varjo XR-4, April 2026, default display photometry): see
 [open issue 36](../OPEN_ISSUES.md) for the results and what they say about sensitivity and pupil scale.
 
-## Latency and offset
+## Latency and offset (earlier)
 
 `fit.fit_calibration`, run after the light sensitivity.
 
@@ -151,7 +203,7 @@ On synthetic recordings the fit recovers latency, time constants, transient and 
 `tests/test_alignment_and_fit.py`). On the seven Varjo calibration recordings the transient lowers the ΔPD RMS in the
 sequence by 5–19 % and in the 4 s after brightening steps by 15–25 %; see [open issue 43](../OPEN_ISSUES.md).
 
-## Glasses with a lux sensor
+## Glasses with a lux sensor (earlier)
 
 `photometry.fit_lux_response`. Glasses have no display photometry, and their luminance comes from the lux sensor and
 the scene video (see [Luminance](luminance.md#lux-sensor-devices)), so the display fit above does not apply. What is
