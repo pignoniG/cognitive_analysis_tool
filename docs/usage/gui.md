@@ -252,7 +252,7 @@ See [Participant calibration](calibration.md) for the procedure.
   best constant offset) before and after, the ΔPD RMS in the sequence from the whole analysis, the values with the
   sensitivity's 95 % interval, and warnings; Apply sets them (with a lux sensor also the alignment `fixed`, so the offset
   carries over). See [Calibration fit](../processing/calibration-fit.md#the-fit-on-the-time-course).
-- **Dynamics** (Params → Participant, drop-down): the latency, always applied, and one switch for the rest: dilation and constriction time
+- **Dynamics** (Params → Participant, drop-down): the latency, always applied, and one switch for the rest: dilation (a fast and a slow part) and constriction time
   constants, constriction stages, transient and escape τ (greyed out while the switch is off).
 
 ## Video preview

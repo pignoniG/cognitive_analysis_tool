@@ -79,6 +79,7 @@ class _Problem:
         self.offset_in = np.searchsorted(t, start) - lo
         self.luminance = prep.luminance[lo:hi]
         self.stages = params.constriction_stages
+        self.fast = (params.dilation_fast_share, params.dilation_fast)
         self.base = steady_pupil(self.luminance, params, field_area)
         seg = slice(lo + self.offset_in, hi)
         scale = prep.scale if prep.scale is not None else 1.0
@@ -95,7 +96,7 @@ class _Problem:
                  transient: float = 0.0, escape: float = 2.0) -> np.ndarray:
         """The expected pupil in the fit window for these dynamics parameters."""
         pd = dynamic_pupil(self.base, self.luminance, self.fs, delay, attack, release, transient, escape,
-                           self.stages)
+                           self.stages, *self.fast)
         return pd[self.offset_in:][self.use]
 
     def solve(self, delay, attack, release, transient=0.0, escape=2.0) -> tuple[float, float]:

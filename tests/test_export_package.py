@@ -249,3 +249,16 @@ def test_a_parameter_file_of_another_device_is_refused(tmp_path, capsys):
     Parameters().save(p, participant_only=True, device="pupil_core")
     assert cli.main([str(folder), "--params", str(p)]) == 2
     assert "hardware" in capsys.readouterr().err
+
+
+def test_files_from_before_the_two_part_dilation_keep_one_time_constant(tmp_path):
+    from dataclasses import asdict
+    p = tmp_path / "old.json"
+    old = asdict(Parameters())
+    old.pop("dilation_fast_share")
+    old.pop("dilation_fast")
+    p.write_text(json.dumps(old))
+    assert Parameters.load(p).dilation_fast_share == 0.0          # reproduces what it was fitted with
+    assert Parameters().dilation_fast_share == 0.6                # new analyses use the two parts
+    Parameters().save(p)
+    assert Parameters.load(p).dilation_fast_share == 0.6

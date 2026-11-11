@@ -1269,3 +1269,28 @@ is revised; they remain in the git history of this file.
   the pupil dilates, and a short grey anchor in every recording.
 - **Status:** partly fixed (the fit); the sequence and the device profile are open.
 
+### 56. The session's dark stretches were under-corrected: one dilation time constant is too slow after moderate light
+
+- **Where:** `cwtool/model.py` (`attack_release`), `Parameters.dilation_fast_share`, `Parameters.dilation_fast`.
+- **Seen (11 November 2026):** on the first VR run, with the calibration fitted (one dilation time constant, 9.6 s), the
+  pupil in the session was larger than the model wherever the light was low: night scene +0.95 mm, uniform grey steps below
+  0.5 cd/m² +0.78 mm, overcast scene +0.41 mm, bright conditions about 0. In a dark segment the gap grew from +0.2 mm at 0.5 s
+  to +0.9 mm at 3 s and stayed: the pupil re-dilated much faster than the model. In the calibration it did not (its black steps
+  follow very bright ones, after which the pupil stays small for seconds), so the fit took the slow time constant. Part of the
+  gap is the task: in the dark the n-back blocks were +0.96 mm above the model and the rests +0.49 mm (in dim light +0.31 and
+  -0.12), so the load added about 0.45 mm at both light levels, which ΔPD should keep.
+- **Now:** the dilation has a fast part (60 %, 1 s, fixed) and a slow part (`attack`, fitted, up to 120 s in the calibration
+  fit). On the run: the dark gap +0.79 → +0.35 mm, the session's ΔPD RMS 0.476 → 0.447 mm, replicate blocks 0.26 → 0.23 mm apart,
+  light left 5 → 2 %, the calibration's fit error 0.640 → 0.613 mm; the slow part settles at 76 s. Moving the sequence by 0.3 s
+  changes nothing. The effective sensitivity becomes 8 to 10 (3.4 with one time constant): the slow part now carries the long
+  memory of bright light. Old parameter files are read with one time constant (`dilation_fast_share` 0).
+- **Tried:** fitting the two parts freely: the slow one ran to its limit and the sensitivity to 27 (share 0.8); not
+  determined by this calibration.
+- **Not known:** the share and the fast time constant (60 % and 1 s are the best of a small grid on one recording); whether
+  the slow part is better described by the preceding bright and blue light (the post-illumination response), which would be
+  more faithful; what remains of the dark gap (+0.35 mm, part of it the task).
+- **Proposal:** dark steps after moderate light in the calibration, so that the two parts can be separated; the share and the
+  fast time constant from the validation participants (population values); a model of the slow part driven by the preceding
+  light.
+- **Status:** open (the values need data).
+

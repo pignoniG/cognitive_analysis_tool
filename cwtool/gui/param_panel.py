@@ -33,7 +33,13 @@ NUMBERS = {
                          "Participant multiplier on the device's pupil scale (1 = device default)"),
     "timelag": ("Time lag (s)", -60, 60, 0.05, 2, "Shift of the luminance signal"),
     "delay": ("Delay (s)", 0, 5, 0.05, 2, "Pupil response latency"),
-    "attack": ("Dilation τ (s)", 0.01, 60, 0.5, 2, "Time constant while the pupil dilates (attack)"),
+    "attack": ("Dilation τ, slow (s)", 0.01, 120, 0.5, 2,
+               "Time constant of the slow part of the dilation (after bright light the pupil re-dilates slowly)"),
+    "dilation_fast_share": ("Fast dilation share", 0, 1, 0.05, 2,
+                            "Share of the dilation with the fast time constant; the rest is slow. 0: one time constant "
+                            "(files written before the two-part dilation). Fixed, not fitted (open issue 56)"),
+    "dilation_fast": ("Dilation τ, fast (s)", 0.05, 10, 0.1, 2,
+                      "Time constant of the fast part of the dilation (after moderate light the pupil re-dilates quickly)"),
     "release": ("Constriction τ (s)", 0.01, 60, 0.1, 2,
                 "Time constant while the pupil constricts (release), per constriction stage"),
     "transient": ("Transient (mm)", 0, 5, 0.05, 2,
@@ -112,8 +118,10 @@ SIGNAL_GROUPS = [
 PAGES = (("Participant", PARTICIPANT_GROUPS), ("Light", LIGHT_GROUPS), ("Signal", SIGNAL_GROUPS))
 GROUPS = PARTICIPANT_GROUPS + LIGHT_GROUPS + SIGNAL_GROUPS
 # Shown in drop-down sections next to the controls they belong to (see ParameterPanel).
-DYNAMICS_GROUP = (None, ["delay", "dynamics", "attack", "release", "constriction_stages", "transient", "escape"])
-DYNAMICS_SWITCHED = ("attack", "release", "constriction_stages", "transient", "escape")
+DYNAMICS_GROUP = (None, ["delay", "dynamics", "attack", "dilation_fast_share", "dilation_fast", "release",
+                         "constriction_stages", "transient", "escape"])
+DYNAMICS_SWITCHED = ("attack", "dilation_fast_share", "dilation_fast", "release", "constriction_stages", "transient",
+                     "escape")
 VIDEO_GROUP = (None, ["fixation_radius_deg", "field_radius", "background_excludes_fixation", "analysis_width"])
 
 

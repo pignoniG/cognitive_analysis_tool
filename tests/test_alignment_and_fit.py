@@ -62,7 +62,7 @@ def test_old_align_mean_key_is_converted():
 def test_fit_recovers_latency_dynamics_and_offset_and_keeps_the_scale(tmp_path, correction=1.0):
     true = dict(delay=0.3, attack=3.0, release=0.4, k=correction, b=0.35)
     # photometry assumed correct; one-stage participant; the pupil scale is set by hand, never fitted
-    params = Parameters(constriction_stages=1, pupil_correction=correction)
+    params = Parameters(dilation_fast_share=0.0, constriction_stages=1, pupil_correction=correction)
     colours = [0] * 10 + [0, 255, 40, 200, 0, 128, 255, 60, 0, 180] * 2  # 6 s steps below
     step = 6
     rate = 100
@@ -106,7 +106,7 @@ def test_the_scale_is_the_one_set_by_hand(tmp_path):
 
 def test_fit_on_flat_pupil_fits_offset_only(varjo_folder):
     rec, video = _load(varjo_folder)   # constant pupil
-    fit = fit_calibration(rec, video, Parameters(pupil_correction=1.25), start=0.0, fit_dynamics=False,
+    fit = fit_calibration(rec, video, Parameters(dilation_fast_share=0.0, pupil_correction=1.25), start=0.0, fit_dynamics=False,
                           fit_offset=True)
     assert fit.pupil_correction == 1.25 and np.isfinite(fit.pupil_offset)
     assert np.isfinite(fit.rms_after)
@@ -159,7 +159,7 @@ def test_fit_recovers_the_transient(tmp_path):
     (pupillary escape): the transient and its escape time constant are recovered, and fitting them
     lowers the error."""
     from cwtool import calibration
-    params = Parameters(constriction_stages=1)
+    params = Parameters(dilation_fast_share=0.0, constriction_stages=1)
     colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191, 20, 230]
     step, rate = 8, 100
     true = dict(delay=0.3, attack=3.0, release=0.3, transient=0.6, escape=2.0)
@@ -210,7 +210,7 @@ def test_two_stage_constriction_keeps_the_true_latency(tmp_path):
     """With a gradual (two-stage) constriction the measured onset comes later than the latency; the fit
     corrects for the model's own onset bias, so ``delay`` is the latency."""
     from cwtool import calibration
-    params = Parameters(constriction_stages=2)
+    params = Parameters(dilation_fast_share=0.0, constriction_stages=2)
     colours = [0, 36, 73, 109, 146, 182, 219, 255, 0, 128, 255, 64, 191]
     step, rate = 8, 100
     true = dict(delay=0.3, attack=3.0, release=0.25)
@@ -229,7 +229,7 @@ def test_two_stage_constriction_keeps_the_true_latency(tmp_path):
     assert fit.delay == pytest.approx(true["delay"], abs=0.04)
     assert fit.release == pytest.approx(true["release"], rel=0.2)
     assert fit.params.constriction_stages == 2
-    one = fit_calibration(rec, video, Parameters(constriction_stages=1), start=0.0, sequence=seq)
+    one = fit_calibration(rec, video, Parameters(dilation_fast_share=0.0, constriction_stages=1), start=0.0, sequence=seq)
     assert fit.rms_after < one.rms_after
 
 

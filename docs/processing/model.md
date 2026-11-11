@@ -59,6 +59,23 @@ y_n = \alpha\, y_{n-1} + (1 - \alpha)\, x_n, \qquad \alpha = e^{-1/(f_s \tau)}
 Dilation is slow (`attack`, default 6 s) and constriction fast (`release`, default 0.5 s). The filter acts on the
 expected diameter after the formula and starts from the first value.
 
+**Dilation in two parts.** After bright light the pupil re-dilates slowly, after moderate light quickly. One dilation time
+constant cannot do both: fitted on the calibration (whose dark steps all follow bright ones) it was 9.6 s on the first Varjo
+run, and in the session the pupil had dilated 0.9 mm more than that predicts within 3 s of the light dimming, so the dark
+stretches were under-corrected by 0.8 mm ([open issue 56](../OPEN_ISSUES.md)). The dilation is therefore the mixture of two
+filters with the same constriction:
+
+\[
+y = s_\text{fast}\, \mathrm{AR}(x;\ \tau_\text{fast}, \tau_\text{release}) + (1 - s_\text{fast})\, \mathrm{AR}(x;\ \tau_\text{attack}, \tau_\text{release})
+\]
+
+with the fast share \(s_\text{fast}\) (`dilation_fast_share`, 0.6) and its time constant \(\tau_\text{fast}\)
+(`dilation_fast`, 1 s) fixed, and \(\tau_\text{attack}\) the slow part, fitted (it may be tens of seconds: the pupil stays
+small long after bright light). The calibration cannot separate the two parts (with both free the slow one ran to its limit
+and the sensitivity with it), so the fast part is held at these values until the validation participants give population
+values. Parameter files written before it have no `dilation_fast_share` and are read with 0: one time constant, as they were
+fitted.
+
 A one-pole constriction starts at full speed, while the pupil's starts gradually. With `constriction_stages` = 2 a
 second stage with the same time constant `release` acts while the pupil constricts (it follows the first stage
 directly while that rises), so the constriction is S-shaped, like that of a critically damped second-order system,

@@ -109,7 +109,13 @@ class Parameters:
     # On by default with two stages, the combination that behaved best on the Varjo calibration recordings
     # (open issues 26 and 43); the calibration fit sets the time constants per participant.
     dynamics: bool = True
-    attack: float = 6.0                  # s, dilation
+    attack: float = 6.0                  # s, dilation (its slow part)
+    # Dilation in two parts: this share of it with the fast time constant, the rest with ``attack``. The pupil re-dilates
+    # slowly after bright light and quickly after moderate light; one time constant fitted on the calibration (whose dark
+    # steps follow bright ones) left the session's dark stretches 0.8 mm too small (open issue 56). Fixed, not fitted:
+    # the calibration cannot separate the two parts (with them free the slow one ran to its limit).
+    dilation_fast_share: float = 0.6
+    dilation_fast: float = 1.0           # s, the fast part's time constant
     release: float = 0.5                 # s, constriction (per stage)
     # 1: constriction starts at full speed (one-pole); 2: it starts gradually (two poles, S-shaped),
     # so ``delay`` is the latency to the first movement rather than absorbing the slow start.
@@ -189,8 +195,10 @@ class Parameters:
                     data[key] = data[key] * factor
             if "pupil_scale" in data and profile.pupil_scale:
                 data["pupil_correction"] = data.pop("pupil_scale") / profile.pupil_scale
-        # Files written before the constriction stages existed were fitted with one.
+        # Files written before the constriction stages existed were fitted with one, and before the two-part dilation with
+        # one dilation time constant.
         data.setdefault("constriction_stages", 1)
+        data.setdefault("dilation_fast_share", 0.0)
         data["version"] = PARAMS_VERSION   # versions 2 and 3 differ only in which fields a file holds
         known = {f.name for f in fields(cls)}
         values = asdict(base) if base is not None else {}

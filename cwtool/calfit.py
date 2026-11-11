@@ -45,6 +45,7 @@ INDEPENDENT_PER_SECOND = 2.0  # the smoothed pupil carries about two independent
 OFFSET_RANGE = (-5.0, 5.0)   # mm
 FIXATION_RANGE = (0.05, 1.0)
 MIN_SAMPLES = 200            # valid samples the window needs
+SLOW_ATTACK_MAX = 120.0      # s, the dilation's slow part
 WEAK_RATIO = 4.0             # a 95 % interval of the sensitivity wider than this factor: weakly determined
 MIN_CORRELATION = 0.3        # measured against expected; below this the model does not follow the pupil
 CEILING_NOTE = 0.01          # share of the window at the tracker's ceiling above which a note says so
@@ -58,7 +59,9 @@ RANGES = {
     "fixation_weight": (FIXATION_RANGE, False),
     "pupil_offset": (OFFSET_RANGE, False),
     "delay": (DELAY_RANGE, False),
-    "attack": (ATTACK_RANGE, True), "release": (RELEASE_RANGE, True),
+    # the slow part of a two-part dilation can be very slow (the pupil stays small for tens of seconds after bright light):
+    # on the first Varjo run it settled at 76 s, against the 30 s limit of a single time constant
+    "attack": ((ATTACK_RANGE[0], SLOW_ATTACK_MAX), True), "release": (RELEASE_RANGE, True),
     "transient": (TRANSIENT_RANGE, True), "escape": (ESCAPE_RANGE, True),
 }
 LABELS = {"sensitivity": "light sensitivity", "gain_r": "red weight", "gain_g": "green weight", "gain_b": "blue weight",
@@ -253,7 +256,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         pd = model.delay(steady, FIT_RATE, v["delay"])
         if not dynamics:
             return pd
-        pd = model.attack_release(pd, FIT_RATE, v["attack"], v["release"], stages)
+        pd = model.attack_release(pd, FIT_RATE, v["attack"], v["release"], stages, params.dilation_fast_share,
+                                  params.dilation_fast)
         if v["transient"] > 0:
             tr = model.delay(model.escape_transient(L, FIT_RATE, v["escape"]), FIT_RATE, v["delay"])
             for _ in range(stages):

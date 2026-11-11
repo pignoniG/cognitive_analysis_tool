@@ -99,3 +99,17 @@ def test_the_transient_is_switched_with_the_dynamics():
     off = pipeline.expected_pupil(lum, fs, Parameters(dynamics=False, transient=1.0), 9896)
     assert (on < no_transient - 0.1).any()
     assert off == pytest.approx(pipeline.expected_pupil(lum, fs, Parameters(dynamics=False), 9896))
+
+
+def test_a_two_part_dilation_mixes_a_fast_and_a_slow_filter():
+    from cwtool import model
+    fs = 100.0
+    x = np.concatenate([np.full(500, 3.0), np.full(3000, 6.0), np.full(500, 2.0)])     # dilate, then constrict
+    one = model.attack_release(x, fs, 10.0, 0.3)
+    assert np.array_equal(model.attack_release(x, fs, 10.0, 0.3, fast_share=0.0), one)   # share 0: one filter
+    two = model.attack_release(x, fs, 10.0, 0.3, fast_share=0.6, fast_attack=1.0)
+    fast = model.attack_release(x, fs, 1.0, 0.3)
+    assert two == pytest.approx(0.6 * fast + 0.4 * one)
+    # 3 s into the dilation the two-part pupil has gone most of the way, the single slow one a quarter
+    i = 500 + 300
+    assert (two[i] - 3) / 3 > 0.6 > 0.3 > (one[i] - 3) / 3

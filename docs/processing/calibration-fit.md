@@ -40,7 +40,7 @@ sees what the analysis sees.
 | Red, green and blue weights | yes (a weak prior around 1, a relative balance with mean 1) | no |
 | Pupil offset | no: the model's level is the sensitivity's | yes: the sensor's luminance is not absolute enough |
 | Latency | from the constriction onsets at the brightening steps (at least 3), else fitted | same |
-| Dilation and constriction τ | with *Include the time constants* (default) | same |
+| Dilation (slow part) and constriction τ | with *Include the time constants* (default); the fast part of the dilation (60 %, 1 s) is held fixed | same |
 | Transient and escape τ | only when asked | same |
 | Gamma, the display's black | only when asked | — |
 | Fixation weight | — | only when asked |

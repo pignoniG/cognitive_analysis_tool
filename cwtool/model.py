@@ -56,7 +56,23 @@ def delay(signal, fs: float, seconds: float) -> np.ndarray:
     return out if f == 0.0 else (1 - f) * out + f * shifted(k + 1)
 
 
-def attack_release(signal, fs: float, attack: float, release: float, stages: int = 1) -> np.ndarray:
+def attack_release(signal, fs: float, attack: float, release: float, stages: int = 1, fast_share: float = 0.0,
+                   fast_attack: float = 1.0) -> np.ndarray:
+    """The attack/release filter (:func:`_attack_release`), with a dilation in two parts: ``fast_share`` of it with the time
+    constant ``fast_attack`` and the rest with ``attack``. Constriction is the same in both. With ``fast_share`` 0 it is one
+    filter.
+
+    After bright light the pupil re-dilates slowly (the calibration's black steps all follow bright ones: a time constant
+    near 10 s), after moderate light quickly: in the session of the first Varjo run the pupil had dilated 0.9 mm more than a
+    single 9.6 s time constant predicts within 3 s of the light dimming (open issue 56). A fast and a slow part follow both."""
+    if fast_share <= 0:
+        return _attack_release(signal, fs, attack, release, stages)
+    share = min(float(fast_share), 1.0)
+    return (share * _attack_release(signal, fs, fast_attack, release, stages)
+            + (1 - share) * _attack_release(signal, fs, attack, release, stages))
+
+
+def _attack_release(signal, fs: float, attack: float, release: float, stages: int = 1) -> np.ndarray:
     """One-pole filter with time constant ``attack`` (s) while the input rises
     above the output and ``release`` (s) while it falls.
 

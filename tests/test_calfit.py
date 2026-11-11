@@ -17,6 +17,7 @@ import test_lux_fit as LUX
 import test_photometry as PHOTO
 import test_quality as QUALITY
 
+ONE_TAU = Parameters(dilation_fast_share=0.0)      # the synthetic participants dilate with one time constant
 TRUTH = dict(sensitivity=3.0, gains=PHOTO.TRUE_GAINS / PHOTO.TRUE_GAINS.mean(), offset=0.3, attack=4.0)
 
 
@@ -29,7 +30,7 @@ def participant(tmp_path_factory):
 
 def test_the_display_route_recovers_the_participant_and_does_not_move_with_the_start(participant):
     rec, video, seq = participant
-    fit = calfit.fit_calibration(rec, video, Parameters(), PHOTO.LEAD, seq, fit_offset=True)
+    fit = calfit.fit_calibration(rec, video, ONE_TAU, PHOTO.LEAD, seq, fit_offset=True)
     assert fit.route == "display"
     assert fit.values["sensitivity"] == pytest.approx(TRUTH["sensitivity"], rel=0.1)
     assert [fit.values[k] for k in ("gain_r", "gain_g", "gain_b")] == pytest.approx(TRUTH["gains"], rel=0.05)
@@ -42,16 +43,16 @@ def test_the_display_route_recovers_the_participant_and_does_not_move_with_the_s
     assert p.l_max == Parameters().l_max and p.pupil_correction == 1.0             # neither the display nor the scale
     assert any("effective" in n for n in fit.notes)
     # placed 0.3 s late, the step-level fit moves by half; this one does not
-    late = calfit.fit_calibration(rec, video, Parameters(), PHOTO.LEAD + 0.3, seq, fit_offset=True)
+    late = calfit.fit_calibration(rec, video, ONE_TAU, PHOTO.LEAD + 0.3, seq, fit_offset=True)
     assert late.values["sensitivity"] == pytest.approx(fit.values["sensitivity"], rel=0.02)
-    old = [fit_light_response(rec, video, Parameters(), PHOTO.LEAD + d, seq, fit_offset=True).sensitivity for d in (0, 0.3)]
+    old = [fit_light_response(rec, video, ONE_TAU, PHOTO.LEAD + d, seq, fit_offset=True).sensitivity for d in (0, 0.3)]
     assert abs(np.log(old[1] / old[0])) > 5 * abs(np.log(late.values["sensitivity"] / fit.values["sensitivity"]))
 
 
 def test_steps_that_have_not_settled_are_followed_not_read_as_levels(tmp_path):
     """A slow dilation (τ 10 s) on 10 s steps: the darker steps end short of their level. The step-level fit reads them as
     levels; the time course does not."""
-    p = Parameters()
+    p = ONE_TAU
     seq = calibration.scaled(calibration.STAIRCASE_20, PHOTO.STEP / calibration.STEP_SECONDS)
     colours = [(0, 0, 0)] * int(PHOTO.LEAD / PHOTO.STEP) + [s.rgb for s in seq.steps]
     rate = PHOTO.RATE
@@ -127,10 +128,36 @@ def test_a_fit_can_be_cancelled_and_the_transient_is_opt_in(participant):
     with pytest.raises(InterruptedError):
         calfit.fit_calibration(rec, video, Parameters(), PHOTO.LEAD, seq, cancelled=lambda: True)
     # the participant has no transient: asked for, it is found too small and left off, with a note
-    fit = calfit.fit_calibration(rec, video, Parameters(), PHOTO.LEAD, seq, fit_offset=True, fit_transient=True)
+    fit = calfit.fit_calibration(rec, video, ONE_TAU, PHOTO.LEAD, seq, fit_offset=True, fit_transient=True)
     assert fit.params.transient == 0.0 and "transient" not in fit.values
     assert any("No transient" in n for n in fit.notes)
     # without the dynamics the time constants are neither fitted nor switched on
     still = calfit.fit_calibration(rec, video, Parameters(dynamics=False), PHOTO.LEAD, seq, fit_dynamics=False,
                                    fit_offset=True)
     assert not still.params.dynamics and "attack" not in still.values
+
+
+def test_a_two_part_dilation_is_followed(tmp_path):
+    """A participant who re-dilates with a fast part (60 %, 1 s) and a slow one (20 s): with the two-part dilation the fit
+    finds the slow part and follows the pupil; with one time constant it does worse."""
+    p = Parameters()
+    seq = calibration.scaled(calibration.STAIRCASE_20, PHOTO.STEP / calibration.STEP_SECONDS)
+    colours = [(0, 0, 0)] * int(PHOTO.LEAD / PHOTO.STEP) + [s.rgb for s in seq.steps]
+    rate = PHOTO.RATE
+    t = np.arange(len(colours) * PHOTO.STEP * rate) / rate
+    rgb = np.array([colours[min(int(x // PHOTO.STEP), len(colours) - 1)] for x in t], dtype=float)
+    L = luminance.absolute_luminance(luminance.to_linear(rgb, p.gamma), p.l_min, p.l_max, (1.0, 1.0, 1.0))
+    pd = model.attack_release(model.delay(model.watson_yellott(L * 3.0, p.age, varjo.PROFILE.field_area), rate, 0.3),
+                              rate, 20.0, 0.4, 1, fast_share=0.6, fast_attack=1.0)
+    pd = pd + np.random.default_rng(2).normal(0, 0.02, len(pd))
+    folder = write_varjo_recording(tmp_path / "two", colours, seconds_per_level=PHOTO.STEP, iris_mm=12.0,
+                                   pupil_mm=lambda x: float(pd[min(int(x * rate), len(t) - 1)]))
+    rec = devices.load(folder)
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec))
+    two = calfit.fit_calibration(rec, video, replace(p, constriction_stages=1), PHOTO.LEAD, seq, fit_gains=False)
+    one = calfit.fit_calibration(rec, video, replace(p, constriction_stages=1, dilation_fast_share=0.0), PHOTO.LEAD, seq,
+                                 fit_gains=False)
+    assert two.values["attack"] == pytest.approx(20.0, rel=0.3)
+    assert two.values["sensitivity"] == pytest.approx(3.0, rel=0.15)
+    assert two.fit_rms_after < 0.05 and two.fit_rms_after < one.fit_rms_after / 2
+    assert two.params.dilation_fast_share == 0.6                      # fixed, not fitted

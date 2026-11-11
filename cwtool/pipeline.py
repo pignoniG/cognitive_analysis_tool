@@ -183,7 +183,7 @@ def steady_pupil(lum, params: Parameters, field_area: float) -> np.ndarray:
 
 def dynamic_pupil(steady: np.ndarray, lum: np.ndarray, fs: float, delay: float, attack: Optional[float],
                   release: Optional[float], transient: float = 0.0, escape: float = 2.0,
-                  stages: int = 1) -> np.ndarray:
+                  stages: int = 1, fast_share: float = 0.0, fast_attack: float = 1.0) -> np.ndarray:
     """The steady-state pupil ``steady`` for luminance ``lum``, delayed. With the dynamics (``attack``
     given), it then goes through the attack/release filter with ``stages`` constriction stages, minus
     the transient constriction of ``transient`` mm at most, which has the same latency and
@@ -191,7 +191,7 @@ def dynamic_pupil(steady: np.ndarray, lum: np.ndarray, fs: float, delay: float, 
     pd = model.delay(steady, fs, delay)
     if attack is None:
         return pd
-    pd = model.attack_release(pd, fs, attack, release, stages)
+    pd = model.attack_release(pd, fs, attack, release, stages, fast_share, fast_attack)
     if transient > 0:
         tr = model.delay(model.escape_transient(lum, fs, escape), fs, delay)
         for _ in range(stages):
@@ -206,7 +206,8 @@ def expected_pupil(lum: np.ndarray, fs: float, params: Parameters, field_area: f
     dyn = params.dynamics
     return dynamic_pupil(steady_pupil(lum, params, field_area), lum, fs, params.delay,
                          params.attack if dyn else None, params.release if dyn else None,
-                         params.transient, params.escape, params.constriction_stages)
+                         params.transient, params.escape, params.constriction_stages,
+                         params.dilation_fast_share, params.dilation_fast)
 
 
 def windowed_difference(time, a, b, window_n: int):
