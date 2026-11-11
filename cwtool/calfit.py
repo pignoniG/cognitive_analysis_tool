@@ -120,10 +120,15 @@ def _luminance_model(rec: Recording, video: VideoResult, params: Parameters, mod
         return out.reshape(len(t), *a.shape[1:])
 
     fix, bg = on_t(video.fixation_lin), on_t(video.background_lin)
+    last = {}
 
     def weighted(v: dict) -> np.ndarray:
-        w = v["fixation_weight"]
-        return at_gamma(w * fix + (1 - w) * bg, v["gamma"])
+        """The gaze-weighted colour; kept while the weight and the gamma do not change (they are rarely fitted)."""
+        key = (v["fixation_weight"], v["gamma"])
+        if last.get("key") != key:
+            w = v["fixation_weight"]
+            last.update(key=key, value=at_gamma(w * fix + (1 - w) * bg, v["gamma"]))
+        return last["value"]
 
     def gains(v: dict) -> np.ndarray:
         return np.array([v["gain_r"], v["gain_g"], v["gain_b"]], dtype=float)

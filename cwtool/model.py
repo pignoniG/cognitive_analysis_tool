@@ -83,21 +83,28 @@ def _attack_release(signal, fs: float, attack: float, release: float, stages: in
     (S-shaped) instead of at full speed, and dilation is unchanged.
     """
     x = np.asarray(signal, dtype=float)
-    y = np.empty_like(x)
     if len(x) == 0:
-        return y
-    a_att = np.exp(-1 / (fs * attack))
-    a_rel = np.exp(-1 / (fs * release))
-    y[0] = x[0]
-    for n in range(1, len(x)):
-        a = a_att if x[n] > y[n - 1] else a_rel
-        y[n] = a * y[n - 1] + (1 - a) * x[n]
+        return np.empty_like(x)
+    # The recursion is a loop; on plain Python floats it runs several times faster than on NumPy elements (the calibration
+    # fit calls it hundreds of times), with the same double-precision arithmetic, so the result is identical.
+    a_att = float(np.exp(-1 / (fs * attack)))
+    a_rel = float(np.exp(-1 / (fs * release)))
+    b_att, b_rel = 1 - a_att, 1 - a_rel
+    xs = x.tolist()
+    ys = [0.0] * len(xs)
+    prev = ys[0] = xs[0]
+    for n in range(1, len(xs)):
+        v = xs[n]
+        prev = a_att * prev + b_att * v if v > prev else a_rel * prev + b_rel * v
+        ys[n] = prev
     for _ in range(stages - 1):
-        x, y = y, np.empty_like(y)
-        y[0] = x[0]
-        for n in range(1, len(x)):
-            y[n] = x[n] if x[n] >= y[n - 1] else a_rel * y[n - 1] + (1 - a_rel) * x[n]
-    return y
+        xs, ys = ys, [0.0] * len(ys)
+        prev = ys[0] = xs[0]
+        for n in range(1, len(xs)):
+            v = xs[n]
+            prev = v if v >= prev else a_rel * prev + b_rel * v
+            ys[n] = prev
+    return np.array(ys)
 
 
 # Half-saturation of the transient, in log10 units of luminance increase. On the seven Varjo calibration
