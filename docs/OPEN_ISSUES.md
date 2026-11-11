@@ -1294,3 +1294,23 @@ is revised; they remain in the git history of this file.
   light.
 - **Status:** open (the values need data).
 
+### 57. The calibration sequence redesigned for the time-course fit
+
+- **Where:** `cwtool/calibration.py` (`TIME_COURSE`), `docs/calibration-tool/index.html` (its default preset), the validation
+  task's `src/calibration.js`.
+- **Why (11 November 2026):** the full calibration's 13 black steps never settled in 8 s and reached the Varjo's ceiling
+  (issues 52, 55); every dark step followed a bright one, so the dilation was measured only after bright light (issue 56);
+  each colour came after a black reset; regular 8 s steps were anticipated (three constrictions before the change).
+- **Now:** the time-course calibration (30 steps, 281 s): eight greys from 12 to 255, no black; dimming after moderate light
+  (Gray 128 → 24, Gray 96 → 12) and after bright light (Gray 255 → 24, Blue 255 → 12), each probe linked to its context so it
+  works in any participant's order; colours at 128 and 255 after a grey of the same luminance; two repeats; lengths 6 to 20 s.
+  The presenter's JavaScript and cwtool give the same order (checked for a participant). The fit can free the two parts of
+  the dilation (`fit_dilation_parts`). On the first run (old sequence) freeing them gave a fast share of 0.42 and a slow τ of
+  41 s, the best calibration fit (0.571 mm) but a worse session (dark gap +0.67 mm against +0.35 with 0.6 fixed): the old
+  sequence measures the dilation after bright light only. On a synthetic participant whose dilation does not depend on the
+  preceding light both sequences recover the parts exactly, so the difference can only show on real pupils.
+- **Not known:** whether the new sequence separates the two parts on real recordings; whether Gray 12 keeps the pupil below the
+  Varjo's ceiling for every participant; the colour weights from equal-luminance changes against those from black resets.
+- **Proposal:** record the next participants with it, fit with and without the parts free, and compare the session's dark gap.
+- **Status:** open (needs data).
+

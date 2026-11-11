@@ -13,11 +13,13 @@ The fit is saved in the participant's parameter file and applied to their other 
 
 ## The sequence
 
-The default sequence is the [calibration presenter](calibration-tool.md)'s **full calibration**: the 8 grey levels of
-Eckert et al. (2022), longer the darker; red, green and blue at 64, 128, 191 and 255, each after a black step; two greys
-repeated; 34 steps, 291 s, in a pseudo-random order (`calibration.DEFAULT`). The presenter usually scrambles it again
-for each participant, seeded by their ID: load the run file it saves (**Load sequence…**), which records the order
-played, or regenerate it with `calibration.scrambled(calibration.DEFAULT, "<participant ID>")`.
+The default sequence is the [calibration presenter](calibration-tool.md)'s **time-course calibration**: eight greys from
+12 to 255 (no black); dimming after moderate and after bright light; red, green and blue at 128 and 255, each after a grey
+of the same luminance; two greys repeated; 30 steps, 281 s, in a pseudo-random order (`calibration.TIME_COURSE`). The
+presenter usually scrambles it again for each participant, seeded by their ID: load the run file it saves (**Load
+sequence…**), which records the order played, or regenerate it with
+`calibration.scrambled(calibration.TIME_COURSE, "<participant ID>")`. Recordings made before November 2026 used the **full
+calibration** (34 steps, 291 s, with black steps: `calibration.DEFAULT`, also in the **Built-in** menu).
 
 The 20-step staircase used before October 2026 (greys 0 to 255, then red, green and blue at 64 to 255, 6 s each,
 ascending) is still available (**Built-in** menu, `calibration.STAIRCASE_20`) for recordings made with it; its fixed
@@ -72,7 +74,9 @@ sequence, and finds together:
 | **Dilation and constriction τ** | how fast the pupil follows each step (*Include the time constants*, on by default) |
 | **Pupil offset** (lux sensor) | the level of the measured pupil against the model |
 
-Options: *Also fit the transient constriction after brightening* (off by default: on the first Varjo run it explained
+Options: *Also fit the two parts of the dilation* (the share and time constant of its fast part, otherwise held at 60 % and
+1 s; only with the time-course calibration, which dims after moderate as well as after bright light), *Also fit the
+transient constriction after brightening* (off by default: on the first Varjo run it explained
 the slow dilation after the black steps instead, and made the session's ΔPD worse), and on a display *Also fit gamma* and
 *Also fit the black level*, which the sequence rarely determines. A step that is still dilating at its end, or a step at the
 tracker's ceiling, is simply part of the curve (or a lower bound): it does not need to settle.

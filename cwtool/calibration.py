@@ -1,5 +1,6 @@
-"""Full-field calibration sequences: the calibration presenter's default (``DEFAULT``), the 20-step staircase
-used before October 2026 (``STAIRCASE_20``), or one read from a sequence CSV or a presenter run file."""
+"""Full-field calibration sequences: the calibration presenter's default (``TIME_COURSE``, from November 2026), its
+earlier default (``DEFAULT``, the full calibration), the 20-step staircase used before October 2026 (``STAIRCASE_20``), or
+one read from a sequence CSV or a presenter run file."""
 
 from __future__ import annotations
 
@@ -173,9 +174,48 @@ def scrambled(sequence: Sequence, seed, avoid: bool = True) -> Sequence:
                       for i in order], f"{sequence.name}, order {seed}")
 
 
-# The default: the presenter's default sequence in its preset order. A participant's run is usually scrambled
-# again with their ID (load the run file, or use ``scrambled(DEFAULT, participant_id)``).
+# The presenter's default until November 2026, in its preset order. A participant's run is usually scrambled again with
+# their ID (load the run file, or use ``scrambled(DEFAULT, participant_id)``).
 DEFAULT = full_calibration()
+
+
+# The time-course calibration (November 2026): (label, rgb, seconds, linked), in the design's order. Each probe that needs
+# a context carries it as its first step, linked, so the probes work in any order the participant's seed gives.
+TIME_COURSE_ITEMS = (
+    # the light-response curve: eight greys about 2.3 times apart in luminance (Gray 12 to 255), no black, so the pupil
+    # stays below a tracker's ceiling (open issue 52); longer the darker, and irregular, so the steps cannot be anticipated
+    *((f"Gray {v}", (v, v, v), s, False) for v, s in ((12, 14), (24, 12), (40, 10), (64, 9), (96, 8), (140, 7), (196, 6),
+                                                      (255, 8))),
+    # dimming after moderate light and after bright light: the fast and the slow part of the dilation (open issue 56)
+    ("Gray 128 (before dim)", (128, 128, 128), 7, False), ("Gray 24 (after moderate)", (24, 24, 24), 15, True),
+    ("Gray 96 (before dim)", (96, 96, 96), 6, False), ("Gray 12 (after moderate)", (12, 12, 12), 16, True),
+    ("Gray 255 (before dim)", (255, 255, 255), 6, False), ("Gray 24 (after bright)", (24, 24, 24), 18, True),
+    ("Blue 255 (before dim)", (0, 0, 255), 7, False), ("Gray 12 (after blue)", (12, 12, 12), 20, True),
+    # the colour weights: each colour after a grey of the same luminance (the presenter's sRGB weights), not after black
+    ("Gray 60 (as Red 128)", (60, 60, 60), 8, False), ("Red 128", (128, 0, 0), 8, True),
+    ("Gray 110 (as Green 128)", (110, 110, 110), 7, False), ("Green 128", (0, 128, 0), 9, True),
+    ("Gray 33 (as Blue 128)", (33, 33, 33), 9, False), ("Blue 128", (0, 0, 128), 8, True),
+    ("Gray 127 (as Red 255)", (127, 127, 127), 8, False), ("Red 255", (255, 0, 0), 7, True),
+    ("Gray 220 (as Green 255)", (220, 220, 220), 7, False), ("Green 255", (0, 255, 0), 8, True),
+    ("Gray 76 (as Blue 255)", (76, 76, 76), 8, False), ("Blue 255", (0, 0, 255), 9, True),
+    # test-retest
+    ("Gray 64 (repeat)", (64, 64, 64), 9, False), ("Gray 196 (repeat)", (196, 196, 196), 7, False),
+)
+
+
+def time_course_calibration(seed=PRESET_SEED) -> Sequence:
+    """The presenter's default from November 2026 ("Time-course calibration"), made for the fit on the pupil's time course
+    (:mod:`cwtool.calfit`). 30 steps, 281 s: eight greys from Gray 12 to 255 with no black; four dimming probes, after
+    moderate light (Gray 128, Gray 96) and after bright light (Gray 255, Blue 255), which separate the fast and the slow part
+    of the dilation; six colours (red, green and blue at 128 and 255), each after a grey of the same luminance; two greys
+    repeated. Durations are irregular (6 to 20 s), longer where the pupil dilates. In the presenter's pseudo-random order
+    for ``seed``, each probe moving with its context."""
+    items = list(TIME_COURSE_ITEMS)
+    order = _scramble([it[1] for it in items], [it[3] for it in items], seed)
+    return _sequence([items[i] for i in order], "time-course calibration (presenter default)")
+
+
+TIME_COURSE = time_course_calibration()
 
 _TIME_NAMES = ("time", "t", "timestamp", "start", "seconds", "onset")
 _CHANNELS = (("r", "red"), ("g", "green"), ("b", "blue"))

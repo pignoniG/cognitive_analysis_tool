@@ -321,7 +321,9 @@ class MainWindow(QMainWindow):
         load_sequence.clicked.connect(self.choose_sequence)
         default_sequence = QPushButton("Built-in")
         builtin = QMenu(default_sequence)
-        builtin.addAction("Full calibration (the presenter's default, preset order)",
+        builtin.addAction("Time-course calibration (the presenter's default, preset order)",
+                          lambda: self.set_sequence(calibration.TIME_COURSE))
+        builtin.addAction("Full calibration (the presenter's default until November 2026)",
                           lambda: self.set_sequence(calibration.DEFAULT))
         builtin.addAction("20-step staircase (before October 2026)",
                           lambda: self.set_sequence(calibration.STAIRCASE_20))
@@ -352,12 +354,17 @@ class MainWindow(QMainWindow):
         self.fit_dynamics_check = QCheckBox("Include the time constants (dilation and constriction)")
         self.fit_dynamics_check.setChecked(True)
         self.fit_dynamics_check.setToolTip("Also fit how fast the pupil dilates and constricts, and turn the dynamics on")
-        self.fit_dynamics_check.toggled.connect(lambda on: self.fit_transient_check.setEnabled(on))
+        self.fit_dynamics_check.toggled.connect(lambda on: (self.fit_transient_check.setEnabled(on),
+                                                            self.fit_parts_check.setEnabled(on)))
         self.fit_transient_check = QCheckBox("Also fit the transient constriction after brightening")
         self.fit_transient_check.setToolTip("The constriction beyond the steady state after a brightening step and its "
                                             "re-dilation (pupillary escape). Off by default: on the first Varjo run it "
                                             "explained the slow dilation after the black steps instead and made the "
                                             "session's ΔPD worse (open issue 55)")
+        self.fit_parts_check = QCheckBox("Also fit the two parts of the dilation")
+        self.fit_parts_check.setToolTip("Fit the share and the time constant of the dilation's fast part too (otherwise held at "
+                                        "60 % and 1 s). Only a sequence that dims after moderate as well as after bright "
+                                        "light determines them: the time-course calibration (open issue 56)")
         self.fit_gamma_check = QCheckBox("Also fit gamma")
         self.fit_gamma_check.setToolTip("Fit the display gamma from the spacing of the grey steps (usually weakly "
                                         "determined; keep the nominal value unless it clearly fails)")
@@ -378,8 +385,8 @@ class MainWindow(QMainWindow):
         fit_content = QWidget()
         fit_form = QFormLayout(fit_content)
         fit_form.setContentsMargins(0, 0, 0, 0)
-        for check in (self.fit_dynamics_check, self.fit_transient_check, self.fit_gamma_check, self.fit_black_check,
-                      self.fit_weight_check):
+        for check in (self.fit_dynamics_check, self.fit_transient_check, self.fit_parts_check, self.fit_gamma_check,
+                      self.fit_black_check, self.fit_weight_check):
             fit_form.addRow(check)
         fit_form.addRow(self.fit_button)
         self.step_fit = Step(2, "Fit the calibration", fit_content)
@@ -639,6 +646,7 @@ class MainWindow(QMainWindow):
         self.export_action.setEnabled(self.result is not None)
         self.fit_button.setEnabled(self.result is not None and self.sequence_check.isChecked() and not busy)
         self.fit_transient_check.setEnabled(self.fit_dynamics_check.isChecked())
+        self.fit_parts_check.setEnabled(self.fit_dynamics_check.isChecked())
         self.find_sequence_button.setEnabled(self.video is not None and not busy)
         has_lux = has_rec and self.recording.lux_values is not None
         self.camera_button.setVisible(has_rec and self.recording.luminance_source == "lux_sensor")
@@ -1014,7 +1022,8 @@ class MainWindow(QMainWindow):
         rec, video, params = self.recording, self.video, self.params_panel.params()
         start, sequence = self.sequence_start.value(), self.sequence
         options = dict(fit_dynamics=self.fit_dynamics_check.isChecked(),
-                       fit_transient=self.fit_transient_check.isChecked() and self.fit_dynamics_check.isChecked())
+                       fit_transient=self.fit_transient_check.isChecked() and self.fit_dynamics_check.isChecked(),
+                       fit_dilation_parts=self.fit_parts_check.isChecked() and self.fit_dynamics_check.isChecked())
         if rec.luminance_source == "display":
             options.update(fit_gamma=self.fit_gamma_check.isChecked(), fit_black=self.fit_black_check.isChecked())
         else:

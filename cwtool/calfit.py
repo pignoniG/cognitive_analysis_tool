@@ -63,11 +63,12 @@ RANGES = {
     # on the first Varjo run it settled at 76 s, against the 30 s limit of a single time constant
     "attack": ((ATTACK_RANGE[0], SLOW_ATTACK_MAX), True), "release": (RELEASE_RANGE, True),
     "transient": (TRANSIENT_RANGE, True), "escape": (ESCAPE_RANGE, True),
+    "dilation_fast_share": ((0.0, 0.95), False), "dilation_fast": ((0.2, 5.0), True),
 }
 LABELS = {"sensitivity": "light sensitivity", "gain_r": "red weight", "gain_g": "green weight", "gain_b": "blue weight",
           "gamma": "gamma", "l_min": "black (Lmin)", "fixation_weight": "fixation weight", "pupil_offset": "pupil offset",
           "delay": "latency", "attack": "dilation τ", "release": "constriction τ", "transient": "transient",
-          "escape": "escape τ"}
+          "escape": "escape τ", "dilation_fast_share": "fast dilation share", "dilation_fast": "fast dilation τ"}
 
 
 @dataclass
@@ -159,7 +160,7 @@ def _luminance_model(rec: Recording, video: VideoResult, params: Parameters, mod
 def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, start: float,
                     sequence: calibration.Sequence, fit_dynamics: bool = True, fit_transient: bool = False,
                     fit_gains: Optional[bool] = None, fit_gamma: bool = False, fit_black: bool = False,
-                    fit_fixation: bool = False, fit_offset: Optional[bool] = None,
+                    fit_fixation: bool = False, fit_offset: Optional[bool] = None, fit_dilation_parts: bool = False,
                     cancelled: Optional[Callable[[], bool]] = None) -> CalibrationFit:
     """Fit the participant's light response and timing together on the calibration ``sequence`` starting at ``start``.
 
@@ -169,7 +170,9 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     after brightening (``fit_transient``) is off unless asked: on the first Varjo run, with it free, the transient and a
     dilation time constant at the end of its range explained the slow dilation after the black steps and made the session's
     ΔPD worse (replicate blocks 0.41 mm apart against 0.26 without it, open issue 55). The latency comes from the constriction onsets at the sequence's brightening steps when there are
-    enough (it is sharper than the whole response), else it is fitted with the rest."""
+    enough (it is sharper than the whole response), else it is fitted with the rest. ``fit_dilation_parts`` also fits the
+    share and the time constant of the dilation's fast part, which only a sequence that dims after moderate as well as after
+    bright light determines (the time-course calibration, :data:`cwtool.calibration.TIME_COURSE`)."""
     end = start + sequence.duration
     prep = prepare(rec, video, params)
     if prep.scale is None:
@@ -212,7 +215,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     base = dict(sensitivity=params.sensitivity, gain_r=params.gain_r, gain_g=params.gain_g, gain_b=params.gain_b,
                 gamma=params.gamma, l_min=params.l_min, fixation_weight=params.fixation_weight,
                 pupil_offset=params.pupil_offset if fit_offset else 0.0, delay=params.delay, attack=params.attack,
-                release=params.release, transient=params.transient if dynamics else 0.0, escape=params.escape)
+                release=params.release, transient=params.transient if dynamics else 0.0, escape=params.escape,
+                dilation_fast_share=params.dilation_fast_share, dilation_fast=params.dilation_fast)
     free = ["sensitivity"]
     if fit_gains:
         free += ["gain_r", "gain_g", "gain_b"]
@@ -230,6 +234,9 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         free += ["attack", "release"]
     if fit_transient:
         free += ["transient", "escape"]
+    fit_dilation_parts = fit_dilation_parts and fit_dynamics
+    if fit_dilation_parts:
+        free += ["dilation_fast_share", "dilation_fast"]
 
     def to_x(v: dict) -> np.ndarray:
         out = []
@@ -256,8 +263,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         pd = model.delay(steady, FIT_RATE, v["delay"])
         if not dynamics:
             return pd
-        pd = model.attack_release(pd, FIT_RATE, v["attack"], v["release"], stages, params.dilation_fast_share,
-                                  params.dilation_fast)
+        pd = model.attack_release(pd, FIT_RATE, v["attack"], v["release"], stages, v["dilation_fast_share"],
+                                  v["dilation_fast"])
         if v["transient"] > 0:
             tr = model.delay(model.escape_transient(L, FIT_RATE, v["escape"]), FIT_RATE, v["delay"])
             for _ in range(stages):
@@ -300,7 +307,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         # Too small to be a transient: it only reshapes the steps and pulls the other values with it.
         refit = fit_calibration(rec, video, replace(params, transient=0.0), start, sequence, fit_dynamics,
                                 fit_transient=False, fit_gains=fit_gains, fit_gamma=fit_gamma, fit_black=fit_black,
-                                fit_fixation=fit_fixation, fit_offset=fit_offset, cancelled=cancelled)
+                                fit_fixation=fit_fixation, fit_offset=fit_offset,
+                                fit_dilation_parts=fit_dilation_parts, cancelled=cancelled)
         refit.notes.insert(0, f"No transient constriction after brightening was found (the fit gave "
                               f"{values['transient']:.2f} mm, below {MIN_TRANSIENT:g} mm): it is left off.")
         return refit
@@ -338,6 +346,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         fitted = replace(fitted, fixation_weight=values["fixation_weight"])
     if fit_offset:
         fitted = replace(fitted, pupil_offset=values["pupil_offset"], alignment="fixed")
+    if fit_dilation_parts:
+        fitted = replace(fitted, dilation_fast_share=values["dilation_fast_share"], dilation_fast=values["dilation_fast"])
     if fit_dynamics:
         fitted = replace(fitted, dynamics=True, attack=values["attack"], release=values["release"],
                          transient=values["transient"] if fit_transient else 0.0,

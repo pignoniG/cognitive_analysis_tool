@@ -136,3 +136,29 @@ def test_locate_finds_the_default_sequence():
         rgb[sel] = np.array(s.rgb) * 0.9
     loc = calibration.locate(t, rgb, calibration.DEFAULT)
     assert loc.start == pytest.approx(start, abs=0.05) and loc.error < 0.05
+
+
+
+def test_the_time_course_calibration():
+    """The presenter's default from November 2026: no black, each probe with its context in any order, the same order as
+    the presenter's JavaScript (checked against it: these are its labels for the participant "P01")."""
+    from cwtool import calibration
+    seq = calibration.TIME_COURSE
+    assert len(seq.steps) == 30 and seq.duration == 281.0
+    assert all(sum(st.rgb) > 0 for st in seq.steps)                       # no black: below a tracker's ceiling
+    assert {st.end - st.start for st in seq.steps} >= {6, 7, 8, 9, 14, 20}   # irregular lengths
+    for order in (seq, calibration.scrambled(seq, "P01"), calibration.scrambled(seq, "someone else")):
+        steps = list(order.steps)
+        for i, st in enumerate(steps):
+            if st.linked:                                                   # a probe follows its own context
+                before = steps[i - 1].label
+                assert ("before dim" in before) == ("(after" in st.label)
+                assert ("(as " in before) == (not st.label.startswith("Gray"))
+    # each colour's gray has the colour's luminance (the presenter's sRGB weights), to a code value
+    y = calibration._srgb_luminance
+    for st in seq.steps:
+        if st.label.startswith("Gray") and "(as " in st.label:
+            colour = next(x for x in calibration.TIME_COURSE_ITEMS if x[0] == st.label.split("(as ")[1].rstrip(")"))
+            g = st.rgb[0]
+            assert abs(y(st.rgb) - y(colour[1])) <= abs(y((g + 1,) * 3) - y((g,) * 3))
+    assert [st.label for st in calibration.scrambled(seq, "P01").steps] == ["Gray 24", "Gray 64 (repeat)", "Blue 255 (before dim)", "Gray 12 (after blue)", "Gray 96", "Gray 196", "Gray 128 (before dim)", "Gray 24 (after moderate)", "Gray 96 (before dim)", "Gray 12 (after moderate)", "Gray 220 (as Green 255)", "Green 255", "Gray 76 (as Blue 255)", "Blue 255", "Gray 255 (before dim)", "Gray 24 (after bright)", "Gray 110 (as Green 128)", "Green 128", "Gray 255", "Gray 12", "Gray 60 (as Red 128)", "Red 128", "Gray 196 (repeat)", "Gray 33 (as Blue 128)", "Blue 128", "Gray 127 (as Red 255)", "Red 255", "Gray 64", "Gray 40", "Gray 140"]

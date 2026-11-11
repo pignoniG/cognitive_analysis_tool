@@ -41,6 +41,7 @@ sees what the analysis sees.
 | Pupil offset | no: the model's level is the sensitivity's | yes: the sensor's luminance is not absolute enough |
 | Latency | from the constriction onsets at the brightening steps (at least 3), else fitted | same |
 | Dilation (slow part) and constriction τ | with *Include the time constants* (default); the fast part of the dilation (60 %, 1 s) is held fixed | same |
+| The fast part of the dilation (share, τ) | only when asked (`fit_dilation_parts`), with the time-course calibration | same |
 | Transient and escape τ | only when asked | same |
 | Gamma, the display's black | only when asked | — |
 | Fixation weight | — | only when asked |

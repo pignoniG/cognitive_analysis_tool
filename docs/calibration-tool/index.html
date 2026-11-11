@@ -264,6 +264,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
           <option value="blue">Blue (shades, then tints)</option>
           <option value="red">Red (shades, then tints)</option>
           <option value="green">Green (shades, then tints)</option>
+          <option value="timecourse">Time-course calibration: grays without black, dimming probes, colours against gray</option>
           <option value="full">Full calibration: gray + RGB, steady-state lengths</option>
           <option value="cwtool20">Gray + RGB primaries (20)</option>
         </select>
@@ -417,9 +418,30 @@ function fullCalibration() {
   for (const v of [73, 182]) out.push(mk(`Gray ${v} (repeat)`, v, v, v, 8));
   return out;
 }
+/** The time-course calibration (default from November 2026; cwtool.calibration.TIME_COURSE_ITEMS, same steps in the same
+ *  order): eight grays from 12 to 255 with no black, so the pupil stays below a tracker's ceiling; four dimming probes after
+ *  moderate light (Gray 128, Gray 96) and after bright light (Gray 255, Blue 255), each linked to its context, which separate
+ *  the fast and the slow part of the dilation; six colours after a gray of the same luminance; two grays repeated. Irregular
+ *  lengths (6 to 20 s), longer where the pupil dilates, so the steps cannot be anticipated. 30 steps, 281 s. */
+function timeCourseCalibration() {
+  const out = [];
+  for (const [v, s] of [[12, 14], [24, 12], [40, 10], [64, 9], [96, 8], [140, 7], [196, 6], [255, 8]]) out.push(mk(`Gray ${v}`, v, v, v, s));
+  out.push(mk("Gray 128 (before dim)", 128, 128, 128, 7), mk("Gray 24 (after moderate)", 24, 24, 24, 15, true),
+    mk("Gray 96 (before dim)", 96, 96, 96, 6), mk("Gray 12 (after moderate)", 12, 12, 12, 16, true),
+    mk("Gray 255 (before dim)", 255, 255, 255, 6), mk("Gray 24 (after bright)", 24, 24, 24, 18, true),
+    mk("Blue 255 (before dim)", 0, 0, 255, 7), mk("Gray 12 (after blue)", 12, 12, 12, 20, true));
+  for (const [g, gs, label, c, cs] of [[60, 8, "Red 128", [128, 0, 0], 8], [110, 7, "Green 128", [0, 128, 0], 9],
+    [33, 9, "Blue 128", [0, 0, 128], 8], [127, 8, "Red 255", [255, 0, 0], 7], [220, 7, "Green 255", [0, 255, 0], 8],
+    [76, 8, "Blue 255", [0, 0, 255], 9]]) {
+    out.push(mk(`Gray ${g} (as ${label})`, g, g, g, gs), mk(label, ...c, cs, true));
+  }
+  out.push(mk("Gray 64 (repeat)", 64, 64, 64, 9), mk("Gray 196 (repeat)", 196, 196, 196, 7));
+  return out;
+}
 function generate({ kind, n, dur, lo, hi, order, seed }) {
   let list = kind === "gray" ? grays(n, lo, hi, dur)
     : kind === "full" ? fullCalibration()
+    : kind === "timecourse" ? timeCourseCalibration()
     : kind === "cwtool20" ? cwtool20(dur)
     : hueRamp({ red: 0, green: 1, blue: 2 }[kind], n, dur);
   const groups = groupsOf(list), Y = (g) => groupY(list, g);
@@ -429,7 +451,8 @@ function generate({ kind, n, dur, lo, hi, order, seed }) {
   return groups.flat().map((i) => list[i]);
 }
 const PRESETS = [
-  ["Full calibration: gray + RGB, steady-state lengths, pseudo-random (default, about 5 min)", "full-calibration-gray-rgb", { kind: "full", n: 0, dur: 0, order: "random" }],
+  ["Time-course calibration: grays without black, dimming probes, colours against gray, pseudo-random (default, about 5 min)", "time-course-calibration", { kind: "timecourse", n: 0, dur: 0, order: "random" }],
+  ["Full calibration: gray + RGB, steady-state lengths, pseudo-random (default until November 2026, about 5 min)", "full-calibration-gray-rgb", { kind: "full", n: 0, dur: 0, order: "random" }],
   ["Gray, 8 levels, 6 s, pseudo-random (Eckert et al. 2022)", "gray-8-pseudo-random-6s", { kind: "gray", n: 8, dur: 6, order: "random" }],
   ["Gray, dark to light, 3 s", "gray-8-dark-to-light-3s", { kind: "gray", n: 8, dur: 3, order: "dtl" }],
   ["Gray, dark to light, 6 s", "gray-8-dark-to-light-6s", { kind: "gray", n: 8, dur: 6, order: "dtl" }],

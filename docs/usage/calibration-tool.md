@@ -12,7 +12,8 @@ The sequence is a **timeline**: one block per step, coloured with the step's col
 - Drag a block to move it; drag its right edge to change its length (0.5 s steps, **Alt** for 0.1 s).
 - Select a block to edit its label, RGB colour and length, or duplicate or delete it. Arrow keys select,
   **Alt**+arrows move, **+**/**−** change the length, **Ctrl/Cmd+Z** undoes.
-- **Preset** loads a sequence. The default is the **full calibration** (below); the others are from Eckert et al.
+- **Preset** loads a sequence. The default is the **time-course calibration** (below); the **full calibration**, the
+  default until November 2026, follows it; the others are from Eckert et al.
   (2022): 8 gray levels, 6 s each, pseudo-random (their most robust sequence); dark-to-light and light-to-dark ramps at
   3, 6 and 10 s; blue and red ramps (shades, then tints) at 3 s; and the 20-step staircase cwtool used before October 2026. The paper describes
   its orders rather than listing them, so the pseudo-random order here is generated (fixed seed), not copied from its
@@ -21,10 +22,30 @@ The sequence is a **timeline**: one block per step, coloured with the step's col
 - **Export CSV** / **Import CSV…** use the format of *Load sequence…* in cwtool (`time,r,g,b,label,duration`), so the
   same file drives the presenter and the analysis.
 
-## The default: full calibration
+## The default: time-course calibration
 
-This is also cwtool's default sequence (`calibration.DEFAULT`, in the preset order); `calibration.scrambled` gives
-the order the presenter plays for a seed, with the same seeded shuffle.
+Made for cwtool's calibration fit on the pupil's time course (`cwtool.calfit`), after the first validation run in the
+Varjo (November 2026). It is `calibration.TIME_COURSE` in cwtool, with the same steps and the same seeded order (the
+presenter's JavaScript and cwtool are checked against each other); `calibration.scrambled` gives a participant's order.
+About 5 minutes, 30 steps, 281 s:
+
+| Part | Steps | Why |
+|---|---|---|
+| Gray, 8 levels (12, 24, 40, 64, 96, 140, 196, 255) | 14, 12, 10, 9, 8, 7, 6 and 8 s | the light-response curve, the levels about 2.3 times apart in luminance. No black: in the dark the pupil can exceed what a tracker reports (the Varjo stopped at 6 mm, open issue 52), and a black step never settles in 8 s |
+| Dimming after moderate light | Gray 128 → Gray 24 (7 + 15 s), Gray 96 → Gray 12 (6 + 16 s), each pair linked | the pupil re-dilates quickly after moderate light: the fast part of the dilation |
+| Dimming after bright light | Gray 255 → Gray 24 (6 + 18 s), Blue 255 → Gray 12 (7 + 20 s), linked | after bright, and especially blue, light it re-dilates slowly: the slow part (open issue 56). The old sequence dimmed only after bright light, so it measured only this |
+| Red, green, blue at 128 and 255 | 7 to 9 s, each after a linked gray of the same luminance (Gray 60, 110, 33, 127, 220, 76) | the colour weights, as the change from a gray of equal luminance; no black reset before each colour |
+| Gray 64 and 196 again | 9 and 7 s | repeats |
+
+- **Order:** pseudo-random as before (no two consecutive levels next to each other in brightness), seeded by the participant.
+  Each probe carries its context as a linked first step, so it works in whatever order the seed gives.
+- **Irregular lengths** (6 to 20 s): the steps cannot be anticipated (three constrictions on the first run started before
+  the change), and the long ones are where the pupil dilates.
+
+## Full calibration (default until November 2026)
+
+This is `calibration.DEFAULT` in cwtool (in the preset order); `calibration.scrambled` gives the order the presenter plays
+for a seed, with the same seeded shuffle.
 
 One sequence for both of cwtool's fits, about 5 minutes (34 steps, 291 s), built from Eckert et al. (2022) and from what the
 recordings showed (open issues 36, 40, 43):
