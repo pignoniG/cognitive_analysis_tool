@@ -19,11 +19,16 @@ cwtool/
 ├── video.py            scene video pass: frame clock, decoding (PyAV/OpenCV), parallel chunks, two-area
 │                       measurement, gamma grid, gaze weighting (VideoResult.weighted), cache
 ├── luminance.py        code values → linear, relative and absolute luminance
-├── model.py            Watson & Yellott, Stanley & Davies, delay, attack/release, transient
+├── model.py            Watson & Yellott, Stanley & Davies, delay, attack/release (dilation in two parts), transient
 ├── pipeline.py         prepare(), run(), export(): from recording + video pass + parameters to ΔPD
-├── calibration.py      calibration sequences: built-in, CSV, locate in a recording
-├── photometry.py       step 1 of the participant fit: light sensitivity and channel weights from step levels
-├── fit.py              step 2: latency (from onsets), dynamics and transient (pupil offset optional)
+├── quality.py          tracking quality of a recording: valid samples, dropouts, the tracker's ceiling, the assumed iris
+├── alignment.py        the presenter's log aligned to the scene video (the offset between the two clocks; Varjo)
+├── calibration.py      calibration sequences: built-in (time-course, full, staircase), CSV and run files, locate in a recording
+├── calfit.py           the participant's calibration fit on the pupil's time course: light response and timing together,
+│                       for every device and luminance route; its search ranges and priors
+├── onsets.py           the response latency from the constriction onsets at the sequence's brightening steps
+├── photometry.py       earlier fits, not used by the app: light sensitivity from step levels, and the lux sensor fit
+├── fit.py              earlier fit, not used by the app: latency, dynamics and transient after the light response
 ├── logger/             the multi-sensor logger (no Qt except gui.py); see usage/logger.md
 │   ├── base.py         Source (one sensor stream), ClockMapper (device clock → Unix time)
 │   ├── session.py      Logger (sources, live buffers, session folder, writer thread), EventLog
@@ -45,7 +50,6 @@ cwtool/
     ├── trim_panel.py   the export range editor in the sidebar
     ├── errors.py       plain-language advice for errors and the gestures/shortcuts list of the Help menu (no Qt)
     ├── icons.py        the icon loader (Tabler outline SVGs in icons/, drawn in the palette's colours)
-    ├── photometry_dialog.py  result window of the light sensitivity fit
     ├── video_preview.py      scene frame at the cursor with the analysis circles
     └── workers.py      QThread wrapper for the video pass and the fit
 

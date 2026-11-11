@@ -90,13 +90,14 @@ app that started them may); see the [sensor logger page](https://pignonig.github
 | `Lux Sensor/` | firmware for the lux logger and the 3D-printable mount for the Pupil Core |
 | `tests/` | pytest suite with synthetic recordings for every device |
 
-## Participant calibration (Varjo)
+## Participant calibration
 
-A short full-field colour sequence, shown in the headset with the calibration presenter, gives each participant's
-light sensitivity and channel weights, then their response latency and pupil dynamics (the pupil scale and offset stay
-values you set). These are saved with the participant's parameters and applied to their other recordings. The display's
-own photometry (black and white luminance, gamma) is kept in a separate file. For glasses with a lux sensor the same
-sequence, shown on a screen, fits the light sensitivity and the pupil offset. See
+A short full-field colour sequence (about 5 minutes), shown in the headset with the calibration presenter, gives each
+participant's light sensitivity and colour weights, response latency and pupil dynamics, in one fit on the pupil's time
+course (the pupil scale stays a value you set). These are saved with the participant's parameters and applied to their
+other recordings with the same device. No photometry of the display is needed: its nominal black, white and gamma are a
+starting point and the fitted values are effective for the headset model. For glasses with a lux sensor the same sequence,
+shown on a screen, fits the light sensitivity, the pupil offset and the timing. See
 [Participant calibration](https://pignonig.github.io/cognitive_analysis_tool/usage/calibration/).
 
 ## Development

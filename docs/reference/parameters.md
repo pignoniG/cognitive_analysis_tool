@@ -74,12 +74,12 @@ not in participant files.
 | `delay` | 0.5 s | response latency, always applied (fitted) |
 | `dynamics` | on | apply the dynamics: attack/release filter, constriction stages and transient |
 | `attack` | 6 s | dilation time constant of the slow part (fitted, up to 120 s) |
-| `dilation_fast_share` | 0.6 | share of the dilation with the fast time constant, fixed (0 = one time constant, as in files written before it) |
-| `dilation_fast` | 1 s | time constant of the fast part of the dilation, fixed |
+| `dilation_fast_share` | 0.6 | share of the dilation with the fast time constant (0 = one time constant, as in files written before it); fitted only when asked, with the time-course calibration |
+| `dilation_fast` | 1 s | time constant of the fast part of the dilation; fitted only when asked |
 | `release` | 0.5 s | constriction time constant, per stage (fitted) |
 | `constriction_stages` | 2 | 1: constriction starts at full speed; 2: gradually (S-shaped); files without it load as 1 |
-| `transient` | 0 mm | largest transient constriction after brightening, with the dynamics; 0 = none (fitted) |
-| `escape` | 2 s | re-dilation time constant of the transient (fitted) |
+| `transient` | 0 mm | largest transient constriction after brightening, with the dynamics; 0 = none (fitted only when asked) |
+| `escape` | 2 s | re-dilation time constant of the transient (fitted only when asked) |
 
 ## ΔPD
 

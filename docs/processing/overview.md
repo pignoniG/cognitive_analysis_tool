@@ -11,7 +11,7 @@ flowchart TD
     MOD --> ALN
     ALN --> DPD[ΔPD<br/>windowed measured − expected]
     DPD --> OUT[Plots, CSV export, per-event means]
-    MOD -.-> FIT[Calibration fit<br/>light sensitivity, channel weights,<br/>latency, dynamics, scale, offset]
+    MOD -.-> FIT[Calibration fit<br/>light sensitivity, colour weights,<br/>latency, dynamics (offset with a lux sensor)]
     PUP -.-> FIT
 ```
 
@@ -37,7 +37,7 @@ Every step with its parameters, defaults and functions is listed in order on one
 | Clean and resample the pupil | `pipeline.prepare` | [Pupil signal](pupil-signal.md) |
 | Expected pupil for that luminance | `model.py`, `pipeline.expected_pupil` | [Expected pupil model](model.md) |
 | Offset, ΔPD, statistics, events | `pipeline.run` | [ΔPD and alignment](delta-pd.md) |
-| Participant parameters from the calibration sequence | `calibration.py`, `photometry.py`, `fit.py` | [Calibration fit](calibration-fit.md) |
+| Participant parameters from the calibration sequence | `calibration.py`, `calfit.py`, `onsets.py` | [Calibration fit](calibration-fit.md) |
 
 ## Clocks
 

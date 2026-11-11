@@ -31,13 +31,30 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from cwtool import calibration, luminance, model
-from cwtool.fit import (ATTACK_RANGE, DELAY_RANGE, ESCAPE_RANGE, MIN_ONSET, MIN_ONSETS, MIN_TRANSIENT, PRE_ROLL,
-                        RELEASE_RANGE, TRANSIENT_RANGE, latency_from_onset, onset_latency)
+from cwtool.onsets import DELAY_RANGE, MIN_ONSET, MIN_ONSETS, latency_from_onset, onset_latency
 from cwtool.params import Parameters
-from cwtool.photometry import BLACK_RANGE, GAIN_RANGE, PRIOR_GAMMA, PRIOR_LOG_GAIN, SENSITIVITY_RANGE
 from cwtool.pipeline import luminance_from_lux, prepare, residual_rms, run
 from cwtool.recording import Recording
 from cwtool.video import GAMMA_RANGE, VideoResult, at_gamma
+
+# Search ranges, and the weak priors (standard deviations; natural log units for factors) that keep poorly constrained
+# values near sensible ones. The sensitivity has no prior: one centred on 1 would mean "the nominal luminance is right"
+# (open issue 42).
+SENSITIVITY_RANGE = (1e-3, 1e3)
+GAIN_RANGE = (0.05, 20.0)
+PRIOR_LOG_GAIN = 1.5         # wide: the pupil's colour weighting departs strongly from photopic (blue)
+PRIOR_GAMMA = 0.2
+BLACK_RANGE = (1e-4, 10.0)   # cd/m², Lmin when it is fitted
+ATTACK_RANGE = (0.3, 30.0)     # s, dilation
+RELEASE_RANGE = (0.05, 5.0)    # s, constriction
+TRANSIENT_RANGE = (0.01, 3.0)  # mm, largest transient constriction
+# mm; a fitted transient below this is taken as none. It is under the pupil's own fluctuation within a step
+# (0.08–0.24 mm RMS on the Varjo calibration recordings, open issue 43), and the transients fitted there were
+# 0.35–1.7 mm; a smaller one only reshapes the steps (on synthetic data without a transient the fit found
+# 0.06 mm and moved the latency by 0.08 s with it).
+MIN_TRANSIENT = 0.1
+ESCAPE_RANGE = (0.3, 30.0)     # s, re-dilation of the transient
+PRE_ROLL = 30.0                # s of signal before the window, so the filter state has settled
 
 FIT_RATE = 50.0              # Hz, the grid of the fit (the pupil carries nothing faster)
 NOISE_MM = 0.15              # mm, the pupil's own fluctuation within a step (0.08-0.24 mm on the Varjo recordings)
@@ -404,9 +421,10 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         notes.append("The display's values are effective: the sensitivity and the colour weights absorb the display's real "
                      "luminance and primaries, so they hold for this headset model and its settings.")
 
-    return CalibrationFit(params=fitted, route=mode, values={k: values[k] for k in free if k in values} | (
-                              {"delay": values["delay"]} if fixed_delay else {}),
-                          intervals=intervals, fit_rms_before=fit_before, fit_rms_after=fit_after,
+    reported = {name: values[name] for name in free}
+    if fixed_delay:
+        reported["delay"] = values["delay"]            # from the onsets, not among the free values
+    return CalibrationFit(params=fitted, route=mode, values=reported, intervals=intervals, fit_rms_before=fit_before, fit_rms_after=fit_after,
                           rms_before=window_rms(params), rms_after=window_rms(fitted), correlation=corr,
                           window=(start, end), time=t[window], measured=mw + off_after,
                           expected_before=e_before[window], expected_after=e_after[window], notes=notes,

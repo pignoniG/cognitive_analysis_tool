@@ -199,20 +199,6 @@ def test_view_fits_the_data(app, varjo_folder, tmp_path):
     assert data_range(np.r_[np.full(999, 3.0), 50.0], trim=0.5) == pytest.approx((2.9, 3.1))  # trimmed spike
 
 
-def test_light_response_dialog(app):
-    import numpy as np
-    from cwtool.gui.photometry_dialog import PhotometryDialog
-    from cwtool.photometry import PhotometryFit, StepLevel
-    steps = [StepLevel(f"Gray {v}", (v, v, v), i * 10.0, i * 10.0 + 10, 6 - v / 60, 0.03, i % 3 > 0,
-                       np.zeros((9, 3))) for i, v in enumerate((0, 73, 146, 255))]
-    fit = PhotometryFit(Parameters(sensitivity=2.0), 2.0, (1.5, 2.7), (1.2, 0.9, 0.9), 2.2, 0.95, 0.2, steps,
-                        np.linspace(6, 3, 4), np.linspace(6.1, 2.9, 4), np.linspace(6, 3, 4), np.full(4, 0.03),
-                        0.3, 0.05, ["example note"])
-    dialog = PhotometryDialog(fit)
-    assert "×2" in dialog.findChildren(type(dialog.layout().itemAt(0).widget()))[0].text()
-    dialog.close()
-
-
 def test_the_calibration_fit_applies_the_light_response(app, varjo_folder, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
     from cwtool import calibration

@@ -30,6 +30,7 @@ import numpy as np
 from scipy.optimize import least_squares, minimize_scalar
 
 from cwtool import calibration, luminance
+from cwtool.calfit import BLACK_RANGE, GAIN_RANGE, PRIOR_GAMMA, PRIOR_LOG_GAIN, SENSITIVITY_RANGE
 from cwtool.params import Parameters
 from cwtool.pipeline import expected_pupil, prepare, steady_pupil
 from cwtool.recording import Recording
@@ -40,12 +41,6 @@ MIN_STEP_SAMPLES = 20       # pupil samples a step needs to be used
 NOISE_MM = 0.1              # mm, floor on a step's uncertainty (pupil fluctuations, model error)
 SETTLED_MM = 0.1            # mm, change over the last 30 % of a step below which it has settled
 TAIL = 0.3                  # share of the step (after the latency) whose mean is the step's level
-# Prior standard deviations (natural log units for factors). None on the sensitivity (see the module text).
-PRIOR_LOG_GAIN = 1.5         # wide: the pupil's colour weighting departs strongly from photopic (blue)
-PRIOR_GAMMA = 0.2
-SENSITIVITY_RANGE = (1e-3, 1e3)
-GAIN_RANGE = (0.05, 20.0)
-BLACK_RANGE = (1e-4, 10.0)     # cd/m², Lmin when it is fitted
 CENSORED_STEP = 0.5            # share of a step's end at the tracker's ceiling above which its level is a lower bound
 
 
@@ -365,7 +360,6 @@ def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, sta
                          "scene video')")
     end = start + sequence.duration
     area = rec.profile.field_area
-    state = {}
 
     def setup(weight: float):
         """Prepare the analysis at one fixation weight: the measured pupil in the sequence window and a function giving

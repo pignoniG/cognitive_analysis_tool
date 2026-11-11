@@ -48,9 +48,10 @@ Every parameter change in the side panel updates the plots immediately.
 
 ## 5. Calibrate and save the participant's parameters
 
-For Varjo recordings, enter the display photometry once, then fit the participant's light sensitivity and pupil
-response on the calibration sequence (see [Participant calibration](../usage/calibration.md)) and
-**File → Save parameters**.
+For Varjo recordings, and glasses recordings with a lux log, fit the participant's light response and timing on the
+calibration sequence: **Calibrate → Fit the calibration** (see [Participant calibration](../usage/calibration.md)), then
+**File → Save parameters**. A presenter run file in the recording's folder places the sequence when the recording is opened,
+and the display's nominal photometry is enough.
 Load the same file for that participant's other recordings. **Revert** (Params tab) goes back to the saved values, and the
 app asks before closing or opening another recording with parameters that were changed and not saved.
 
