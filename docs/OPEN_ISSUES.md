@@ -1341,3 +1341,22 @@ is revised; they remain in the git history of this file.
   the ten channels to photopic illuminance and the α-opic (melanopic) irradiances; check the gain ratios by measuring a
   steady light at every gain; then offer the photopic and melanopic estimates to the luminance model next to the lux.
 - **Status:** open (needs a calibration).
+
+### 59. VR presenters: the WebXR Layers path is not shown by a Quest 3 over Link
+
+- **Where:** `docs/calibration-tool/index.html` (`setXrSession`, `countView`), the validation task's `src/xrcompat.js`.
+- **Why (13 November 2026):** reported by a colleague with a Quest 3 over Link (cable), Windows, Chrome. *Start run in VR*
+  left the headset dark with "this page is not responding", while the run went on for its whole length, took the trigger
+  and saved a complete file. The WebXR sample "Immersive VR Session" worked in the same setup. Removing
+  `XRWebGLBinding.prototype.createProjectionLayer` in the console before starting made the colours appear: three.js then
+  draws into the classic `XRWebGLLayer` and not into a WebXR Layers projection layer.
+- **Now:** both presenters hide that function while three.js starts the session (the only moment it looks for it) and put
+  it back, so the classic layer is used; a *Compatible rendering* box, on by default, switches this off. The run file and
+  `session.json` name the layer. Frames in which the session's view was not "visible" or had no head pose are counted, and
+  a warning is given when that is most of them.
+- **Not known:** whether the Varjo XR-4 shows the classic layer as it showed the projection layer (the 10 November run
+  used the projection layer; not rerun since); whether the counts differ from normal in the failing Quest setup, since
+  there the frames kept arriving, so the warning may not fire for it; why the projection layer is not shown.
+- **Proposal:** run the calibration on the Varjo with the box on and compare the frame statistics with the earlier run; ask
+  for one Quest run with the box off, to see what its file counts.
+- **Status:** open (needs the Varjo test).

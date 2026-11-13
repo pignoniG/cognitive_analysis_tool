@@ -212,6 +212,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
     <label class="check"><input type="checkbox" id="wait" checked> Wait for a start signal (<kbd>Space</kbd>, click, or VR trigger)</label>
     <label class="check"><input type="checkbox" id="autodl" checked> Download the CSV when the run ends</label>
     <label class="check" id="exit-wrap"><input type="checkbox" id="exitvr" checked> Leave VR at the end</label>
+    <label class="check" id="compat-wrap" title="Draw into the classic WebXR layer (XRWebGLLayer), which every runtime shows. Off: the WebXR Layers projection layer, which a Quest over Link in Chrome does not show."><input type="checkbox" id="xrcompat" checked> Compatible VR rendering</label>
   </div>
   <div class="row">
     <div>
@@ -920,7 +921,7 @@ function settings() {
   const g = byte(val("#lead-grey"));
   return { participant: participantId(), mode: document.querySelector("input[name=mode]:checked").value,
     leadin: Math.max(0, Number(val("#leadin")) || 0), lead: [g, g, g], wait: $("#wait").checked,
-    autodl: $("#autodl").checked, exitvr: $("#exitvr").checked };
+    autodl: $("#autodl").checked, exitvr: $("#exitvr").checked, xrcompat: $("#xrcompat").checked };
 }
 async function startRun() {
   if (active) return;
@@ -971,6 +972,31 @@ async function startScreen(p, cfg, done) {
   return run;
 }
 
+/* three.js draws into a WebXR Layers projection layer when the browser offers XRWebGLBinding.createProjectionLayer, and
+   into the classic XRWebGLLayer otherwise; it has no setting for the choice. With Chrome and a Quest 3 over Link the
+   projection layer is never shown (a dark headset, "this page is not responding") while the page gets its frames and the
+   run completes. So the function is hidden while three.js starts the session, the only moment it looks for it, and put
+   back afterwards. Returns the layer taken. */
+async function setXrSession(xr, session, compatible) {
+  const proto = compatible && typeof XRWebGLBinding !== "undefined" ? XRWebGLBinding.prototype : null;
+  const saved = proto ? Object.getOwnPropertyDescriptor(proto, "createProjectionLayer") : null;
+  let hidden = false;
+  if (saved) { try { hidden = delete proto.createProjectionLayer; } catch { hidden = false; } }
+  try { await xr.setSession(session); }
+  finally { if (hidden) Object.defineProperty(proto, "createProjectionLayer", saved); }
+  const layer = xr.getBaseLayer();
+  return !layer ? "unknown" : typeof XRWebGLLayer !== "undefined" && layer instanceof XRWebGLLayer ? "XRWebGLLayer" : "projection layer";
+}
+/* A headset that shows nothing may still deliver every frame, so the run cannot know it was seen. What the session does
+   say is counted per frame: whether the view was "visible" and whether there was a head pose. */
+function countView(c, session, frame, space) {
+  c.frames++;
+  if (session.visibilityState && session.visibilityState !== "visible") c.notVisible++;
+  let pose = null;
+  try { pose = frame && space ? frame.getViewerPose(space) : null; } catch { pose = null; }
+  if (!pose || !pose.views?.length) c.noPose++;
+}
+const unseen = (c) => !!c && c.frames >= 60 && Math.max(c.notVisible, c.noPose) > c.frames / 2;
 let threeLoad = null;
 const loadThree = () => (threeLoad ??= import("./vendor/three-slim.module.js").catch((e) => { threeLoad = null; throw e; }));
 async function startVR(p, cfg, done) {
@@ -1011,10 +1037,14 @@ async function startVR(p, cfg, done) {
     run.abort("VR session ended");
   });
   active = { run };
-  try { await renderer.xr.setSession(session); }
+  let path;
+  try { path = await setXrSession(renderer.xr, session, cfg.xrcompat); }
   catch (e) { active = null; session.end().catch(() => {}); throw e; }   // never leave the headset on a black, idle session
-  run.vr = { frameRate: session.frameRate ?? null };
-  renderer.setAnimationLoop((t) => { run.frame(t); renderer.render(scene, camera); tickStatus(run); });
+  run.vr = { frameRate: session.frameRate ?? null, path, view: { frames: 0, notVisible: 0, noPose: 0 } };
+  renderer.setAnimationLoop((t) => {
+    countView(run.vr.view, session, renderer.xr.getFrame(), renderer.xr.getReferenceSpace());
+    run.frame(t); renderer.render(scene, camera); tickStatus(run);
+  });
   return run;
 }
 let lastTick = 0;
@@ -1057,7 +1087,9 @@ function finishRun(runId, cfg, p, run, r) {
     lead_in_s: cfg.leadin, lead_in_rgb: cfg.lead.join(" "), waited_for_start_signal: cfg.wait,
     frames: r.frames, frame_interval_median_ms: r.frame_median_ms === null ? "" : r.frame_median_ms.toFixed(2),
     frame_interval_max_ms: r.frame_max_ms === null ? "" : r.frame_max_ms.toFixed(2),
-    xr_frame_rate_hz: run.vr?.frameRate ?? "",
+    xr_frame_rate_hz: run.vr?.frameRate ?? "", xr_render_path: run.vr?.path ?? "",
+    xr_frames_view_not_visible: run.vr?.view.notVisible ?? "", xr_frames_without_head_pose: run.vr?.view.noPose ?? "",
+    xr_view_possibly_not_shown: run.vr ? unseen(run.vr.view) : "",
     time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     screen: `${screen.width}x${screen.height} @${window.devicePixelRatio}`,
     color_gamut_p3: matchMedia("(color-gamut: p3)").matches, hdr: matchMedia("(dynamic-range: high)").matches,
@@ -1067,7 +1099,9 @@ function finishRun(runId, cfg, p, run, r) {
   const rec = { id: runId, meta, rows: r.rows };
   runs.unshift(rec); store.set("cal.runs", runs); renderRuns();
   const name = `calibration_run_${runId}.csv`;
-  setStatus(`${r.status === "completed" ? "Run complete" : "Run " + r.status}: ${r.rows.length} steps logged.${cfg.autodl ? " Saved as " + name + "." : ""}`, r.status !== "completed");
+  const dark = run.vr && unseen(run.vr.view)
+    ? " WARNING: the headset may not have shown the run (the view was not visible or had no head pose for most frames). Ask the participant what they saw." : "";
+  setStatus(`${r.status === "completed" ? "Run complete" : "Run " + r.status}: ${r.rows.length} steps logged.${cfg.autodl ? " Saved as " + name + "." : ""}${dark}`, r.status !== "completed" || !!dark);
   if (cfg.autodl) download(name, runCsv(rec));
 }
 function renderRuns() {
@@ -1090,13 +1124,13 @@ $("#btn-clear").addEventListener("click", () => {
 });
 
 /* ---------- mode, saved settings, start-up ---------- */
-const SAVED = ["#participant", "#seed", "#scramble", "#leadin", "#lead-grey"], SAVED_CHECK = ["#avoid", "#wait", "#autodl", "#exitvr"];
+const SAVED = ["#participant", "#seed", "#scramble", "#leadin", "#lead-grey"], SAVED_CHECK = ["#avoid", "#wait", "#autodl", "#exitvr", "#xrcompat"];
 function saveSettings() {
   store.set("cal.settings", { mode: settings().mode, v: Object.fromEntries(SAVED.map((k) => [k, val(k)])), c: Object.fromEntries(SAVED_CHECK.map((k) => [k, $(k).checked])) });
 }
 function applyMode() {
   const vr = settings().mode === "vr";
-  $("#exit-wrap").hidden = !vr;
+  $("#exit-wrap").hidden = !vr; $("#compat-wrap").hidden = !vr;
   if (vr) loadThree().catch(() => {});
   $("#btn-start").textContent = vr ? "Start run in VR" : "Start run full screen";
 }

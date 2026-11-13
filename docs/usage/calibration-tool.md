@@ -80,6 +80,15 @@ Choose **On screen** or **In VR**, enter the **participant ID** and press start.
   `immersive-vr`, no shading or tone mapping, so the field is the requested sRGB value). It needs a
   WebXR browser (a headset browser, or a desktop browser with SteamVR or Varjo Base) and an HTTPS or localhost page.
   Start the run from the desktop window; the status line follows it.
+- **Compatible VR rendering** (on by default): the page draws into the classic WebXR layer (`XRWebGLLayer`), which every
+  runtime shows. Switched off, three.js draws into a WebXR Layers projection layer where the browser offers one. A
+  Quest 3 over Link in Chrome does not show that layer: the headset stays dark ("this page is not responding") while
+  the run goes on and saves a complete file. The run file names the layer used (`xr_render_path`).
+- **A run nobody saw:** the page cannot know what the headset shows, because a headset that shows nothing may still
+  deliver every frame. It counts the frames in which the session's view was not "visible" or had no head pose
+  (`xr_frames_view_not_visible`, `xr_frames_without_head_pose`), and warns in the status line and in the file
+  (`xr_view_possibly_not_shown`) when that is most of them. No warning is not proof: with a new headset or browser,
+  ask the participant what they saw.
 
 Fix the display first (constant brightness, sRGB, no night shift or HDR): the page sends sRGB values, the light
 that results depends on the display.
