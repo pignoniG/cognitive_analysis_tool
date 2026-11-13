@@ -49,6 +49,7 @@ Each stream is a binary `<name> ps<n>.raw` with a `<name> ps<n>.time` file of in
 | pupil | `eye_state ps*.raw` (float32 records; left diameter first, right diameter at field 7, or by name from `eye_state.dtype`) |
 | gaze | `gaze_200hz.raw` / `.time` if present, else `gaze ps*.raw` |
 | not worn | `worn_200hz.raw` or `worn ps*.raw` (on the gaze timestamps) |
+| blinks | `blinks ps*.raw` (type, start, end), if present |
 | events | `event.txt` / `event.time` |
 | scene video | `Neon Scene Camera v1 ps*.mp4` / `.time` (the longest part) |
 | field of view | `calibration.bin` (scene camera matrix) |
@@ -56,12 +57,12 @@ Each stream is a binary `<name> ps<n>.raw` with a `<name> ps<n>.time` file of in
 !!! note "Pupil diameters need eye state estimation"
     The native format has pupil diameters only if real-time eye state estimation was enabled in the Companion app.
     Otherwise the reader stops with an explanation: upload the recording to Pupil Cloud and use the Timeseries
-    export instead. Blinks are not in the native format; the pipeline's speed filter removes their edges.
+    export instead. Native recordings of data format 2.5 have blinks (`blinks ps*.raw`); on older ones the pipeline's speed filter removes the blink edges.
 
 ## Processing
 
 - Pupil diameters are in mm (scale 1), each eye separately. Zero or missing values are invalid.
-- Samples where Neon was not worn lose their pupil and gaze values; Cloud blinks remove the pupil from 0.1 s
+- Samples where Neon was not worn lose their pupil and gaze values; blinks (Cloud, or native `blinks ps*.raw`) remove the pupil from 0.1 s
   before to 0.1 s after each blink.
 - Samples are averaged into bins on a grid at the measured rate (nominally 200 Hz).
 - Time zero is the first scene frame; the eye cameras start slightly earlier, so the recording can start at

@@ -31,7 +31,7 @@ which re-runs on every parameter change. Step 9 runs on demand and writes its re
 |---|---|
 | Detection | each reader's `detect(folder)` in turn: Varjo, Pupil Core, Pupil Neon, Tobii Pro Glasses 3 |
 | Pupil | per eye, in device units; NaN where invalid |
-| Validity | Varjo: tracking status 1 or lower (overall or either eye); Core: confidence below 0.6; Neon: not worn, and 0.1 s around Cloud blinks; Glasses 3: empty samples. Zero or negative diameters are invalid on every device |
+| Validity | Varjo: tracking status 1 or lower (overall or either eye); Core: confidence below 0.6; Neon: not worn, and 0.1 s around blinks; Glasses 3: empty samples. Zero or negative diameters are invalid on every device |
 | Grid | irregular samples are averaged into bins at the measured rate (`common.bin_samples`, `common.sample_rate`) |
 | Time base | seconds from the first scene video frame (can start below 0); `epoch_start` is its Unix time |
 | Gaze | normalised scene video coordinates, origin top left |

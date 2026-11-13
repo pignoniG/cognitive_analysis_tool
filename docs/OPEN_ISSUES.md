@@ -434,7 +434,14 @@ is revised; they remain in the git history of this file.
   is analysed); the native `eye_state` record layout when there is no `.dtype` file (left diameter at field 0,
   right at field 7); multipart scene videos (only the longest part is analysed); the 0.1 s padding around
   Cloud blinks.
-- **Status:** needs data.
+- **Checked on a real native recording (27 October 2026; Pupil Labs' Neon Player sample, format 2.5, app 2.9.26,
+  508 s, 100 732 eye samples at 200 Hz):** detection and loading work; `eye_state` has 20 fields (read through
+  `eye_state.dtype`, so the `[0, 7]` fallback was not exercised); `worn_200hz.raw` stores 255 for worn (the `< 0.5`
+  test copes); medians 3.0 mm (left) and 3.1 mm (right). **Found:** the native format does have blinks
+  (`blinks ps1.raw`, 209 of median 0.27 s); they were ignored and the docs said otherwise. Now read, with the same
+  0.1 s padding as the Cloud blinks. The sample has no protocol events (only `recording.begin/end`), so marker
+  handling is still tested on synthetic data only, and the pupil values were not compared with `pl-neon-recording`.
+- **Status:** partly checked (native, one recording); Cloud export still needs data.
 
 ### 33. Glasses trackers' scene camera field of view comes from a pinhole model
 - **Where:** `devices/common.pinhole_fov`, used by the Pupil Core and Neon readers.

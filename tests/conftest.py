@@ -192,6 +192,10 @@ def write_neon_recording(folder: Path, grays, frame_times, layout="cloud", pupil
         np.tile(np.asarray(gaze_px, dtype="<f4"), (len(times), 1)).tofile(folder / "gaze ps1.raw")
         np.array([0 if inside(t, not_worn) else 1 for t in times], dtype="u1").tofile(folder / "worn ps1.raw")
         np.array(frame_ns, dtype="<i8").tofile(folder / "Neon Scene Camera v1 ps1.time")
+        if blinks:
+            np.array([(4, ns(a), ns(b)) for a, b in blinks],
+                     dtype=[("t", "<i4"), ("s", "<i8"), ("e", "<i8")]).tofile(folder / "blinks ps1.raw")
+            np.array([ns(a) for a, _ in blinks], dtype="<i8").tofile(folder / "blinks ps1.time")
         marks = [(start_ns, "recording.begin")] + [(ns(t), name) for t, name in events]
         (folder / "event.txt").write_text("\n".join(name for _, name in marks) + "\n")
         np.array([t for t, _ in marks], dtype="<i8").tofile(folder / "event.time")

@@ -36,7 +36,7 @@ Pass `--device` (or `device=` to `devices.load`) to skip detection.
 | Support | tested | tested | experimental | experimental |
 | Pupil | mm: radius ×2 in older exports, diameter in newer ones (from the iris column) | mm (3D model) or px (2D) | mm per eye | mm per eye |
 | Sampling | 200 Hz | 120/200 Hz per eye | 200 Hz | 50 or 100 Hz |
-| Invalid samples | tracking status | confidence < 0.6 | not worn, blinks (Cloud) | empty samples, per eye |
+| Invalid samples | tracking status | confidence < 0.6 | not worn, blinks | empty samples, per eye |
 | Gaze | projected to the left-eye view | normalised scene coordinates | scene camera pixels | normalised scene coordinates |
 | Scene video | capture of the left-eye view, circular | world camera | scene camera, 1600×1200 | scene camera, 1920×1080 |
 | Frame timing | constant frame rate | recorded timestamps | recorded timestamps | constant frame rate |

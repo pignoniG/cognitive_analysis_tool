@@ -15,8 +15,9 @@ Companion phone over USB): ``info.json``, binary streams ``<name> ps<n>.raw`` wi
 200 Hz, ``event.txt`` / ``event.time``, ``calibration.bin`` and the scene video
 ``Neon Scene Camera v1 ps<n>.mp4`` with its ``.time`` file. Pupil diameters exist only
 if eye state estimation was enabled in the Companion app during the recording.
-Blinks are not in the native format (Pupil Cloud computes them); the pipeline's
-speed filter removes their edges.
+Blinks are in ``blinks ps<n>.raw`` (data format 2.5, checked on a real recording, open
+issue 32); older recordings without that file rely on the pipeline's speed filter, which
+removes the blink edges.
 
 Neon reports the physical pupil diameter in mm for each eye. Samples where Neon
 was not worn, and blinks (widened by BLINK_PADDING), are removed. Like the Pupil
@@ -188,6 +189,20 @@ def _records(pairs, n_fields: int, fields_dtype=None) -> tuple[np.ndarray, np.nd
     return np.concatenate(ts_all), np.concatenate(rec_all).astype(float)
 
 
+BLINK_RECORD = np.dtype([("event_type", "<i4"), ("start", "<i8"), ("end", "<i8")])   # packed, as blinks.dtype
+
+
+def _native_blinks(folder: Path) -> np.ndarray:
+    """(start, end) ns of the blinks in ``blinks ps*.raw``, empty when the recording has none."""
+    spans = []
+    for data, _ in _parts(folder, "blinks"):
+        raw = data.read_bytes()
+        n = len(raw) // BLINK_RECORD.itemsize
+        rec = np.frombuffer(raw[: n * BLINK_RECORD.itemsize], dtype=BLINK_RECORD)
+        spans.append(np.stack([rec["start"], rec["end"]], axis=1))
+    return np.concatenate(spans) if spans else np.empty((0, 2), np.int64)
+
+
 def _dtype_names(folder: Path, base: str) -> Optional[list[str]]:
     path = folder / f"{base}.dtype"
     if not path.exists():
@@ -244,7 +259,7 @@ def _load_native(folder: Path):
     calib = folder / "calibration.bin"
     if calib.exists() and calib.stat().st_size >= 7 + 72:
         matrix = np.frombuffer(calib.read_bytes()[7:7 + 72], dtype="<f8").reshape(3, 3)
-    return eye_ts, pupils, gaze_ts, gaze_px, worn, np.empty((0, 2), np.int64), markers, video, frame_ts, matrix
+    return eye_ts, pupils, gaze_ts, gaze_px, worn, _native_blinks(folder), markers, video, frame_ts, matrix
 
 
 def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:

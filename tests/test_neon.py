@@ -35,7 +35,7 @@ def test_reader(tmp_path, layout):
     assert np.allclose(rec.gaze[ok], [0.5, 0.25])            # px / scene size, origin top left
     assert [(e.label, round(e.start, 3), round(e.end, 3)) for e in rec.events] == [("Task", 0.5, 2.0)]
     in_blink = (rec.time > 2.35) & (rec.time < 2.55)
-    assert np.isnan(rec.pupil_left[in_blink]).all() == (layout == "cloud")   # blinks: Cloud export only
+    assert np.isnan(rec.pupil_left[in_blink]).all()          # blinks, in both layouts
 
 
 def test_pipeline_with_lux_sensor(tmp_path):
