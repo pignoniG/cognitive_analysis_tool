@@ -88,10 +88,13 @@ class SpectralSerialSource(Source):
     """The AS7341 on a serial port: one spectrum per line, stamped by the board's clock mapped onto the computer's."""
 
     kind = "as7341"
+    stall_seconds = 5.0       # 7.5 spectra a second; the board says when the sensor is missing, but sends no spectra
 
     def __init__(self, port: str | None = None, baud: int = BAUD, name: str = "as7341"):
         super().__init__(name)
         self.port, self.baud = port, baud
+        self._auto = port is None  # looked for again on every reconnection: the port's name can change
+        self._opened = False
         self.columns = ["unix time (s)", "device time (s)", *CHANNELS, "gain", "integration (ms)", "saturated"]
         self._ser = None
         self._sent = MillisUnwrapper()
@@ -104,24 +107,29 @@ class SpectralSerialSource(Source):
         """Open the port and wait for the firmware to answer; with no port given, try the USB serial ports until one
         does. Raises with the firmware's own message if it cannot find the sensor."""
         import serial
+        import serial.tools.list_ports
 
-        if self.port is not None:
-            self._ser = serial.Serial(port=self.port, baudrate=self.baud, timeout=0.3)
+        # a clean start: the board restarts when its port opens, so its clock starts again at zero
+        self._sent, self._mid, self._clock = MillisUnwrapper(), MillisUnwrapper(), ClockMapper()
+        self._buffer, self._pending, self.message = b"", [], None
+        gone = self._opened and self.port not in {p.device for p in serial.tools.list_ports.comports()}
+        if not self._auto and not gone:
+            self._ser = serial.Serial(port=self.port, baudrate=self.baud, timeout=0.3, exclusive=True)
             try:
                 self._handshake()
             except Exception:
                 self._ser.close()
                 raise
-        else:
-            import serial.tools.list_ports
-
+        else:                     # automatic, or the chosen port has gone since (back under another name)
             usb = sorted((p for p in serial.tools.list_ports.comports() if p.vid is not None),
                          key=lambda p: p.vid not in LIKELY_VENDORS)
             errors = []
+            # every port is opened exclusively (here and by the lux sensor): a port another sensor is reading is
+            # busy and skipped, not read by two at once
             for device in (p.device for p in usb):
                 self._buffer = b""
                 try:
-                    self._ser = serial.Serial(port=device, baudrate=self.baud, timeout=0.3)
+                    self._ser = serial.Serial(port=device, baudrate=self.baud, timeout=0.3, exclusive=True)
                 except serial.SerialException as e:
                     errors.append(f"{device}: {e}")
                     continue
@@ -137,6 +145,7 @@ class SpectralSerialSource(Source):
                 self._ser = None
                 raise RuntimeError("No AS7341 board answered on the USB serial ports"
                                    + (" (" + "; ".join(errors) + ")" if errors else "") + ". Is the firmware flashed?")
+        self._opened = True
         self.settings = {"port": self.port, "baud": self.baud, "firmware": self.settings.get("firmware", ""),
                          "channels": "basic counts: raw counts / (gain × integration time in ms)",
                          "peak wavelengths (nm)": {name: nm for name, nm in BANDS}}
@@ -192,8 +201,15 @@ class SpectralSerialSource(Source):
         self._pending.clear()
         while not stopped.is_set():
             host, lines = self._read_lines()
-            rows = [self.row(host, f) for f in (parse_line(ln.decode("utf-8", "replace")) for ln in lines) if f]
+            rows = []
+            for line in lines:
+                text = line.decode("utf-8", "replace").strip()
+                if text.startswith("# ERROR"):          # the board is there, the sensor is not: shown in the table
+                    self.message = text[2:]
+                elif (fields := parse_line(text)) is not None:
+                    rows.append(self.row(host, fields))
             if rows:
+                self.message = None
                 emit(rows)
 
     def signals(self) -> list[str]:
@@ -210,3 +226,4 @@ class SpectralSerialSource(Source):
         """Close the serial port."""
         if self._ser is not None:
             self._ser.close()
+            self._ser = None

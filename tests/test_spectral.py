@@ -176,3 +176,64 @@ def _wait(cond, timeout=5):
     while not cond() and time.time() < end:
         time.sleep(0.01)
     return cond()
+
+
+def test_the_boards_sensor_message_is_shown_and_cleared(monkeypatch):
+    pytest.importorskip("serial")
+    _port(monkeypatch, ["# AS7341 spectral logger 1\r\n", LINE, "# ERROR lost the AS7341, reconnecting\r\n"])
+    s = SpectralSerialSource("/dev/fake")
+    s.open()
+    got, stop = [], threading.Event()
+    t = threading.Thread(target=s.run, args=(got.extend, stop))
+    t.start()
+    assert _wait(lambda: s.message == "ERROR lost the AS7341, reconnecting") and len(got) == 1
+    s._ser.lines.append(LINE.encode())
+    assert _wait(lambda: s.message is None and len(got) == 2)
+    stop.set()
+    t.join(2)
+
+
+def test_reopening_starts_the_boards_clock_afresh(monkeypatch):
+    pytest.importorskip("serial")
+    later = LINE.replace("10125,10070", "600125,600070")
+    _port(monkeypatch, ["# AS7341 spectral logger 1\r\n", later])
+    s = SpectralSerialSource("/dev/fake")
+    s.open()
+    first = s.row(5000.0, parse_line(later))
+    s.close()
+    _port(monkeypatch, ["# AS7341 spectral logger 1\r\n", LINE])        # the board restarted: its clock is back at 10 s
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [type("P", (), {"device": "/dev/fake"})()])
+    s.open()
+    second = s.row(5010.0, parse_line(LINE))
+    assert second[0] - first[0] == pytest.approx(10.0)                 # on the computer's clock, not 590 s back
+    assert s.port == "/dev/fake"
+
+
+def test_a_chosen_port_that_is_gone_is_looked_for_on_reconnecting(monkeypatch):
+    pytest.importorskip("serial")
+    _port(monkeypatch, ["# AS7341 spectral logger 1\r\n", LINE] * 3)
+    s = SpectralSerialSource("/dev/old")
+    s.open()
+    s.close()
+    port = type("P", (), {"device": "/dev/new", "vid": 0x1A86})()
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [port])
+    s.open()
+    assert s.port == "/dev/new"
+
+
+def test_the_search_skips_a_port_another_sensor_is_reading(monkeypatch):
+    serial = pytest.importorskip("serial")
+    asked = []
+
+    def factory(port, exclusive=False, **kwargs):
+        asked.append((port, exclusive))
+        if port == "/dev/lux":                      # the lux sensor holds its port
+            raise serial.SerialException("Could not exclusively lock port /dev/lux")
+        return FakeSerial(["# AS7341 spectral logger 1\r\n", LINE])
+
+    monkeypatch.setattr(serial, "Serial", factory)
+    ports = [type("P", (), {"device": d, "vid": v})() for d, v in (("/dev/lux", 0x2341), ("/dev/nano", 0x1A86))]
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: ports)
+    s = SpectralSerialSource()
+    s.open()
+    assert s.port == "/dev/nano" and all(exclusive for _, exclusive in asked)

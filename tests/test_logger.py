@@ -481,3 +481,83 @@ def test_the_window_stays_responsive_with_a_noisy_512_hz_source_and_the_buttons_
     assert not w.logger.recording and w.record.text() == "Start recording" and w.record.isEnabled()
     assert "Saved to" in w.statusBar().currentMessage()
     w.logger.shutdown()
+
+
+class Flaky(SimulatedSource):
+    """Sends a few rows per connection; how each connection ends and whether opening works are set by the test."""
+
+    def __init__(self, name="flaky", fail_opens=0, end="raise", channels=1):
+        super().__init__(name, rate=100, channels=channels)
+        self.opens, self.closes, self.fail_opens, self.end = 0, 0, fail_opens, end
+
+    def open(self):
+        if self.opens and self.fail_opens:
+            self.fail_opens -= 1
+            raise OSError("no such port")
+        self.opens += 1
+
+    def run(self, emit, stopped):
+        for i in range(5):
+            emit([(time.time(), float(self.opens))])
+        if self.end == "raise" and self.opens == 1:
+            raise OSError("device disconnected")
+        stopped.wait()              # "silent": only the watchdog ends this connection
+
+    def close(self):
+        self.closes += 1
+
+
+def test_a_lost_device_is_reconnected_into_the_same_file(tmp_path):
+    log = Logger()
+    log.retry_seconds = 0.05
+    session = log.start_recording(tmp_path)
+    src = Flaky(fail_opens=2)
+    log.add(src)
+    assert wait(lambda: log.counts["flaky"] == 10)
+    assert src.opens == 2 and src.closes >= 1 and "flaky" not in log.errors
+    [(lost, back)] = log.gaps["flaky"]
+    assert back > lost
+    log.stop_recording()
+    rows = list(csv.reader(open(session / "flaky.csv")))
+    assert rows[0] == ["unix time (s)", "ch1"] and [r[1] for r in rows[1:]] == ["1"] * 5 + ["2"] * 5
+    info = json.loads((session / "session.json").read_text())
+    assert info["sources"]["flaky"]["gaps (unix s)"] == [[lost, back]]
+    log.shutdown()
+
+
+def test_a_silent_device_is_reconnected_after_its_stall_time():
+    log = Logger()
+    log.retry_seconds = 0.05
+    src = Flaky(end="silent")
+    src.stall_seconds = 0.3
+    log.add(src)
+    assert wait(lambda: src.opens >= 2 and log.counts["flaky"] >= 10)
+    assert log.gaps["flaky"][0][1] is not None
+    log.shutdown()
+
+
+def test_the_error_says_it_is_reconnecting_and_removing_stops_it():
+    log = Logger()
+    log.retry_seconds = 0.05
+    src = Flaky(fail_opens=10**6)
+    log.add(src)
+    assert wait(lambda: "reconnecting: no such port" in log.errors.get("flaky", ""))
+    assert log.gaps["flaky"][0][1] is None
+    start = time.time()
+    log.remove("flaky")
+    assert time.time() - start < 1 and "flaky" not in log.sources and "flaky" not in log.errors
+    log.shutdown()
+
+
+def test_a_device_back_with_other_channels_is_not_written_into_the_old_file():
+    class Changing(Flaky):
+        def open(self):
+            super().open()
+            if self.opens == 2:
+                self.columns = self.columns + ["ch9"]
+
+    log = Logger()
+    log.retry_seconds = 0.05
+    log.add(Changing())
+    assert wait(lambda: "other channels" in log.errors.get("flaky", ""))
+    log.shutdown()

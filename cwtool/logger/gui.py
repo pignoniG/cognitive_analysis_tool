@@ -556,10 +556,16 @@ class LoggerWindow(QMainWindow):
             err = self.logger.errors.get(name)
             last = self.logger.last_time.get(name)
             age = None if last is None else now - last
-            status = err or ("waiting for data" if age is None else "ok" if age < 3 else f"silent {age:.0f} s")
+            status = (err or src.message
+                      or ("waiting for data" if age is None else "ok" if age < 3 else f"silent {age:.0f} s"))
+            gaps = len(self.logger.gaps.get(name, ()))
+            if gaps and not err:
+                status += f" (reconnected {gaps}×)"
             for c, text in enumerate([name, status, str(self.logger.counts.get(name, 0)),
                                       "" if age is None else f"{age:.1f} s"]):
-                self.table.setItem(r, c, QTableWidgetItem(text))
+                item = QTableWidgetItem(text)
+                item.setToolTip(text)                  # a long message does not fit the column
+                self.table.setItem(r, c, item)
         if "disk" in self.logger.errors:  # a write failed (full disk, ...): the recording goes on without those rows
             self.statusBar().showMessage(f"Could not write to disk: {self.logger.errors['disk']}")
         self._ticks += 1

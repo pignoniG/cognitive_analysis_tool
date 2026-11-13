@@ -81,6 +81,7 @@ class ShimmerSource(Source):
     onto the computer's.
     """
     kind = "shimmer"
+    stall_seconds = 10.0      # streams at 51.2 Hz or more: a Bluetooth link that drops goes silent, it does not raise
 
     def __init__(self, port: str, name: str = "shimmer", sampling_rate: float | None = None, sensors=None,
                  timeout: float = 10.0, set_clock: bool = True):
@@ -101,6 +102,7 @@ class ShimmerSource(Source):
         """
         from pyshimmer import ShimmerBluetooth
 
+        self._unwrap, self._clock = TimestampUnwrapper(), ClockMapper()   # a clean start when reconnecting
         ser = self._link()
         self._dev = ShimmerBluetooth(ser)
         # initialize() waits for the device's answer forever; give up after a while instead.
@@ -215,10 +217,17 @@ class ShimmerSource(Source):
         try:
             stopped.wait()
         finally:
-            self._dev.stop_streaming()
+            try:   # over a lost link the device never acknowledges: give up after a while, the logger reconnects
+                call_with_timeout(self._dev.stop_streaming, timeout=3.0)
+            except Exception:
+                pass
             self._dev.remove_stream_callback(on_packet)
 
     def close(self) -> None:
         """Shut the device's connection down."""
         if self._dev is not None:
-            self._dev.shutdown()
+            dev, self._dev = self._dev, None
+            try:
+                call_with_timeout(dev.shutdown, timeout=5.0)   # a lost link must not hold up the reconnection
+            except Exception:
+                pass

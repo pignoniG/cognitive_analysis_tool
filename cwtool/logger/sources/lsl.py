@@ -83,6 +83,7 @@ class LslSource(Source):
                 f"No LSL stream matching {self.match!r} (device ID, name or type). Is the device streaming and "
                 "its LSL output enabled in the Oscilloscope?")
         flags = pylsl.proc_clocksync | pylsl.proc_dejitter
+        self._inlets = []         # LSL's inlets recover from a lost stream by themselves; this is for a reopen
         for info in infos:
             self._inlets.append((pylsl.StreamInlet(info, max_buflen=60, processing_flags=flags), signal_names(info)))
         self.settings = {"match": self.match, "source ids": sorted({i.source_id() for i in infos}),

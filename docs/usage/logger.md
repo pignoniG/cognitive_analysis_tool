@@ -26,8 +26,27 @@ cwtool-logger                 # or: python -m cwtool.logger
 4. Press **Stop recording**. The folder is shown in the status bar.
 
 Sensors can be added or removed while recording; one added during a recording starts its own file at that moment.
-The table lists each sensor's status (*ok*, *waiting for data*, *silent* with the seconds since its last sample, or
-the error that stopped it), its row count and the time since the last row.
+The table lists each sensor's status (*ok*, *waiting for data*, *silent* with the seconds since its last sample, what
+the device reports, or *lost … reconnecting*), its row count and the time since the last row. Hover over a status to
+read all of it.
+
+### When a device is lost
+
+A device that drops out (a USB cable pulled, a Bluetooth link lost, the board restarted) is reconnected by itself: the
+logger closes it and tries to open it again every 2 s until it answers, or until it is removed. A device counts as
+lost when reading from it fails, or when it sends nothing for longer than its usual pauses: 5 s for the lux and AS7341
+sensors, 10 s for the Shimmer (a lost Bluetooth link goes quiet rather than failing). The EmotiBit's LSL streams
+recover by themselves and are left to it.
+
+- The rows go on into the **same file**, with a gap. Each gap is listed in `session.json` under the sensor, as
+  `gaps (unix s)`: `[lost, back]`, `back` being `null` if the device had not come back when the recording stopped.
+- A USB board that comes back under another port name is found again: for the lux sensor when it was added with
+  *Automatic*, for the AS7341 always (the firmware is asked on each port).
+- The board's clock starts again from zero after a restart; the mapping onto the computer's clock starts afresh with
+  it, so `unix time (s)` stays right and `device time (s)` jumps back.
+- The table says *reconnected n×* after the status once it is back.
+- A device that comes back with other channels (a Shimmer set up differently meanwhile) is not written into the old
+  file: the table asks to remove it and add it again.
 
 ### What the plots show
 
@@ -166,7 +185,7 @@ flushed every second, so a crash loses little. Every data file starts with a hea
 | `shimmer.csv` | `unix time (s)`, `device time (s)`, then one column per enabled channel (`accel_ln_x`, `gyro_mpu9150_x`, `exg_ads1292r_1_ch1_24bit`, ...), raw values |
 | `emotibit.csv` | `unix time (s)`, `signal`, `value`: one row per sample, with the stream name (`EDA`, `PPG_RED`, ...) as the signal, so signals of different rates share the file |
 | `event_log.csv` | `Event`, `Start Time`, `End Time`, `Duration (s)`, `Start (unix s)`, `End (unix s)`, as written by `tools/event_logger.py` |
-| `session.json` | start and end, the computer's UTC offset, and for each sensor its file, kind, columns, settings (port, sampling rate, for the Shimmer's ECG the ExG gains and data rates, ...) and row count |
+| `session.json` | start and end, the computer's UTC offset, and for each sensor its file, kind, columns, settings (port, sampling rate, for the Shimmer's ECG the ExG gains and data rates, ...), row count and the gaps where it was lost |
 
 The main app can show the Shimmer, EmotiBit and AS7341 files under ΔPD and export them with the results, trimmed to what
 you choose ([Sensor data](gui.md#sensor-data-optional)).
@@ -220,8 +239,10 @@ setup (a long recording, a different Wi-Fi network) and keep the result with the
 
 - **The window freezes.** If it stops responding for more than 2 s, the stack of every thread is written to
   `stall.log` in the recordings folder. Send it with a note of which sensors were connected.
-- **A sensor says *silent*.** The device stopped sending: check its battery, its connection, and for the EmotiBit that
-  the Oscilloscope is still connected and streaming.
+- **A sensor says *silent*** (or *lost … reconnecting*). The device stopped sending: check its battery, its
+  connection, and for the EmotiBit that the Oscilloscope is still connected and streaming. The logger keeps trying.
+- **AS7341: *AS7341 not found* in the table.** The Nano answers but the sensor does not: check its four wires. A board
+  that keeps dropping off USB points to a short on the sensor's power wires or a loose cable.
 - **Shimmer: no answer.** Not in standby (switch it off and on), still connected to Consensys or another computer, a
   flat battery (red light), or, on macOS, the program was not started from Terminal.
 - **EmotiBit: not in the list.** The Oscilloscope does not see it (Wi-Fi settings, 2.4 GHz, same network), or its LSL
@@ -250,4 +271,7 @@ log.shutdown()
 ```
 
 A new sensor is a `Source` subclass (`cwtool/logger/base.py`): `open()` connects and sets `columns`, `run(emit,
-stopped)` calls `emit([(unix_time, value, ...), ...])` until `stopped` is set.
+stopped)` calls `emit([(unix_time, value, ...), ...])` until `stopped` is set and raises if the device is lost,
+`close()` disconnects. `open()` is called again to reconnect, so it starts from a clean state; `stall_seconds` sets
+how long the device may stay silent before it counts as lost, and `message` shows what the device reports in the
+table.

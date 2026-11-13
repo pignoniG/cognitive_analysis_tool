@@ -21,10 +21,12 @@ def list_ports() -> list[tuple[str, str]]:
 class LuxSerialSource(Source):
     """The TSL2591 lux logger on a serial port: one reading per line, stamped when it arrives."""
     kind = "lux"
+    stall_seconds = 5.0       # about 10 readings a second
 
     def __init__(self, port: str | None = None, baud: int = 250000, name: str = "lux"):
         super().__init__(name)
         self.port, self.baud = port, baud
+        self._auto = port is None  # found by the board's name, again on every reconnection (the name can change)
         self.columns = ["unix time (s)", "lux"]  # the file cwtool.lux reads: lux.csv
         self._ser = None
 
@@ -32,12 +34,12 @@ class LuxSerialSource(Source):
         """Open the serial port, choosing the board by its name if no port was given."""
         import serial
 
-        if self.port is None:
+        if self._auto:
             ports = [p for p, d in list_ports() if any(k in d for k in KNOWN_BOARDS)]
             if not ports:
                 raise RuntimeError("No sensor board found; choose the serial port")
             self.port = ports[0]
-        self._ser = serial.Serial(port=self.port, baudrate=self.baud, timeout=0.3)
+        self._ser = serial.Serial(port=self.port, baudrate=self.baud, timeout=0.3, exclusive=True)
         self.settings = {"port": self.port, "baud": self.baud}
 
     def run(self, emit, stopped) -> None:
@@ -57,3 +59,4 @@ class LuxSerialSource(Source):
         """Close the serial port."""
         if self._ser is not None:
             self._ser.close()
+            self._ser = None

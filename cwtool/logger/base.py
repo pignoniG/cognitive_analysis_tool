@@ -19,21 +19,27 @@ class Source:
     """
 
     kind = "source"
+    # Seconds without a row after which the logger takes the device as lost and reconnects; None: never (a device
+    # that may legitimately go quiet, or one that recovers by itself, as LSL does).
+    stall_seconds: float | None = None
 
     def __init__(self, name: str):
         self.name = name
         self.columns: list[str] = ["unix time (s)"]
         self.settings: dict = {}
+        self.message: str | None = None   # what the device says is wrong while it is still connected, for the table
 
     def open(self) -> None:
-        """Connect to the device and set ``columns``. Blocking; raises on failure."""
+        """Connect to the device and set ``columns``. Blocking; raises on failure. Called again to reconnect after
+        :meth:`close`, so it must start from a clean state (the device may have restarted)."""
 
     def run(self, emit: Emit, stopped: threading.Event) -> None:
-        """Deliver rows with ``emit`` until ``stopped`` is set. Runs in its own thread."""
+        """Deliver rows with ``emit`` until ``stopped`` is set. Runs in its own thread. Raise if the device is lost:
+        the logger closes the source and reconnects."""
         stopped.wait()
 
     def close(self) -> None:
-        """Disconnect."""
+        """Disconnect. May be called more than once, and after a lost connection."""
 
     def signals(self) -> list[str]:
         """Names of the numeric signals shown on the live plot."""

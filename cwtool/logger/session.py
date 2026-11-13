@@ -18,6 +18,8 @@ from cwtool.logger.base import Source
 
 LIVE_SECONDS = 60.0
 LIVE_POINTS = 16000   # per signal: 30 s of the plot at 512 Hz
+RETRY_SECONDS = 2.0   # between attempts to reconnect a lost device
+WATCH_SECONDS = 0.5   # how often the logger checks for devices gone silent
 
 
 class EventLog:
@@ -68,6 +70,10 @@ class Logger:
 
     Every data file starts with the Unix time in seconds on the computer's clock, so the analysis takes the time
     span it needs from each; ``lux.csv`` is read by cwtool.lux as it is.
+
+    A device that is lost (its source raises, or it sends nothing for its ``stall_seconds``) is closed and opened
+    again every ``RETRY_SECONDS`` until it answers or is removed. Its rows go on into the same file; the gap is listed
+    in ``session.json`` (``gaps (unix s)``) and ``errors`` says what happened meanwhile.
     """
 
     def __init__(self):
@@ -78,6 +84,10 @@ class Logger:
         self.errors: dict[str, str] = {}
         self.counts: dict[str, int] = defaultdict(int)
         self.last_time: dict[str, float] = {}
+        self.gaps: dict[str, list] = defaultdict(list)     # [lost, back] in Unix s (back None while still lost)
+        self.retry_seconds = RETRY_SECONDS
+        self._attempts: dict[str, threading.Event] = {}     # set to end the current connection (stall or removal)
+        self._heard: dict[str, float] = {}                  # when a row last arrived, or the device (re)connected
         self._live: dict[tuple[str, str], deque] = {}
         self._sinks: dict[str, object] = {}
         self.session_folder: Path | None = None
@@ -86,6 +96,8 @@ class Logger:
         # Rows are written by their own thread: a slow disk must not hold up the sources or the window.
         self._write_queue: queue.Queue = queue.Queue()
         threading.Thread(target=self._write_loop, daemon=True, name="logger-writer").start()
+        self._closed = threading.Event()
+        threading.Thread(target=self._watch_loop, daemon=True, name="logger-watchdog").start()
 
     def _write_loop(self) -> None:
         while True:
@@ -129,12 +141,17 @@ class Logger:
         stop = self._stops.pop(name, None)
         if stop:
             stop.set()
+        attempt = self._attempts.get(name)
+        if attempt:
+            attempt.set()
         t = self._threads.pop(name, None)
         if t:
             t.join(timeout=5)
         src = self.sources.pop(name, None)
         if src:
             src.close()
+        for d in (self._attempts, self._heard, self.gaps, self.errors):
+            d.pop(name, None)
         with self._lock:
             sink = self._sinks.pop(name, None)
             for key in [k for k in self._live if k[0] == name]:
@@ -144,14 +161,71 @@ class Logger:
             sink.close()
 
     def _run(self, source: Source, stop: threading.Event) -> None:
+        """The source's thread: receive rows; when the device is lost, reconnect until it is back or removed."""
+        name = source.name
+        while not stop.is_set():
+            attempt = threading.Event()
+            self._attempts[name] = attempt
+            self._heard[name] = time.time()
+            if stop.is_set():
+                return
+            try:
+                source.run(lambda rows: self._on_rows(source, rows), attempt)
+                reason = None if stop.is_set() else f"no data for {source.stall_seconds:g} s"
+            except Exception as e:
+                reason = f"{type(e).__name__}: {e}"
+            if stop.is_set():
+                return
+            lost = time.time()
+            self.gaps[name].append([lost, None])
+            self.errors[name] = f"lost ({reason}); reconnecting…"
+            if not self._reconnect(source, stop, reason):
+                return
+            self.gaps[name][-1][1] = time.time()
+            self.errors.pop(name, None)
+
+    def _reconnect(self, source: Source, stop: threading.Event, reason: str) -> bool:
+        """Close the source and open it again every ``retry_seconds`` until it opens (True) or is removed (False)."""
+        name = source.name
+        columns = list(source.columns)
         try:
-            source.run(lambda rows: self._on_rows(source, rows), stop)
-        except Exception as e:  # shown by the window, the other sources keep going
-            self.errors[source.name] = f"{type(e).__name__}: {e}"
+            source.close()
+        except Exception:
+            pass
+        while not stop.wait(self.retry_seconds):
+            try:
+                source.open()
+            except Exception as e:
+                self.errors[name] = f"lost ({reason}); reconnecting: {e}"
+                try:
+                    source.close()
+                except Exception:
+                    pass
+                continue
+            if stop.is_set():          # removed while it was opening
+                source.close()
+                return False
+            if source.columns != columns:   # the file has the old columns: rows would not fit them
+                self.errors[name] = "reconnected with other channels; remove the sensor and add it again"
+                source.close()
+                return False
+            return True
+        return False
+
+    def _watch_loop(self) -> None:
+        """End the connection of a source that has sent nothing for its ``stall_seconds``, so it is reconnected."""
+        while not self._closed.wait(WATCH_SECONDS):
+            now = time.time()
+            for name, src in list(self.sources.items()):
+                attempt = self._attempts.get(name)
+                if (src.stall_seconds and attempt is not None and not attempt.is_set()
+                        and now - self._heard.get(name, now) > src.stall_seconds):
+                    attempt.set()
 
     def _on_rows(self, source: Source, rows) -> None:
         if not rows:
             return
+        self._heard[source.name] = time.time()
         with self._lock:
             self.counts[source.name] += len(rows)
             self.last_time[source.name] = rows[-1][0]
@@ -244,7 +318,8 @@ class Logger:
             "time source": "unix time of the computer running this logger; device clocks are mapped onto it",
             "sources": {
                 name: {"file": s.filename, "kind": s.kind, "columns": s.columns, "settings": s.settings,
-                       "rows": self.counts.get(name, 0)}
+                       "rows": self.counts.get(name, 0),
+                       "gaps (unix s)": [g for g in self.gaps.get(name, []) if g[1] is None or g[1] >= self._started]}
                 for name, s in self.sources.items()
             },
         }
@@ -255,4 +330,5 @@ class Logger:
         self.stop_recording()
         for name in list(self.sources):
             self.remove(name)
+        self._closed.set()
         self._write_queue.put(None)
