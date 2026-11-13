@@ -93,3 +93,21 @@ def test_command_line_prints_and_saves(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "EmotiBit's timestamps are +250 ms late" in out or "ms late with respect to the Shimmer" in out
     assert json.loads((folder / "clock_check.json").read_text())["shimmer_vs_emotibit"]["offset_s"] == pytest.approx(0.25, abs=0.03)
+
+
+def test_the_as7341_boards_clock_and_regularity(tmp_path):
+    folder = write_session(tmp_path / "s")
+    rng = np.random.default_rng(3)
+    t = np.arange(0, 60, 0.108)                                  # about 9 spectra per second
+    with open(folder / "as7341.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["unix time (s)", "device time (s)", "clear"])
+        for ti in t:
+            w.writerow([f"{EPOCH + ti + rng.normal(0, 0.0003):.6f}", f"{12.0 + ti * (1 - 300e-6):.4f}", 10.0])
+    info = json.loads((folder / "session.json").read_text())
+    info["sources"]["as7341"] = {"file": "as7341.csv", "kind": "as7341"}
+    (folder / "session.json").write_text(json.dumps(info))
+    report = clockcheck.check_session(folder)
+    assert report["regularity"]["as7341"]["rate_hz"] == pytest.approx(1 / 0.108, abs=0.1)
+    assert report["as7341_clock"]["drift_ppm"] == pytest.approx(-300.0, abs=20)   # the board's clock runs slow
+    assert "AS7341 board clock" in clockcheck.format_report(report)

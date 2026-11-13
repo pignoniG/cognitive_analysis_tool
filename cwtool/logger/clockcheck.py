@@ -2,8 +2,9 @@
 
     python -m cwtool.logger.clockcheck SESSION_FOLDER
 
-* **Regularity** of each file (lux, Shimmer, EmotiBit signals): the rate, and how much the time between samples
+* **Regularity** of each file (lux, AS7341, Shimmer, EmotiBit signals): the rate, and how much the time between samples
   varies. The lux sensor is stamped when its line arrives over USB, so this is its timestamp jitter.
+* **The AS7341 board's clock against the computer's**, as for the Shimmer below.
 * **The Shimmer's clock against the computer's:** its own clock (``device time (s)``) is regular but drifts; the file's
   ``unix time (s)`` maps it onto the computer's. How fast the clock runs (ppm), and how far the mapping wanders around a
   straight line, say how good that mapping is.
@@ -131,6 +132,11 @@ def check_session(folder: Path, max_lag: float = 2.0) -> dict:
         report["regularity"]["shimmer"] = interval_stats(shimmer.unix)
         if "device time (s)" in shimmer.data:
             report["shimmer_clock"] = shimmer_clock(shimmer.unix, shimmer.data["device time (s)"])
+    spectral = found.get("as7341")
+    if spectral is not None:
+        report["regularity"]["as7341"] = interval_stats(spectral.unix)
+        if "device time (s)" in spectral.data:
+            report["as7341_clock"] = shimmer_clock(spectral.unix, spectral.data["device time (s)"])
     if emotibit is not None:
         for name in emotibit.signals():
             t, _ = emotibit.series(name)
@@ -161,6 +167,12 @@ def format_report(report: dict) -> str:
                   f"  the Shimmer's clock runs {clock['drift_ppm']:+.1f} ppm fast (negative: slow), wander about a straight line: std {clock['wander_std_ms']:.2f} ms, "
                   f"1-99 % {clock['wander_p1_p99_ms'][0]:.1f} to {clock['wander_p1_p99_ms'][1]:.1f} ms; the offset "
                   f"moved by {clock['offset_range_ms']:.1f} ms in all"]
+    clock = report.get("as7341_clock")
+    if clock:
+        lines += ["", "AS7341 board clock against the computer's:",
+                  f"  the board's clock runs {clock['drift_ppm']:+.1f} ppm fast (negative: slow), wander about a "
+                  f"straight line: std {clock['wander_std_ms']:.2f} ms, 1-99 % {clock['wander_p1_p99_ms'][0]:.1f} to "
+                  f"{clock['wander_p1_p99_ms'][1]:.1f} ms; the offset moved by {clock['offset_range_ms']:.1f} ms in all"]
     cross = report.get("shimmer_vs_emotibit")
     if cross:
         verdict = "" if is_clear(cross) else "   (weak: not enough shared movement, repeat with clear knocks)"

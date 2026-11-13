@@ -68,6 +68,7 @@ nav:
       - Pupil Neon: devices/pupil-neon.md
       - Tobii Pro Glasses 3: devices/tobii-g3.md
       - Lux sensor hardware: hardware/lux-sensor.md
+      - AS7341 spectral sensor: hardware/spectral-sensor.md
   - How data is processed:
       - Pipeline overview: processing/overview.md
       - Processing at a glance: processing/pipeline.md

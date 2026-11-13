@@ -1,7 +1,7 @@
 # Sensor logger
 
-A desktop app that records the lux sensor, a Shimmer (ECG and other signals) and an EmotiBit side by side, on the
-computer's clock, together with the phases of the experiment. It replaces running `tools/lux_logger.py` and
+A desktop app that records the lux sensor, the AS7341 spectral sensor, a Shimmer (ECG and other signals) and an
+EmotiBit side by side, on the computer's clock, together with the phases of the experiment. It replaces running `tools/lux_logger.py` and
 `tools/event_logger.py` separately (see [Lux and event loggers](tools.md), which still work).
 
 ```bash
@@ -17,7 +17,7 @@ cwtool-logger                 # or: python -m cwtool.logger
 
 ## Recording
 
-1. **Add the sensors** with the *+ Lux*, *+ Shimmer*, *+ EmotiBit* buttons (see below). Each sensor gets a live plot
+1. **Add the sensors** with the *+ Lux*, *+ Spectral*, *+ Shimmer*, *+ EmotiBit* buttons (see below). Each sensor gets a live plot
    as soon as it is connected, so the signals can be checked before recording; nothing is saved yet. Choose the signal
    shown with the drop-down above each plot.
 2. **Pick the folder** for the recordings (remembered between sessions) and press the green **Start recording**
@@ -44,6 +44,14 @@ not magnified.
 
 The [TSL2591 logger](../hardware/lux-sensor.md) on a USB port. *+ Lux* finds the board by its name (Adafruit, Arduino,
 CH340 "USB2.0-Serial"); choose the port by hand if several are connected. About 10 readings per second.
+
+### AS7341 spectral sensor
+
+The [AS7341 on an Arduino Nano](../hardware/spectral-sensor.md): eight visible bands, clear and near infrared, 7.5
+spectra per second, with the gain set by the board. *+ Spectral* asks each USB serial port for the firmware, the Nano's
+USB chips first, and takes the one that answers (under 2 s; up to 5 s for each other device it tries); choose the port
+to skip the search. If the board answers but the sensor does not, the firmware's message (check the wiring) is shown. The plot shows
+the clear channel first; any band, NIR or the gain can be chosen.
 
 ### Shimmer
 
@@ -154,12 +162,13 @@ flushed every second, so a crash loses little. Every data file starts with a hea
 | File | Columns |
 |---|---|
 | `lux.csv` | `unix time (s)`, `lux` |
+| `as7341.csv` | `unix time (s)`, `device time (s)`, `F1 415 nm` … `F8 680 nm`, `clear`, `nir` (basic counts), `gain`, `integration (ms)`, `saturated` ([details](../hardware/spectral-sensor.md#what-the-logger-saves)) |
 | `shimmer.csv` | `unix time (s)`, `device time (s)`, then one column per enabled channel (`accel_ln_x`, `gyro_mpu9150_x`, `exg_ads1292r_1_ch1_24bit`, ...), raw values |
 | `emotibit.csv` | `unix time (s)`, `signal`, `value`: one row per sample, with the stream name (`EDA`, `PPG_RED`, ...) as the signal, so signals of different rates share the file |
 | `event_log.csv` | `Event`, `Start Time`, `End Time`, `Duration (s)`, `Start (unix s)`, `End (unix s)`, as written by `tools/event_logger.py` |
 | `session.json` | start and end, the computer's UTC offset, and for each sensor its file, kind, columns, settings (port, sampling rate, for the Shimmer's ECG the ExG gains and data rates, ...) and row count |
 
-The main app can show the Shimmer and EmotiBit files under ΔPD and export them with the results, trimmed to what
+The main app can show the Shimmer, EmotiBit and AS7341 files under ΔPD and export them with the results, trimmed to what
 you choose ([Sensor data](gui.md#sensor-data-optional)).
 
 The whole session folder is read by the analysis: point **File → Logger folder…** of the app (or `cwtool --logs`) at the
@@ -174,6 +183,8 @@ both share a clock; for the Neon, whose timestamps come from the phone, see
 [clock synchronisation](../devices/pupil-neon.md#clocks).
 
 - **Lux:** stamped when the line arrives over USB.
+- **AS7341:** stamped by the board at the middle of each measurement; the board's clock is mapped onto the computer's
+  as the Shimmer's is (below), from the time each line was sent and the time it arrived.
 - **Shimmer:** its own clock is regular but drifts, and Bluetooth delivers samples in bursts. `device time (s)` is the
   device's clock (zero at the first sample) and `unix time (s)` maps it onto the computer's clock, using the smallest
   difference between the two over the last minute (the sample that arrived with the least delay), so the burst delay
@@ -225,10 +236,11 @@ The window is a thin layer over classes that do not use Qt:
 ```python
 from pathlib import Path
 from cwtool.logger import Logger
-from cwtool.logger.sources import LuxSerialSource, ShimmerSource, LslSource
+from cwtool.logger.sources import LuxSerialSource, ShimmerSource, LslSource, SpectralSerialSource
 
 log = Logger()
 log.add(LuxSerialSource())                        # connects, then streams into live buffers
+log.add(SpectralSerialSource())                   # the AS7341: the first USB port whose board answers
 log.add(LslSource("MD-V7-0000188", name="emotibit"))
 session = log.start_recording(Path("recordings"))
 log.mark("Baseline")                              # begin an event

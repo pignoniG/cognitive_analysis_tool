@@ -78,5 +78,5 @@ def test_the_windows_use_the_icons(app):
     w.close()
     lw = LoggerWindow()
     adds = [b for b in lw.findChildren(type(w.analyse_button)) if b.toolTip().startswith("Add a")]
-    assert len(adds) == 4 and all(not b.icon().isNull() for b in adds)
+    assert len(adds) == 5 and all(not b.icon().isNull() for b in adds)
     lw.close()

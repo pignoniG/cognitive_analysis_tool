@@ -1,4 +1,5 @@
-"""Multi-sensor logger: lux sensor, Shimmer ECG and EmotiBit recorded side by side on the computer's clock.
+"""Multi-sensor logger: lux sensor, AS7341 spectral sensor, Shimmer ECG and EmotiBit recorded side by side on the
+computer's clock.
 
 The classes here do not import Qt; the window is in :mod:`cwtool.logger.gui` (``cwtool-logger``).
 """

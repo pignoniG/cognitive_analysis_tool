@@ -112,13 +112,13 @@ DEFAULT_SHIMMER_RATE = 256.0      # the lowest rate fit for heart rate variabili
 
 
 class AddSourceDialog(QDialog):
-    """Settings of a new source: ``kind`` is lux, shimmer, emotibit or simulated."""
+    """Settings of a new source: ``kind`` is lux, as7341, shimmer, emotibit or simulated."""
 
     def __init__(self, kind: str, taken: set[str], found=None, parent=None):
         super().__init__(parent)
         self.kind = kind
-        self.setWindowTitle({"lux": "Lux sensor", "shimmer": "Shimmer", "emotibit": "EmotiBit (LSL)",
-                             "simulated": "Simulated sensor"}[kind])
+        self.setWindowTitle({"lux": "Lux sensor", "as7341": "AS7341 spectral sensor", "shimmer": "Shimmer",
+                             "emotibit": "EmotiBit (LSL)", "simulated": "Simulated sensor"}[kind])
         form = QFormLayout(self)
         default = kind if kind not in taken else next(f"{kind}_{i}" for i in range(2, 99) if f"{kind}_{i}" not in taken)
         self.name = QLineEdit(default)
@@ -137,8 +137,8 @@ class AddSourceDialog(QDialog):
         self.rate_note.setWordWrap(True)
         self.rate.currentIndexChanged.connect(self._rate_changed)
         self._rate_changed()
-        if kind in ("lux", "shimmer"):
-            if kind == "lux":
+        if kind in ("lux", "as7341", "shimmer"):
+            if kind in ("lux", "as7341"):
                 self.port.addItem("Automatic", None)
             if kind == "shimmer":  # paired over Bluetooth (macOS): connected directly, not through a serial port
                 for name, address in found or []:
@@ -150,7 +150,7 @@ class AddSourceDialog(QDialog):
                     self.port.addItem(f"{device}  {desc}", device)
             except ImportError:
                 pass
-            form.addRow("Serial port" if kind == "lux" else "Serial port (Bluetooth or USB dock)", self.port)
+            form.addRow("Serial port (Bluetooth or USB dock)" if kind == "shimmer" else "Serial port", self.port)
             if kind == "shimmer":
                 form.addRow("Sampling rate", self.rate)
                 form.addRow(self.rate_note)
@@ -187,6 +187,8 @@ class AddSourceDialog(QDialog):
                                            ("", "Automatic") else None)
         if self.kind == "lux":
             return sources.LuxSerialSource(port, name=name)
+        if self.kind == "as7341":
+            return sources.SpectralSerialSource(port, name=name)
         if self.kind == "shimmer":
             return sources.ShimmerSource(port, name=name, sampling_rate=self.rate.currentData(),
                                          set_clock=self.set_clock.isChecked())
@@ -323,11 +325,13 @@ class LoggerWindow(QMainWindow):
         v = QVBoxLayout(box)
         row = QHBoxLayout()
         row.addWidget(QLabel("Add:"))
-        for kind, text, name in (("lux", "Lux", "sun"), ("shimmer", "Shimmer", "heartbeat"),
-                                 ("emotibit", "EmotiBit", "activity"), ("simulated", "Simulated", "flask")):
+        for kind, text, name in (("lux", "Lux", "sun"), ("as7341", "Spectral", "rainbow"),
+                                 ("shimmer", "Shimmer", "heartbeat"), ("emotibit", "EmotiBit", "activity"),
+                                 ("simulated", "Simulated", "flask")):
             b = QPushButton(text)
             b.setIcon(icon(name, 18))
-            b.setToolTip(f"Add a {text} sensor" if kind != "simulated" else "Add a simulated sensor to try the logger")
+            b.setToolTip({"simulated": "Add a simulated sensor to try the logger",
+                          "as7341": "Add an AS7341 spectral sensor"}.get(kind, f"Add a {text} sensor"))
             b.clicked.connect(lambda _=False, k=kind: self.add_source(k))
             row.addWidget(b)
         v.addLayout(row)

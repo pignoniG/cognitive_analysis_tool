@@ -1314,3 +1314,23 @@ is revised; they remain in the git history of this file.
 - **Proposal:** record the next participants with it, fit with and without the parts free, and compare the session's dark gap.
 - **Status:** open (needs data).
 
+### 58. The AS7341 spectral sensor is logged but not calibrated or used by the analysis
+
+- **Where:** `cwtool/logger/sources/spectral.py`, `Lux Sensor/Arduino Nano/AS7341_spectral_nano`
+  ([AS7341 spectral sensor](hardware/spectral-sensor.md)).
+- **Why (13 November 2026):** an AS7341 on an Arduino Nano was added as a sensor of the logger. It could tell the
+  pupil's effective light better than the TSL2591's lux: the same lux of blue and of red light do not constrict the pupil
+  alike (issue 56's blue steps), and the melanopic content of the light is what the slow part of the response follows.
+- **Now:** the logger saves the eight bands, clear and NIR in AMS's basic counts (raw / (gain × integration ms)), the
+  gain, the integration time and a saturation flag, stamped by the board's clock mapped onto the computer's. The app
+  shows and exports the file like the Shimmer's; the luminance model does not use it.
+- **Not known:** the sensor's responsivity per band (counts per µW/cm²) for this unit, so the counts are not irradiance,
+  lux or luminance; the actual gain ratios (nominally 2×, the datasheet allows a few percent), which matter because the
+  firmware changes the gain automatically; the angular response in the housing (the TSL2591's field correction, 2.2, does
+  not carry over); the two integrations of a spectrum are 50 ms apart, so a fast change of light can fall between them.
+  Run on the real board (a CH340 Nano clone, old bootloader) on 13 November 2026: 30 s indoors gave 224 spectra at
+  7.52 Hz (133 ± 0.5 ms), gain 256×, no saturation; the gain steps and the clock over a long recording were not checked.
+- **Proposal:** calibrate against a spectroradiometer (or a reference lux meter under several sources) to a matrix from
+  the ten channels to photopic illuminance and the α-opic (melanopic) irradiances; check the gain ratios by measuring a
+  steady light at every gain; then offer the photopic and melanopic estimates to the luminance model next to the lux.
+- **Status:** open (needs a calibration).
