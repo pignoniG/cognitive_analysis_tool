@@ -89,6 +89,9 @@ Choose **On screen** or **In VR**, enter the **participant ID** and press start.
   (`xr_frames_view_not_visible`, `xr_frames_without_head_pose`), and warns in the status line and in the file
   (`xr_view_possibly_not_shown`) when that is most of them. No warning is not proof: with a new headset or browser,
   ask the participant what they saw.
+- **Only the headset's frames move the run:** the sequence advances on the frames the headset asks the page for. If
+  none has come 5 s after entering VR, the run is stopped and the session ended, with a message in the status line,
+  instead of going on with nothing shown.
 
 Fix the display first (constant brightness, sRGB, no night shift or HDR): the page sends sRGB values, the light
 that results depends on the display.

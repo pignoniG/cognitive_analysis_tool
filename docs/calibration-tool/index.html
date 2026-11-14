@@ -997,6 +997,7 @@ function countView(c, session, frame, space) {
   if (!pose || !pose.views?.length) c.noPose++;
 }
 const unseen = (c) => !!c && c.frames >= 60 && Math.max(c.notVisible, c.noPose) > c.frames / 2;
+const XR_FIRST_FRAME_S = 5;   // a session that has delivered no frame by then is ended
 let threeLoad = null;
 const loadThree = () => (threeLoad ??= import("./vendor/three-slim.module.js").catch((e) => { threeLoad = null; throw e; }));
 async function startVR(p, cfg, done) {
@@ -1041,10 +1042,21 @@ async function startVR(p, cfg, done) {
   try { path = await setXrSession(renderer.xr, session, cfg.xrcompat); }
   catch (e) { active = null; session.end().catch(() => {}); throw e; }   // never leave the headset on a black, idle session
   run.vr = { frameRate: session.frameRate ?? null, path, view: { frames: 0, notVisible: 0, noPose: 0 } };
-  renderer.setAnimationLoop((t) => {
-    countView(run.vr.view, session, renderer.xr.getFrame(), renderer.xr.getReferenceSpace());
+  // Set after the session has started, three.js runs this loop on the page's frames too, not only on the headset's:
+  // drawing there fails ("Cannot render to a XRWebGLLayer framebuffer outside of an XRSession animation frame
+  // callback") and the run would go on with nothing shown. So only the headset's frames (with an XRFrame) count.
+  renderer.setAnimationLoop((t, frame) => {
+    if (!frame) return;
+    countView(run.vr.view, session, frame, renderer.xr.getReferenceSpace());
     run.frame(t); renderer.render(scene, camera); tickStatus(run);
   });
+  setTimeout(() => {
+    if (run.vr.view.frames || run.phase === "done") return;
+    run.abort(`the headset gave the page no frames in ${XR_FIRST_FRAME_S} s`);
+    setStatus(`The headset gave the page no frames in ${XR_FIRST_FRAME_S} s: nothing was shown. Check that the browser `
+      + "runs on the GPU the headset is connected to, then try again (with Compatible VR rendering on or off).");
+    session.end().catch(() => {});
+  }, XR_FIRST_FRAME_S * 1000);
   return run;
 }
 let lastTick = 0;

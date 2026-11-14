@@ -1359,4 +1359,16 @@ is revised; they remain in the git history of this file.
   there the frames kept arriving, so the warning may not fire for it; why the projection layer is not shown.
 - **Proposal:** run the calibration on the Varjo with the box on and compare the frame statistics with the earlier run; ask
   for one Quest run with the box off, to see what its file counts.
-- **Status:** open (needs the Varjo test).
+- **Second report (14 November 2026), with the classic layer:** still no picture on the Quest. The console shows, until
+  Chrome stops reporting, `WebGL: INVALID_FRAMEBUFFER_OPERATION: clear` / `drawElements: Cannot render to a XRWebGLLayer
+  framebuffer outside of an XRSession animation frame callback`. **Cause found in the presenter:** it set three.js's
+  animation loop after the session had started. three.js then runs the loop on the page's own frames as well as on the
+  headset's (`setAnimationLoop` restarts the page's loop, which only the session's start stops), so every page frame drew
+  into the headset's layer outside a headset frame and was refused, and the run was timed by the page's frames, which is
+  why it ran to the end and saved a file with the headset dark. The validation task sets its loop before the session and
+  draws only while presenting, so it does not have this fault. **Now:** the calibration presenter's loop acts only on
+  headset frames (those that bring an `XRFrame`), and a session that has delivered no frame 5 s after it started is ended
+  with a message. Whether the headset frames themselves arrive on the Quest over Link is not known: if they do not, the
+  run now stops at 5 s and says so; the projection layer may then not have been the cause of the first report either.
+- **Status:** open (needs the Quest retry after the site is republished, and the Varjo test).
+
