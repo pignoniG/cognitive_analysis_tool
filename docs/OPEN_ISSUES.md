@@ -441,7 +441,17 @@ is revised; they remain in the git history of this file.
   (`blinks ps1.raw`, 209 of median 0.27 s); they were ignored and the docs said otherwise. Now read, with the same
   0.1 s padding as the Cloud blinks. The sample has no protocol events (only `recording.begin/end`), so marker
   handling is still tested on synthetic data only, and the pupil values were not compared with `pl-neon-recording`.
-- **Status:** partly checked (native, one recording); Cloud export still needs data.
+- **Whole pipeline on the same recording (13 November 2026):** the scene video (1600×1200, 15 141 frames at 30 Hz,
+  timestamps from `Neon Scene Camera v1 ps1.time`) is analysed and the gaze, drawn on frames at six times, lands on what
+  the wearer looks at (handlebar, car, road, bicycle rack), so the scaling by the video size and the time zero at the
+  first frame are right. Field of view from `calibration.bin`: 84° × 68° (pinhole, issue 33). The sample has no lux
+  log, so the luminance came from the scene camera alone, relative and with automatic exposure: the expected pupil is
+  almost flat, and when the cyclist rides into a covered bicycle park at about 480 s the pupil dilates by 2 mm while
+  the expected one moves by 0.3 mm (ΔPD RMS 0.41 mm, light left in ΔPD R² 0.63). That is the camera-only route
+  behaving as documented, not a reader fault: a Neon with the scene camera needs the lux sensor (or a fixed exposure)
+  like the other glasses.
+- **Status:** partly checked (native, one recording, without a lux log); Cloud export and a recording with a lux log
+  still need data.
 
 ### 33. Glasses trackers' scene camera field of view comes from a pinhole model
 - **Where:** `devices/common.pinhole_fov`, used by the Pupil Core and Neon readers.
@@ -1372,3 +1382,24 @@ is revised; they remain in the git history of this file.
   run now stops at 5 s and says so; the projection layer may then not have been the cause of the first report either.
 - **Status:** open (needs the Quest retry after the site is republished, and the Varjo test).
 
+### 60. Lux and spectral sensors behind a PTFE dome diffuser: the 2.2 factor no longer holds
+
+- **Where:** `Parameters.lux_solid_angle` (2.2), `lux.average_luminance`,
+  [lux sensor, calibration](hardware/lux-sensor.md#calibration); the AS7341 ([open issue 58](#58-the-as7341-spectral-sensor-is-logged-but-not-calibrated-or-used-by-the-analysis)).
+- **Why (13 November 2026):** both the TSL2591 and the AS7341 now sit behind a PTFE (teflon) dome diffuser. The 2.2 that
+  turns lux into the average luminance of the field was computed for the bare TSL2591 at the bottom of the printed
+  funnel: a near-cosine response limited to a 55° half-angle. A dome changes both terms: it attenuates (the PTFE's
+  transmission depends on its thickness) and it widens and flattens the angular response, up to beyond 90° from the
+  axis. The factor is then unknown, and it is no longer the same for the two sensors unless their domes are alike.
+- **Consequences:** a wrong factor scales the luminance by a constant. The participant's light sensitivity, fitted by
+  the calibration, absorbs a constant scale, so calibrated recordings are affected little; recordings analysed without a
+  calibration are not. The sensor now sees a wider field than the scene camera (about 84° × 68° for the Neon, issue 33),
+  while distributing the sensor's average with the video (L = avg · rL(gaze) / rL(frame)) assumes they see the same view.
+- **Good for the AS7341:** its interference filters shift with the angle of incidence; AMS recommends a diffuser to keep
+  that angle small, so the spectral ratios are more trustworthy with the dome. With the same diffuser on both sensors, the
+  AS7341 can be scaled to the TSL2591's lux recording by recording without other instruments.
+- **Proposal (no photometry needed):** measure the factor relative to the old housing: a steady, wide scene, the reading
+  with and without the dome a few times in the same position; Ω_dome = 2.2 × (lux without / lux with) for the field the
+  funnel saw. Then set `lux_solid_angle` per sensor build, and record the build in the session.
+- **Status:** open (needs the with/without measurement; how the dome is fitted, on the funnel or instead of it, not
+  known yet).
