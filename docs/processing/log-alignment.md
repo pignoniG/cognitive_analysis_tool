@@ -35,7 +35,24 @@ computer's clock, the same as the logs). The export's `<name>_export.json` recor
 used under `log alignment`.
 
 It is done for the Varjo, whose event log is the presenter's. For the other devices the events come from the device's own clock,
-which this offset does not describe, so it is not offered.
+which this offset does not describe, so it is not offered, except for a video on a clock of its own (below).
+
+## A video on a clock of its own: a Neon inside a Meta Quest
+
+The Quest's capture runs on the headset's clock, placed only to a second by its name; the Neon's pupil is on the phone's clock,
+and the presenter's log on its computer's ([Neon inside a Meta Quest](../devices/pupil-neon.md#neon-inside-a-meta-quest)). Three
+clocks, and the first recording showed the computer's 1.5 s ahead of the phone's: aligned by the run file, the pupil's response
+came before the light (the fitted latency went to zero and the fit got worse, 0.36 against 0.24 mm). So:
+
+- **the pupil** (and the tracker's own events) is placed on the capture by **its response** to the picture;
+- **what the computer wrote** (the run file, the logger's lux and sensors, the exported Unix times) by the run file's own offset,
+  when a run file is next to the capture or the export; the difference between the two is reported as the clocks' difference.
+
+Only when the pupil's response cannot be used (a picture that hardly changes) does the run file place the pupil too, with a
+warning that it assumes the two clocks agree. The pupil's response is estimated as follows: the lag at which the pupil's speed best follows the changes of the picture's log luminance (low-passed with
+0.4 s), searched from −2.5 to +3.5 s, less an assumed latency of 0.5 s; its uncertainty is half the width of the correlation's
+peak. It needs at least 5 large changes of the picture and a correlation of 0.2, and it is coarser: the fitted latency of the
+calibration then holds what the assumed one misses. The switch reads *Align the capture to the pupil* for these recordings.
 
 ## In the window and on the command line
 

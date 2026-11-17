@@ -167,3 +167,41 @@ def test_the_session_folder_opens_its_one_recording(tmp_path):
     write_neon_recording(folder.parent / "other", GRAYS, FRAME_TIMES)
     with pytest.raises(ValueError, match="No supported recording"):
         devices.load(folder.parent)                  # two recordings: the operator has to choose
+
+
+def test_a_run_file_on_another_clock_moves_only_the_computers_files(tmp_path):
+    """The presenter's computer and the tracker's phone disagree (as on 16 November 2026, by 1.5 s): the pupil is placed by
+    its response, the run file's offset moves only what the computer wrote, and the difference is reported."""
+    from cwtool.devices import neon
+    from cwtool.recording import DeviceProfile, Recording
+    rng = np.random.default_rng(2)
+    seconds = list(np.cumsum(rng.uniform(6, 12, 30)))
+    levels = [0.02 if k % 2 == 0 else rng.uniform(0.3, 0.9) for k in range(30)]
+    video = _video(levels, seconds)
+    pupil_offset, log_offset, epoch = 0.6, 2.1, 1_700_000_000.0
+    t = np.arange(0, seconds[-1] + 10, 1 / 200)
+    seen = np.interp(t + pupil_offset - alignment.PUPIL_LATENCY, video.time, np.log10(video.frame_lin[:, 0, 0]))
+    a, acc, smooth = np.exp(-(1 / 200) / 0.3), seen[0], np.empty_like(seen)
+    for i, v in enumerate(seen):
+        acc = a * acc + (1 - a) * v
+        smooth[i] = acc
+    pupil = 5.0 - 1.5 * (smooth - smooth.min()) + rng.normal(0, 0.03, len(t))
+    rows = ["time,duration,r,g,b,label,onset_unix_ms"]
+    for k, (s, y) in enumerate(zip(seconds, levels)):
+        code = round(y ** (1 / 2.2) * 255)
+        rows.append(f"{s},1,{code},{code},{code},step {k},{(epoch + s - log_offset) * 1000:.3f}")
+    (tmp_path / "calibration_run_x.csv").write_text("\n".join(rows) + "\n")
+    rec = Recording(name="x", profile=DeviceProfile(name=neon.XR_NAME, pupil_unit="mm", pupil_scale=1.0,
+                                                    luminance_source="display", field_of_view=quest.CAPTURE_FOV),
+                    folder=tmp_path, time=t, epoch_start=epoch, pupil_left=pupil, pupil_right=pupil,
+                    gaze=np.full((len(t), 2), 0.5), lux_time=np.array([10.0]), separate_video_clock=True)
+    found, message = alignment.find(rec, video)
+    assert found is not None and found.source == alignment.PUPIL_SOURCE, message
+    assert found.offset == pytest.approx(pupil_offset, abs=0.1)
+    assert found.log_offset == pytest.approx(log_offset, abs=0.02)
+    assert found.clock_difference == pytest.approx(pupil_offset - log_offset, abs=0.1)
+    assert any("behind the tracker's" in n for n in found.notes())
+    moved = alignment.align(rec, found)
+    assert moved.time[0] == pytest.approx(found.offset)                          # the pupil by its own offset
+    assert moved.epoch_start == pytest.approx(epoch - found.log_offset)          # the computer's files by the log's
+    assert moved.lux_time[0] == pytest.approx(10.0 + found.log_offset)

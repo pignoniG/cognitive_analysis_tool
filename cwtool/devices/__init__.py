@@ -40,7 +40,8 @@ def resolve(folder: str | Path) -> Path:
 def load(folder: str | Path, device: str | None = None, **options) -> Recording:
     """Read ``folder`` with the reader for ``device`` (default: detected); a folder holding a single recording is read as
     that recording (:func:`resolve`). Only the ``options`` the reader's ``load`` accepts, and that are not None, are passed
-    on (e.g. ``lux_folder``)."""
+    on (e.g. ``lux_folder``). The session's gaze offset saved with the recording is applied, or ``gaze_offset`` (deg;
+    right, down) instead when given ((0, 0): none)."""
     folder = resolve(folder) if device is None else Path(folder)
     device = device or detect(folder)
     if device is None:
@@ -48,5 +49,8 @@ def load(folder: str | Path, device: str | None = None, **options) -> Recording:
     if device not in READERS:
         raise ValueError(f"Unknown device {device!r}; supported: {', '.join(READERS)}")
     reader = READERS[device]
+    gaze_offset = options.pop("gaze_offset", None)       # (right, down) deg; None: the one saved with the recording
     accepted = inspect.signature(reader.load).parameters
-    return reader.load(folder, **{k: v for k, v in options.items() if k in accepted and v is not None})
+    rec = reader.load(folder, **{k: v for k, v in options.items() if k in accepted and v is not None})
+    from cwtool import gazecheck            # the session's gaze offset, saved with the recording
+    return gazecheck.apply_offset(rec, gaze_offset)

@@ -151,3 +151,41 @@ def test_the_log_is_aligned_to_the_video_in_the_window_and_in_the_export(app, tm
 def pipeline_export(w, out):
     from cwtool import pipeline
     return pipeline.export(w.result, w.recording, w.params_panel.params(), out, hrv=False)
+
+
+def test_the_gaze_check_is_shown_with_the_scene_video(app, tmp_path):
+    """A Varjo recording whose capture shows the gaze check's dot and whose folder holds the run file: the scene video's
+    panel says how far the gaze was from the dots (the synthetic gaze stays at the centre, so the places disagree)."""
+    import shutil
+    from test_gazecheck import _write
+    folder = write_varjo_recording(tmp_path / "varjo", [128] * 25, seconds_per_level=1.0, fps=30, size=(320, 240))
+    source = _write(tmp_path / "src")
+    shutil.copy(source.scene_video, folder / "varjo_capture_test.avi")
+    shutil.copy(source.folder / "calibration_run_test.csv", folder)
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.video is not None and w.gaze_check is not None)
+        assert "gaze check: 9 of 9 places" in w.video_label.text()
+        assert w.recording.gaze_check["found"] == 9
+    finally:
+        w.close()
+
+
+def test_the_session_gaze_offset_is_applied_from_the_window(app, tmp_path):
+    from cwtool import gazecheck
+    folder = write_varjo_recording(tmp_path / "varjo", [128, 200, 60, 128], pupil_mm=3.0)
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.recording is not None)
+        assert w.gaze_dx.value() == 0 and not w.gaze_apply.isEnabled() and not w.gaze_from_check.isEnabled()
+        w.gaze_dx.setValue(1.5)
+        assert w.gaze_apply.isEnabled()
+        before = w.recording
+        w.gaze_apply.click()
+        assert wait_for(app, lambda: w.recording is not before and w.recording is not None and w.recording.gaze_offset)
+        assert w.recording.gaze_offset == (1.5, 0.0) and gazecheck.load_offset(folder) == (1.5, 0.0)
+        assert w.gaze_dx.value() == 1.5 and not w.gaze_apply.isEnabled()
+    finally:
+        w.close()

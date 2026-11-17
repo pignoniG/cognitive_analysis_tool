@@ -814,6 +814,8 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         "sensors": sensor_info,
         "tracking quality": quality.assess(rec).as_dict(),
         "log alignment": rec.log_alignment,
+        "gaze check": rec.gaze_check,
+        "gaze offset (deg, right, down)": list(rec.gaze_offset) if rec.gaze_offset else None,
         "files": [q.name for q in paths] + [p.name],
         "cwtool": __version__,
     }, indent=2))

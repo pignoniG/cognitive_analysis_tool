@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayo
                                QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget,
                                QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
-from cwtool import __version__, alignment, calfit, calibration, devices, hrv, palette, pipeline, quality, sensors
+from cwtool import __version__, alignment, calfit, calibration, devices, gazecheck, hrv, palette, pipeline, quality, sensors
 from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.icons import icon, tinted
@@ -38,6 +38,10 @@ DROP_DOWN_STYLE = "QPushButton::menu-indicator { image: none; width: 0px; }"    
 # the columns of the HRV table: header, the field of the result, the format (the full set is in the exported file)
 HRV_COLUMNS = (("Window", "label", "{}"), ("s", "seconds", "{:.0f}"), ("HR", "mean_hr", "{:.0f}"),
                ("RMSSD", "rmssd", "{:.0f}"), ("SDNN", "sdnn", "{:.0f}"), ("LF/HF", "lf_hf", "{:.1f}"))
+
+
+# Median distance (deg) between gaze and the gaze check's dots above which the check is shown as a warning.
+GAZE_CHECK_NOTE_DEG = 2.0
 
 
 def route_badge(rec) -> str:
@@ -214,6 +218,7 @@ class MainWindow(QMainWindow):
         video_layout.addWidget(self.video_label)
         video_layout.addWidget(self.progress)
         video_layout.addWidget(self.align_check)
+        video_layout.addWidget(self._gaze_offset_row())
         video_layout.addLayout(buttons)
         self.camera_button = QPushButton("Calibrate camera from lux")
         self.camera_button.setToolTip("For recordings made with a fixed camera exposure and a lux log: find the "
@@ -826,6 +831,9 @@ class MainWindow(QMainWindow):
         self._params_note = None
         self.recording, self.video, self.result = rec, None, None
         self._raw_recording, self.log_alignment, self._alignment_message = rec, None, ""
+        self.gaze_check, self._gaze_check_message = None, ""
+        self._show_gaze_offset(rec)
+        self.gaze_from_check.setEnabled(False)
         self.align_check.setVisible(alignment.applicable(rec))
         self.align_check.setText("Align the capture to the pupil (run file, else the pupil's response)"
                                  if rec.separate_video_clock else "Align the presenter's log to the video")
@@ -908,6 +916,11 @@ class MainWindow(QMainWindow):
 
     def _video_text(self) -> str:
         text = f"{breakable(self.recording.scene_video.name)}: {len(self.video.time)} samples"
+        check = getattr(self, "gaze_check", None)
+        if check is not None:
+            colour = palette.WARNING if check.offset_deg is None or check.error_before_deg > GAZE_CHECK_NOTE_DEG else self.OK_COLOUR
+            text += f"<br><span style='color:{colour}'>{check.summary()}</span>"
+            text += "".join(f"<br><span style='color:{palette.WARNING}'>{n}</span>" for n in check.notes)
         if self.log_alignment is not None:
             return f"{text}<br>{self.log_alignment.summary()}"
         if self.align_check.isVisible() and self.align_check.isChecked() and self._alignment_message \
@@ -927,6 +940,11 @@ class MainWindow(QMainWindow):
             al, message = alignment.find(raw, self.video)
         self.log_alignment, self._alignment_message = al, message
         aligned = alignment.align(raw, al) if al is not None else raw
+        checked, self._gaze_check_message = gazecheck.check(aligned)
+        self.gaze_check = checked
+        self.gaze_from_check.setEnabled(checked is not None and checked.total_offset_deg() is not None)
+        if checked is not None:
+            aligned = replace(aligned, gaze_check=checked.as_dict())
         if aligned is not self.recording:
             self.recording = aligned
             self.plots.show_events(aligned.events)
@@ -935,6 +953,76 @@ class MainWindow(QMainWindow):
             if aligned.luminance_source == "display":
                 self._place_from_folder(aligned)
         self.video_label.setText(self._video_text())
+
+    def _gaze_offset_row(self) -> QWidget:
+        """The session's gaze offset: degrees right and down, filled from the gaze check or by hand, saved with the
+        recording (``cwtool_gaze_offset.json``) and applied when it is read, so applying it reads the recording again and
+        analyses the video with the moved gaze."""
+        row = QWidget()
+        layout = QVBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        label = QLabel("Gaze offset (this session)")
+        label.setToolTip("Moves the gaze in the scene video by this angle, right and down. Saved with the recording, not "
+                         "with the participant's parameters: how the tracker sits changes between sessions.")
+        self.gaze_dx, self.gaze_dy = QDoubleSpinBox(), QDoubleSpinBox()
+        for box, name in ((self.gaze_dx, "right"), (self.gaze_dy, "down")):
+            box.setRange(-30.0, 30.0)
+            box.setDecimals(2)
+            box.setSingleStep(0.1)
+            box.setSuffix(f"° {name}")
+            box.valueChanged.connect(self._gaze_offset_edited)
+        self.gaze_from_check = QPushButton("From gaze check")
+        self.gaze_from_check.setToolTip("Fill in the offset the gaze check found (added to the one applied now)")
+        self.gaze_from_check.clicked.connect(self._gaze_offset_from_check)
+        self.gaze_apply = QPushButton("Apply")
+        self.gaze_apply.setToolTip("Save the offset with the recording and analyse the video again with the moved gaze")
+        self.gaze_apply.clicked.connect(self._apply_gaze_offset)
+        values, buttons = QHBoxLayout(), QHBoxLayout()      # three short lines: the side column is narrow
+        values.addWidget(self.gaze_dx)
+        values.addWidget(self.gaze_dy)
+        buttons.addWidget(self.gaze_from_check)
+        buttons.addWidget(self.gaze_apply)
+        layout.addWidget(label)
+        layout.addLayout(values)
+        layout.addLayout(buttons)
+        self.gaze_from_check.setEnabled(False)
+        self.gaze_apply.setEnabled(False)
+        return row
+
+    def _show_gaze_offset(self, rec) -> None:
+        """Put the recording's applied offset in the boxes, without marking them edited."""
+        dx, dy = rec.gaze_offset or (0.0, 0.0)
+        for box, v in ((self.gaze_dx, dx), (self.gaze_dy, dy)):
+            box.blockSignals(True)
+            box.setValue(v)
+            box.blockSignals(False)
+        self.gaze_apply.setEnabled(False)
+
+    def _gaze_offset_edited(self) -> None:
+        rec = self._raw_recording
+        applied = (rec.gaze_offset or (0.0, 0.0)) if rec is not None else (0.0, 0.0)
+        self.gaze_apply.setEnabled(rec is not None and (round(self.gaze_dx.value(), 2), round(self.gaze_dy.value(), 2))
+                                   != (round(applied[0], 2), round(applied[1], 2)))
+
+    def _gaze_offset_from_check(self) -> None:
+        check = getattr(self, "gaze_check", None)
+        total = check.total_offset_deg() if check is not None else None
+        if total is not None:
+            self.gaze_dx.setValue(total[0])
+            self.gaze_dy.setValue(total[1])
+
+    def _apply_gaze_offset(self) -> None:
+        rec = self._raw_recording
+        if rec is None:
+            return
+        source = "gaze check" if self.gaze_check is not None and self.gaze_check.total_offset_deg() is not None and \
+            all(abs(a - b) < 0.005 for a, b in zip(self.gaze_check.total_offset_deg(), (self.gaze_dx.value(), self.gaze_dy.value()))) \
+            else "operator"
+        gazecheck.save_offset(rec.folder, (self.gaze_dx.value(), self.gaze_dy.value()), source)
+        if self._task is not None and self._task.isRunning():      # an analysis of the old gaze is of no use now
+            self.cancel_task()
+            self._task.wait(30000)
+        self.open_recording(rec.folder)          # read again: the offset applies on reading, and the video is analysed again
 
     def _align_toggled(self, on: bool) -> None:
         self._settings.setValue("align_log", on)

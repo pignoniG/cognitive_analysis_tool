@@ -92,6 +92,10 @@ class Recording:
     # the headset's clock, the pupil on the phone's): aligning then moves the pupil, events and sensors onto the video, and
     # the alignment may also come from the pupil's response to the picture (:mod:`cwtool.alignment`).
     separate_video_clock: bool = False
+    # The calibration's gaze check (:class:`cwtool.gazecheck.GazeCheck` as a dictionary), when the run file had one.
+    gaze_check: Optional[dict] = None
+    # The operator's gaze offset applied to ``gaze`` (deg; right, down), saved with the recording (:mod:`cwtool.gazecheck`).
+    gaze_offset: Optional[tuple] = None
 
     def __post_init__(self) -> None:
         n = len(self.time)

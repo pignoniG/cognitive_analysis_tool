@@ -5,9 +5,10 @@ from __future__ import annotations
 import argparse
 import math
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-from cwtool import alignment, devices, pipeline, sensors
+from cwtool import alignment, devices, gazecheck, pipeline, sensors
 from cwtool.params import DeviceMismatch, DisplayPhotometry, Parameters, VideoSettings
 from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video
@@ -40,13 +41,21 @@ def main(argv: list[str] | None = None) -> int:
                          "timestamp_relative. Without --start, --end and --exclude, the trim saved by the "
                          "app with the recording is used")
     ap.add_argument("--reanalyse", action="store_true", help="ignore the cached video analysis")
+    ap.add_argument("--gaze-offset", nargs=2, type=float, metavar=("RIGHT", "DOWN"),
+                    help="move the gaze by these degrees for this run, instead of the offset saved with the recording "
+                         "(0 0: none)")
+    ap.add_argument("--save-gaze-offset", action="store_true",
+                    help="save --gaze-offset with the recording (or, without it, the gaze check's proposed total offset)")
     ap.add_argument("--no-align-log", action="store_true",
                     help="do not move the presenter's log (events, sensors, Unix times) onto the video's clock (Varjo)")
     ap.add_argument("--workers", type=int, default=0, help="parallel video chunks (default: one per CPU core)")
     ap.add_argument("--plot", action="store_true", help="save a PDF plot (needs matplotlib)")
     args = ap.parse_args(argv)
 
-    rec = devices.load(args.recording, args.device, lux_folder=args.lux or args.logs)
+    rec = devices.load(args.recording, args.device, lux_folder=args.lux or args.logs,
+                       gaze_offset=tuple(args.gaze_offset) if args.gaze_offset else None)
+    if args.save_gaze_offset and args.gaze_offset:
+        print(f"saved {gazecheck.save_offset(rec.folder, tuple(args.gaze_offset), 'command line')}")
     try:
         params = Parameters.load(args.params, rec.profile, device=rec.device) if args.params else Parameters()
     except DeviceMismatch as e:
@@ -79,6 +88,18 @@ def main(argv: list[str] | None = None) -> int:
             print(found_alignment.summary())
         elif not why.startswith("no presenter log"):
             print(f"log not aligned: {why}", file=sys.stderr)
+
+    checked, why = gazecheck.check(rec)
+    if checked is not None:
+        rec = replace(rec, gaze_check=checked.as_dict())
+        print(checked.summary())
+        if args.save_gaze_offset and not args.gaze_offset and checked.total_offset_deg() is not None:
+            print(f"saved {gazecheck.save_offset(rec.folder, checked.total_offset_deg(), 'gaze check')}; it applies "
+                  "from the next run (the video is analysed again with the moved gaze)")
+        for note in checked.notes:
+            print(f"gaze check: {note}", file=sys.stderr)
+    elif not why.startswith("no calibration run file"):
+        print(f"gaze check: {why}", file=sys.stderr)
 
     result = pipeline.run(rec, video, params)
     print(f"ΔPD RMS: {result.cw_rms:.3f} mm, SD: {result.cw_sd:.3f} mm "

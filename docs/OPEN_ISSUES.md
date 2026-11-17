@@ -1459,15 +1459,27 @@ is revised; they remain in the git history of this file.
   the pupil's response placed the capture 0.80 ± 0.07 s before the name's time (45 changes); the calibration fit then
   brought the model within 0.24 mm of the pupil in its window (r 0.92, from 0.91 mm with the defaults) and the whole
   recording's ΔPD RMS from 1.07 to 0.38 mm.
-- **Not known yet:** which sequence that run showed: the time-course sequence matches the capture poorly (colour error
-  0.88, its steps span about 315 s against 281 s), so the fit's window may be misplaced; the run file was not with the
-  data. Whether the gaze lands where the participant looked (no calibration in the headset yet; a fixation target at the
+- **The run file of `DataCalibration_1` (17 November 2026):** the run was the **full calibration** (34 steps, 291 s,
+  `full-calibration-gray-rgb`), not the time-course one, which is why the latter matched poorly; with the full sequence,
+  `locate` finds it at 117.85 s and the run file at 117.86 s. Aligned by the run file (27 steps, spread 19 ms), the
+  capture leads by 2.297 s, against 0.80 s from the pupil's response; with the run file's offset the pupil responds
+  before the light (fitted latency 0, window RMS 0.356 mm, r 0.81, whole-recording ΔPD 0.40 mm), with the pupil's 0.45 s
+  latency, 0.244 mm, r 0.92, 0.38 mm. The presenter's computer (Windows, over Link) was 1.5 s ahead of the Neon's phone.
+  Scanning the offset shows that only the sum of offset and latency is fixed by the light (about 1.25 s on the name's
+  clock): the window RMS is the same from 0.4 to 1.3 s. **Now:** the pupil is placed by its response, the run file moves
+  only what the computer wrote, and the clocks' difference is reported; with both clocks synced the two would agree. Whether the gaze lands where the participant looked (no calibration in the headset yet; a fixation target at the
   end of the calibration and an operator's x/y gaze offset are planned). The capture's field of view (nominal). Whether
   the capture's picture is what the displays showed (compression, and the Quest's own processing of passthrough).
 - **Gaze check (17 November 2026):** both presenters (the calibration presenter and the validation task's calibration)
   now end the calibration with 18 s on the lead-in grey in which a dot with a white centre moves through 9 places, 2 s
   each; in VR the places are directions fixed to the head (±15° × ±12°), so they sit at fixed places in the headset's
   capture. The run file logs them (`phase` = `gaze`, `target_*` columns); cwtool reads them
-  (`calibration.gaze_targets`) and leaves them out of the light sequence and of the log alignment. Not yet done: finding
-  the dot in the video, comparing it with the gaze, and the operator's x/y gaze offset.
+  (`calibration.gaze_targets`) and leaves them out of the light sequence and of the log alignment. **Then** cwtool finds
+  the dot in the video (each place's frames against the median of all places), compares it with the median gaze and
+  reports the offset that moves the gaze onto the dots, the error before and after, and the places' spread
+  (`cwtool.gazecheck`, [Gaze check](processing/gaze-check.md)); shown in the app, printed and exported, not applied. Tested
+  on synthetic videos only. **And** the operator's gaze offset, per session: degrees right and down, filled from the check
+  or by hand, saved with the recording (`cwtool_gaze_offset.json`) and applied when it is read (the video is then
+  analysed again); `--gaze-offset` / `--save-gaze-offset` on the command line. Not yet tried on a real recording with the
+  gaze check.
 - **Status:** open (route and alignment implemented; needs the run file, the gaze check's analysis and more recordings).

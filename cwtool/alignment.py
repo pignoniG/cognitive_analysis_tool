@@ -73,6 +73,10 @@ class LogAlignment:
     # What is moved onto the video's clock: "log" (the presenter's log, events and sensors; the pupil is on the video's
     # clock) or "pupil" (the pupil too: the video has a clock of its own).
     moves: str = "log"
+    # With moves == "pupil": the presenter's log's own offset (video time = log time + log_offset), when its run file was
+    # found in the video; the pupil (on the tracker's clock) and the log (on the presenter's computer's) then move by
+    # their own offsets, and their difference is the two clocks' (None: the log moves with the pupil).
+    log_offset: Optional[float] = None
 
     @property
     def drift(self) -> float:
@@ -91,8 +95,21 @@ class LogAlignment:
         return (f"log aligned to the video: the video {side} the log by {abs(self.offset):.3f} s "
                 f"(±{self.uncertainty:.3f} s, {self.n} changes)")
 
+    @property
+    def clock_difference(self) -> Optional[float]:
+        """s by which the presenter's computer's clock is ahead of the tracker's (positive: ahead), when both are known."""
+        return None if self.log_offset is None else self.offset - self.log_offset
+
     def notes(self) -> list[str]:
         if self.moves == "pupil":
+            if self.log_offset is not None:
+                ahead = "ahead of" if self.clock_difference > 0 else "behind"
+                return [self.summary() + "; the pupil and the tracker's events are moved onto the capture's clock.",
+                        f"The presenter's run file places the capture {abs(self.log_offset):.3f} s "
+                        f"{'before' if self.log_offset < 0 else 'after'} its own clock: the presenter's computer's clock is "
+                        f"{abs(self.clock_difference):.2f} s {ahead} the tracker's. The run file, the logger's sensors and the "
+                        "exported Unix times follow the computer's clock; the pupil follows its own. Sync both clocks before "
+                        "a session to make the run file's timing usable for the pupil too."]
             notes = [self.summary() + "; the pupil, the events and the sensors are moved onto the capture's clock."]
             if self.source == PUPIL_SOURCE:
                 notes.append("Without the presenter's run file the capture was placed by the pupil's response with an "
@@ -330,12 +347,21 @@ def find(rec: Recording, video: VideoResult) -> tuple[Optional[LogAlignment], st
     if not applicable(rec):
         return None, f"not offered for {rec.device} recordings"
     found, message = estimate(rec, video)
-    if found is None and rec.separate_video_clock:
-        by_pupil, why = estimate_from_pupil(rec, video)
-        if by_pupil is not None:
-            return by_pupil, "aligned by the pupil's response"
-        return None, f"{message}; by the pupil's response: {why}"
-    return found, message
+    if not rec.separate_video_clock:
+        return found, message
+    # A video on a clock of its own (a Neon in a Quest): the presenter's log places the video on the presenter's computer's
+    # clock, which is the pupil's only if the two computers' clocks agree (on 16 November 2026 they were 1.5 s apart, and the
+    # run file's offset put the pupil's response before the light). So the pupil is placed by its response, and the log's
+    # offset moves only what the computer wrote.
+    by_pupil, why = estimate_from_pupil(rec, video)
+    if by_pupil is not None:
+        if found is not None:
+            by_pupil = replace(by_pupil, log_offset=found.offset)
+        return by_pupil, "aligned by the pupil's response"
+    if found is not None:
+        return found, (f"aligned by the presenter's run file only (the pupil's response could not be used: {why}); this "
+                       "assumes the presenter's computer and the tracker's phone had the same time")
+    return None, f"{message}; by the pupil's response: {why}"
 
 
 def align(rec: Recording, alignment: LogAlignment) -> Recording:
@@ -343,9 +369,11 @@ def align(rec: Recording, alignment: LogAlignment) -> Recording:
     that the logger's files, the events and the exported Unix times (all on the computer's clock) fall where the video and
     the pupil are; the events and the lux log, stored relative to the old zero, move by the offset."""
     shift = alignment.offset
-    lux = None if rec.lux_time is None else np.asarray(rec.lux_time, dtype=float) + shift
-    # A video on a clock of its own: the pupil (on the log's clock, both kept to UTC) moves with the log.
+    # A video on a clock of its own: the pupil moves by the alignment's offset, and what the presenter's computer wrote (its
+    # run file, the logger's lux and sensors, placed through epoch_start) by the log's own offset when it was found.
+    computer = alignment.log_offset if alignment.log_offset is not None else shift
+    lux = None if rec.lux_time is None else np.asarray(rec.lux_time, dtype=float) + computer
     time = np.asarray(rec.time, dtype=float) + shift if rec.separate_video_clock else rec.time
-    return replace(rec, time=time, epoch_start=rec.epoch_start - shift, lux_time=lux,
+    return replace(rec, time=time, epoch_start=rec.epoch_start - computer, lux_time=lux,
                    events=[Event(e.label, e.start + shift, e.end + shift) for e in rec.events],
                    notes=list(rec.notes) + alignment.notes(), log_alignment=alignment.as_dict())

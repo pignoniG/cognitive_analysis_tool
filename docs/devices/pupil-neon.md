@@ -136,13 +136,13 @@ the Cloud export folder is never taken as the Neon's scene video.
 UTC start). That places the capture within about a second. The app then aligns it (the switch *Align the capture to the
 pupil* in Data → Scene video):
 
-- with the calibration presenter's **run file** next to the capture or in the export folder, by the steps it logged
-  in Unix time, as the Varjo's log alignment does (the presenter's computer and the Neon's phone are both kept to UTC);
-- without it, by the **pupil's response**: the lag at which the pupil's speed follows the picture's changes best, less
-  an assumed latency of 0.5 s. This needs a picture that changes (a calibration run); the fitted latency then holds what
-  the assumption misses.
-
-The pupil, the events and the sensors are moved onto the capture's clock; the result says which way was used.
+- the **pupil** by its response: the lag at which the pupil's speed follows the picture's changes best, less an assumed
+  latency of 0.5 s. This needs a picture that changes (a calibration run). Only the sum of this offset and the latency is
+  determined by the light, so the calibration's fitted latency holds what the assumption misses;
+- the **presenter's files** (the run file, the logger's sensors) by the calibration presenter's run file, next to the
+  capture or in the export folder, as the Varjo's log alignment does. It is not used for the pupil: on the first
+  recording the presenter's computer was 1.5 s ahead of the Neon's phone, and the pupil placed by the run file responded
+  before the light. The difference between the two clocks is reported; sync both before a session.
 
 **Gaze.** The Neon gives the gaze in its scene camera's image. Its direction (through the camera matrix) is placed in
 the capture as if the capture looked straight ahead with a field of 110° × 78° (the Quest 3's horizontal field; the
