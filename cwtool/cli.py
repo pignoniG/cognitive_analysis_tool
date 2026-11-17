@@ -56,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         params = DisplayPhotometry.load(args.display).apply(params)
     settings = VideoSettings().for_recording(rec)
     print(f"{rec.device} recording {rec.name}: {len(rec.time)} samples, {rec.time[-1] - rec.time[0]:.1f} s")
+    if rec.route:
+        print(f"route: {rec.route}")
 
     if rec.scene_video is None:
         print("No scene video found", file=sys.stderr)

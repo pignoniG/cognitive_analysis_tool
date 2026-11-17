@@ -800,6 +800,8 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
     p.write_text(json.dumps({
         "recording": rec.name,
         "device": rec.device,
+        "route": rec.route or None,
+        "scene video": str(rec.scene_video) if rec.scene_video else None,
         "recording folder": str(rec.folder),
         "time": {"timestamp_unix": "Unix time (s)",
                  "timestamp_relative": "seconds from the recording's first sample (time zero of the plots)",

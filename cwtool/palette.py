@@ -19,6 +19,8 @@ EVENT_TEXT = ORANGE_3   # event labels
 EVENT_ALT = "#2E86AB"
 EVENT_ALT_TEXT = "#1F5F7A"
 ACCENT = ORANGE_3       # selection, focus and checked controls in the app
+ROUTE_XR = EVENT_ALT    # the badge of a recording whose luminance comes from a headset's picture (XR)
+ROUTE_GLASSES = ORANGE_3  # the badge of a glasses recording (scene camera and lux sensor)
 
 
 def event_colours(index: int) -> tuple[str, str]:

@@ -84,6 +84,14 @@ class Recording:
     censored_right: Optional[np.ndarray] = None
     # How the presenter's log was aligned to the video (:class:`cwtool.alignment.LogAlignment` as a dictionary), when it was
     log_alignment: Optional[dict] = None
+    # Where the scene video and the luminance come from, in a few words for the operator (shown prominently by the app):
+    # e.g. "glasses: scene camera and lux sensor" or "XR: Meta Quest capture (com.oculus.vrshell)". Empty: the device's
+    # only route, nothing to point out.
+    route: str = ""
+    # True when the scene video runs on another clock than the pupil and the events (a Neon inside a Quest: the capture is on
+    # the headset's clock, the pupil on the phone's): aligning then moves the pupil, events and sensors onto the video, and
+    # the alignment may also come from the pupil's response to the picture (:mod:`cwtool.alignment`).
+    separate_video_clock: bool = False
 
     def __post_init__(self) -> None:
         n = len(self.time)

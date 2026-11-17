@@ -70,6 +70,21 @@ def test_a_recording_without_them_keeps_the_manual_steps(app, tmp_path):
         assert wait_for(app, lambda: w.recording is not None)
         assert not w.sequence_check.isChecked()
         assert "tracking:" in w.recording_label.text()
+        assert "XR: Varjo capture" in w.recording_label.text()          # the route stands out at the top
+    finally:
+        w.close()
+
+
+def test_the_route_of_a_neon_in_a_quest_stands_out(app, tmp_path):
+    from test_neon_xr import _xr_recording
+    from cwtool import palette
+    folder, _ = _xr_recording(tmp_path)
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.recording is not None)
+        text = w.recording_label.text()
+        assert "XR: Meta Quest capture (com.oculus.vrshell)" in text and palette.ROUTE_XR in text
     finally:
         w.close()
 

@@ -450,8 +450,18 @@ is revised; they remain in the git history of this file.
   the expected one moves by 0.3 mm (ΔPD RMS 0.41 mm, light left in ΔPD R² 0.63). That is the camera-only route
   behaving as documented, not a reader fault: a Neon with the scene camera needs the lux sensor (or a fixed exposure)
   like the other glasses.
-- **Status:** partly checked (native, one recording, without a lux log); Cloud export and a recording with a lux log
-  still need data.
+- **First real Cloud export (14 November 2026; Neon in a Quest 3 frame, data format 2.6, app 2.9.48, 30 s, exported
+  without the scene video):** it loads: pupils from `3d_eye_states.csv` (median 4.3 mm both eyes; that file and
+  `gaze.csv` now carry more columns, eyelid aperture and per-eye gaze, which are ignored), 200 Hz, blinks from
+  `blinks.csv`. **Found:** the folder also held a video recorded by the Quest (1920×1080, 18.8 s, variable frame rate),
+  and `_cloud_video` took it as the scene video because it is the only `.mp4`: its 565 frames were given the 606
+  timestamps of the Neon's scene camera (20 Hz), and the field of view was computed from the Neon's camera matrix with
+  the Quest video's size (95° × 63°). Nothing warned. A foreign video must not be taken as the scene video: match the
+  Cloud name (`<section id start>_<start>-<end>.mp4`) or the frame count of `world_timestamps.csv` (open issue 61).
+  **Fixed (17 November):** a single video is taken only by the export's name or a matching frame count, and Quest
+  captures are never taken.
+- **Status:** partly checked (native and Cloud, one recording each, without a lux log); a recording with a lux log
+  still needs data.
 
 ### 33. Glasses trackers' scene camera field of view comes from a pinhole model
 - **Where:** `devices/common.pinhole_fov`, used by the Pupil Core and Neon readers.
@@ -1380,7 +1390,9 @@ is revised; they remain in the git history of this file.
   headset frames (those that bring an `XRFrame`), and a session that has delivered no frame 5 s after it started is ended
   with a message. Whether the headset frames themselves arrive on the Quest over Link is not known: if they do not, the
   run now stops at 5 s and says so; the projection layer may then not have been the cause of the first report either.
-- **Status:** open (needs the Quest retry after the site is republished, and the Varjo test).
+- **Retry (14 November 2026), with the fix published:** the calibration works on the Quest 3 over wireless Link (Air
+  Link). Not yet tried over the USB cable, the setup of both reports.
+- **Status:** open (needs the Quest over the USB cable, and the Varjo test).
 
 ### 60. Lux and spectral sensors behind a PTFE dome diffuser: the 2.2 factor no longer holds
 
@@ -1403,3 +1415,53 @@ is revised; they remain in the git history of this file.
   funnel saw. Then set `lux_solid_angle` per sensor build, and record the build in the session.
 - **Status:** open (needs the with/without measurement; how the dome is fitted, on the funnel or instead of it, not
   known yet).
+
+### 61. Neon inside a Meta Quest: the luminance has to come from the Quest's own video
+
+- **Where:** not supported yet; `cwtool/devices/neon.py` reads the Neon's data, the display route is the Varjo's
+  (`cwtool/devices/varjo.py`, log-to-video alignment).
+- **Why (14 November 2026):** a Neon in its Quest 3 frame (`frame_name` "Quest3 XR" in `info.json`) measures the pupil,
+  but its scene camera does not see the headset's displays. What the eye sees is in the Quest's own video capture.
+- **First sample (13 November, 30 s):** Neon Cloud export plus a Quest capture of the passthrough view (1920×1080, one
+  eye's view, H.264 at a variable rate of about 30 fps, 18.8 s, no timestamps). The Quest names its captures
+  `com.oculus.vrshell-YYYYMMDD-HHMMSS-0.mp4` with the start of the capture in local time: here 16:59:04–16:59:23,
+  while the Neon recorded 17:00:15–17:00:45, so the two do not overlap unless the Quest's clock was over 52 s behind
+  (not known). The name gives a coarse start (1 s); the calibration run is still needed for a precise one. The view is a steady desk: the mean luminance changes by 15 % over the clip, so it
+  cannot be aligned to the pupil or test the luminance; it only shows the formats.
+- **What it needs:** (1) the luminance from the capture as a display device's (relative, scaled by the participant's
+  calibration fit, no photometry), from per-frame presentation times, not a constant rate; (2) the capture's clock:
+  the VR calibration presenter's run file stamps every step in Unix time, so its steps found in the capture place the
+  capture on that clock, as the Varjo's log alignment does; the Neon's clock is its phone's (NTP), so a few tens of ms
+  between the two clocks are expected; (3) the gaze in the capture: Neon gives azimuth and elevation in its scene
+  camera's frame, which in the Quest frame is fixed relative to the headset but not aligned with its view; until a
+  point calibration in the headset gives that rotation, the whole-frame luminance (or a wide gaze weighting) is safer.
+- **Two recordings (16 November 2026, Quest 3 + Neon in its frame, Cloud exports, the capture next to the export
+  folder):** `DataCalibration_1`, the VR calibration presenter over Link, captured by `com.meta.pclinkservice.server`
+  (1920×1080, 421 s, frames every 28–42 ms) with a 414 s Neon recording; `Passthrough_1`, 27 s of passthrough
+  (`com.oculus.vrshell`) in a 35 s Neon recording. The names fit the Neon's times (capture from 11:29:13, Neon from
+  11:29:14.97; capture from 11:38:07, Neon from 11:38:02.8), so the name is **the capture's start in local time**, to the
+  second; the 13 November sample's capture really did not overlap its Neon recording. In the calibration capture the
+  steps are clear (32 large changes of luminance between 95 and 410 s) and the pupil follows each bright step. On the
+  clock from the name, the pupil's speed matches the capture's luminance changes best 1.3 s later (r 0.38, for a low-pass of
+  0.2–0.8 s), against the 0.3 s or so of the light reflex: the name truncates the start to the second (up to 1 s) and
+  the Quest's clock may differ from the phone's. So the name places the capture within about a second and the run file
+  (or the fit) has to do the rest. The run file of that calibration was not with the data.
+- **Next recording:** start the Quest capture and the Neon recording, run the time-course calibration in VR (keep the
+  run file), then the task; stop both afterwards.
+- **Now (17 November 2026):** the Neon reader has an XR route (`pupil_neon_xr`), taken when `info.json` names a headset
+  frame or a Quest capture overlapping the recording lies in its folder or the one above. The capture is the scene
+  video, its frames timed from the file; time zero is its start as named, read in the phone's zone (from the recording's
+  name and UTC start); the luminance is the display's. The capture is aligned (`Recording.separate_video_clock`) from
+  the presenter's run file when there is one, else from the pupil's response (the lag at which the pupil's speed follows
+  the picture's changes, less an assumed 0.5 s latency); the pupil, events and sensors move onto the capture's clock.
+  The gaze is placed by its direction, with the capture taken as looking straight ahead (110° × 78°). The route is shown
+  as a coloured badge in the app (every reader now names its route) and written to the export. On `DataCalibration_1`
+  the pupil's response placed the capture 0.80 ± 0.07 s before the name's time (45 changes); the calibration fit then
+  brought the model within 0.24 mm of the pupil in its window (r 0.92, from 0.91 mm with the defaults) and the whole
+  recording's ΔPD RMS from 1.07 to 0.38 mm.
+- **Not known yet:** which sequence that run showed: the time-course sequence matches the capture poorly (colour error
+  0.88, its steps span about 315 s against 281 s), so the fit's window may be misplaced; the run file was not with the
+  data. Whether the gaze lands where the participant looked (no calibration in the headset yet; a fixation target at the
+  end of the calibration and an operator's x/y gaze offset are planned). The capture's field of view (nominal). Whether
+  the capture's picture is what the displays showed (compression, and the Quest's own processing of passthrough).
+- **Status:** open (route and alignment implemented; needs the run file, the gaze check and more recordings).

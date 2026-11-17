@@ -166,4 +166,5 @@ def load(folder: Path, lux_folder: Optional[Path] = None, min_confidence: float 
         lux_values=lux_values,
         events=read_event_log(folder, epoch_start),
         notes=lux_notes,
+        route="glasses: scene camera and " + ("lux sensor" if lux_values is not None else "no lux log"),
     )

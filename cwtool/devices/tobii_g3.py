@@ -223,4 +223,5 @@ def load(folder: Path, lux_folder: Optional[Path] = None, flip_gaze_y: bool = Fa
         lux_values=lux_values,
         events=sorted(events, key=lambda e: e.start),
         notes=notes,
+        route="glasses: scene camera and " + ("lux sensor" if lux_values is not None else "no lux log"),
     )

@@ -202,6 +202,7 @@ def load(folder: Path, gaze_eye: str = "combined") -> Recording:
         events=read_event_log(folder, epoch_start, utc_offset),
         censored_left=at_ceiling(ratio_left),
         censored_right=at_ceiling(ratio_right),
+        route="XR: Varjo capture, luminance from the headset's picture",
     )
 
 

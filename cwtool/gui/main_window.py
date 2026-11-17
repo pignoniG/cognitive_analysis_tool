@@ -40,6 +40,15 @@ HRV_COLUMNS = (("Window", "label", "{}"), ("s", "seconds", "{:.0f}"), ("HR", "me
                ("RMSSD", "rmssd", "{:.0f}"), ("SDNN", "sdnn", "{:.0f}"), ("LF/HF", "lf_hf", "{:.1f}"))
 
 
+def route_badge(rec) -> str:
+    """The recording's route (``Recording.route``) as a coloured line, so the operator sees at once whether the luminance
+    comes from a headset's picture (XR) or from glasses' scene camera and sensor; empty for devices with a single route."""
+    if not rec.route:
+        return ""
+    colour = palette.ROUTE_XR if rec.route.startswith("XR") else palette.ROUTE_GLASSES
+    return (f"<br><span style='background:{colour}; color:white; font-weight:bold'>&nbsp;{rec.route}&nbsp;</span>")
+
+
 class MainWindow(QMainWindow):
     """The analysis window: the tabs on the left (Data, Params, Calibrate, Export) with the video preview under them,
     the plots on the right, and the status strip. It owns the open recording, its video analysis and its result, and
@@ -818,6 +827,8 @@ class MainWindow(QMainWindow):
         self.recording, self.video, self.result = rec, None, None
         self._raw_recording, self.log_alignment, self._alignment_message = rec, None, ""
         self.align_check.setVisible(alignment.applicable(rec))
+        self.align_check.setText("Align the capture to the pupil (run file, else the pupil's response)"
+                                 if rec.separate_video_clock else "Align the presenter's log to the video")
         if previous_device and previous_device != rec.device:
             self._forget_params_of(previous_device, rec.device)
         self._remember_recording(rec.folder)
@@ -826,7 +837,7 @@ class MainWindow(QMainWindow):
         prof = rec.profile
         scale = f"×{prof.pupil_scale:g}" if prof.pupil_scale else "scale fitted"
         self.recording_label.setText(
-            f"<b>{breakable(rec.name)}</b><br>{rec.device}, {len(rec.time)} samples, {duration:.1f} s, "
+            f"<b>{breakable(rec.name)}</b>{route_badge(rec)}<br>{rec.device}, {len(rec.time)} samples, {duration:.1f} s, "
             f"{rec.measured_rate:.0f} Hz<br>camera {prof.field_of_view[0]:.0f}° × {prof.field_of_view[1]:.0f}°, "
             f"adapting field {prof.field_area:,.0f} deg², pupil {prof.pupil_unit} {scale}"
             f"<br>video: {breakable(video)}<br>events: {len(rec.events)}"

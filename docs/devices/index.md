@@ -25,6 +25,7 @@ flowchart LR
 | `varjo` | a file whose name contains `varjo_gaze_output_` |
 | `pupil_core` | `info.player.json` and an `exports/<n>/pupil_positions.csv` |
 | `pupil_neon` | `info.json` with `3d_eye_states.csv` or `gaze.csv` (Cloud export), or `gaze ps*.raw` / `gaze_200hz.raw` / `eye_state ps*.raw` (native) |
+| `pupil_neon_xr` | the same, read by the Neon reader when the recording names a headset frame or a Meta Quest capture overlaps it ([Neon inside a Meta Quest](pupil-neon.md#neon-inside-a-meta-quest)) |
 | `tobii_g3` | `recording.g3` and `gazedata.gz` |
 
 Pass `--device` (or `device=` to `devices.load`) to skip detection.

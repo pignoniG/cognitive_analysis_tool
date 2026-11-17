@@ -25,10 +25,23 @@ def detect(folder: str | Path) -> str | None:
     return None
 
 
-def load(folder: str | Path, device: str | None = None, **options) -> Recording:
-    """Read ``folder`` with the reader for ``device`` (default: detected). Only the ``options`` the
-    reader's ``load`` accepts, and that are not None, are passed on (e.g. ``lux_folder``)."""
+def resolve(folder: str | Path) -> Path:
+    """``folder``, or the one recording inside it when ``folder`` is not one itself: a session folder that holds a Neon's
+    Cloud export next to a Meta Quest capture is opened as that export. Unchanged when no subfolder, or several, are
+    recognised."""
     folder = Path(folder)
+    if detect(folder) is not None or not folder.is_dir():
+        return folder
+    found = [sub for sub in sorted(folder.iterdir())
+             if sub.is_dir() and not sub.name.startswith(".") and detect(sub) is not None]
+    return found[0] if len(found) == 1 else folder
+
+
+def load(folder: str | Path, device: str | None = None, **options) -> Recording:
+    """Read ``folder`` with the reader for ``device`` (default: detected); a folder holding a single recording is read as
+    that recording (:func:`resolve`). Only the ``options`` the reader's ``load`` accepts, and that are not None, are passed
+    on (e.g. ``lux_folder``)."""
+    folder = resolve(folder) if device is None else Path(folder)
     device = device or detect(folder)
     if device is None:
         raise ValueError(f"No supported recording found in {folder}")
