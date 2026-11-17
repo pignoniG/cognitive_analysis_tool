@@ -96,6 +96,21 @@ Choose **On screen** or **In VR**, enter the **participant ID** and press start.
 Fix the display first (constant brightness, sRGB, no night shift or HDR): the page sends sRGB values, the light
 that results depends on the display.
 
+## Gaze check
+
+With **Gaze check at the end** (on by default), the light steps are followed by 18 s on the lead-in grey in which a
+black dot with a white centre moves through 9 places, 2 s each, the centre first, then the corners and the edges'
+middles clockwise from the top left. Ask the participant to look at the dot's centre wherever it goes.
+
+- **On screen** the places are at ±35 % of the screen from its centre; the dot is 2.4 % of the screen's shorter side.
+- **In VR** they are directions from the head, ±15° horizontally and ±12° vertically, and the dot (0.8° radius) is fixed
+  to the head: it stays at the same place in the headset's picture, and so in its video capture (the Varjo's, the
+  Quest's), whatever the head does.
+
+The run file logs each place (below), so cwtool can find the dot in the scene video, compare it with the gaze and
+propose an offset ([open issue 61](../OPEN_ISSUES.md)). The gaze check is not part of the light sequence: cwtool's
+*Load sequence…* and the log alignment leave its rows out.
+
 ## Run files
 
 Each run is saved as `calibration_run_<participant>_<mode>_<date-time>.csv`, and kept in the page's list, where you
@@ -112,6 +127,10 @@ seed, lead-in, start time as Unix milliseconds, frame statistics, display and br
 | `onset_unix_ms` | onset on the computer's clock, to match with recordings |
 | `Y` | nominal luminance of the sRGB colour (Eckert et al. 2022, eq. 1) |
 | `completed` | `false` for a step cut short by an abort |
+| `phase` | `light` for the sequence's steps, `gaze` for the gaze check's |
+| `target_u`, `target_v` | gaze check: the place on the unit grid (right, down; −1, 0 or 1) |
+| `target_x`, `target_y` | gaze check on screen: the dot's centre as a fraction of the screen from its top left |
+| `target_az_deg`, `target_el_deg` | gaze check in VR: the dot's direction from the head's straight ahead, in degrees (right, up) |
 
 The file loads in cwtool's *Load sequence…* as it is, giving the sequence as actually presented. Its `onset_unix_ms`
 column is on the presenting computer's clock, so when that is the computer that recorded the eye tracker, cwtool

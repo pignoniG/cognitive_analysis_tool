@@ -1464,4 +1464,10 @@ is revised; they remain in the git history of this file.
   data. Whether the gaze lands where the participant looked (no calibration in the headset yet; a fixation target at the
   end of the calibration and an operator's x/y gaze offset are planned). The capture's field of view (nominal). Whether
   the capture's picture is what the displays showed (compression, and the Quest's own processing of passthrough).
-- **Status:** open (route and alignment implemented; needs the run file, the gaze check and more recordings).
+- **Gaze check (17 November 2026):** both presenters (the calibration presenter and the validation task's calibration)
+  now end the calibration with 18 s on the lead-in grey in which a dot with a white centre moves through 9 places, 2 s
+  each; in VR the places are directions fixed to the head (±15° × ±12°), so they sit at fixed places in the headset's
+  capture. The run file logs them (`phase` = `gaze`, `target_*` columns); cwtool reads them
+  (`calibration.gaze_targets`) and leaves them out of the light sequence and of the log alignment. Not yet done: finding
+  the dot in the video, comparing it with the gaze, and the operator's x/y gaze offset.
+- **Status:** open (route and alignment implemented; needs the run file, the gaze check's analysis and more recordings).

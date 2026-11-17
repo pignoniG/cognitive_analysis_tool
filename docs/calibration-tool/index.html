@@ -108,6 +108,8 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
 #stage.on { display: block; }
 #hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 18px "Open Sans", system-ui, sans-serif; text-align: center; padding: 12px 18px; border-radius: 8px; background: rgba(128,128,128,.55); color: #fff; }
 #hint[hidden] { display: none; }
+#target { position: absolute; width: 2.4vmin; height: 2.4vmin; margin: -1.2vmin 0 0 -1.2vmin; border-radius: 50%; background: radial-gradient(circle, #fff 0 29%, #000 31% 100%); }
+#target[hidden] { display: none; }
 @media (max-width: 640px) {
   input[type=number] { width: 72px; }
   .row > label:not(.check), .row > button, .row > .seg { flex: 1 1 140px; }
@@ -212,6 +214,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
     <label class="check"><input type="checkbox" id="wait" checked> Wait for a start signal (<kbd>Space</kbd>, click, or VR trigger)</label>
     <label class="check"><input type="checkbox" id="autodl" checked> Download the CSV when the run ends</label>
     <label class="check" id="exit-wrap"><input type="checkbox" id="exitvr" checked> Leave VR at the end</label>
+    <label class="check" title="After the light steps, a dot moves through 9 places (2 s each) on the lead-in grey. Ask the participant to look at its centre. The run file logs where it was, so the analysis can check that the gaze lands on it in the video and propose an offset."><input type="checkbox" id="gazecheck" checked> Gaze check at the end (9 points)</label>
     <label class="check" id="compat-wrap" title="Draw into the classic WebXR layer (XRWebGLLayer), which every runtime shows. Off: the WebXR Layers projection layer, which a Quest over Link in Chrome does not show."><input type="checkbox" id="xrcompat" checked> Compatible VR rendering</label>
   </div>
   <div class="row">
@@ -298,7 +301,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
   </form>
 </dialog>
 
-<div id="stage" aria-hidden="true"><div id="hint" hidden></div></div>
+<div id="stage" aria-hidden="true"><div id="target" hidden></div><div id="hint" hidden></div></div>
 
 <script type="module">
 "use strict";
@@ -850,6 +853,26 @@ $("#btn-dl-participant").addEventListener("click", () => {
 });
 for (const id of ["#participant", "#seed", "#scramble", "#avoid"]) $(id).addEventListener("input", renderOrderPreview);
 
+/* ---------- gaze check: a dot through 9 places after the light steps ---------- */
+/* Places on a unit grid (u right, v down), the centre first. On screen the grid spans GAZE_SCREEN of the screen from its
+   centre; in VR it is a direction from the head, GAZE_AZ_DEG and GAZE_EL_DEG at the grid's edges, fixed to the head so it
+   stays at the same place in the headset's picture (and its capture) whatever the participant does with the head. */
+const GAZE_POINTS = [[0, 0], [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]];
+const GAZE_STEP_S = 2, GAZE_SCREEN = 0.35, GAZE_AZ_DEG = 15, GAZE_EL_DEG = 12;
+const GAZE_DOT_DEG = 0.8, GAZE_CENTRE_DEG = 0.25;     // VR: angular radius of the black dot and of its white centre
+function gazeSteps(lead) {
+  return GAZE_POINTS.map(([u, v], k) => ({ r: lead[0], g: lead[1], b: lead[2], dur: GAZE_STEP_S, label: `Gaze target ${k + 1}`,
+    source: -1, phase: "gaze", target: { u, v } }));
+}
+/** Where a target is, for the run file: screen fraction (0-1 from the top left) on screen, direction (deg; right, up) in VR. */
+function targetPlace(t, mode) {
+  if (!t) return {};
+  const out = { target_u: t.u, target_v: t.v };
+  if (mode === "vr") { out.target_az_deg = t.u * GAZE_AZ_DEG; out.target_el_deg = -t.v * GAZE_EL_DEG; }
+  else { out.target_x = round(0.5 + t.u * GAZE_SCREEN, 4); out.target_y = round(0.5 + t.v * GAZE_SCREEN, 4); }
+  return out;
+}
+
 /* ---------- the run: one state machine driven by frame timestamps, for both display modes ---------- */
 class Run {
   /** io: { show(r, g, b), hint(text|null) }. Frame times are DOMHighResTimeStamps (ms, performance.now clock). */
@@ -878,19 +901,20 @@ class Run {
     let changed = false;   // a step is logged even if a stalled frame jumped over its whole duration
     while (this.idx + 1 < this.starts.length && e >= this.starts[this.idx + 1]) { this.idx++; this.onsets[this.idx] = t; changed = true; }
     if (e >= this.total) return this.end(t, "completed");
-    if (changed) { const s = this.plan.steps[this.idx]; io.show(s.r, s.g, s.b); }
+    if (changed) { const s = this.plan.steps[this.idx]; io.show(s.r, s.g, s.b); io.target(s.target ?? null); }
   }
   abort(reason) { if (this.phase !== "done") this.end(performance.now(), `aborted (${reason})`); }
   end(t, status) {
     const started = this.phase === "running";
     this.phase = "done";
-    this.io.show(...this.cfg.lead); this.io.hint(null);
+    this.io.show(...this.cfg.lead); this.io.hint(null); this.io.target(null);
     const shown = this.onsets.length, rows = [];
     for (let i = 0; i < shown; i++) {
       const s = this.plan.steps[i], off = i + 1 < shown ? this.onsets[i + 1] : t;
       rows.push({
         time: (this.onsets[i] - this.t0) / 1000, duration: (off - this.onsets[i]) / 1000,
-        r: s.r, g: s.g, b: s.b, label: s.label, index: i + 1, source_index: s.source + 1,
+        r: s.r, g: s.g, b: s.b, label: s.label, index: i + 1, source_index: s.source >= 0 ? s.source + 1 : "",
+        phase: s.phase ?? "light", ...targetPlace(s.target, this.cfg.mode),
         planned_start_s: this.starts[i], planned_duration_s: s.dur,
         onset_unix_ms: performance.timeOrigin + this.onsets[i], Y: lum(s.r, s.g, s.b), completed: status === "completed" || i + 1 < shown,
       });
@@ -908,8 +932,12 @@ class Run {
   }
 }
 
-const stage = $("#stage"), hintEl = $("#hint");
+const stage = $("#stage"), hintEl = $("#hint"), targetEl = $("#target");
 const stageIo = {
+  target(t) {
+    targetEl.hidden = !t;
+    if (t) { targetEl.style.left = `${(0.5 + t.u * GAZE_SCREEN) * 100}%`; targetEl.style.top = `${(0.5 + t.v * GAZE_SCREEN) * 100}%`; }
+  },
   show(r, g, b) { const c = `rgb(${r},${g},${b})`; if (stage.dataset.c !== c) { stage.dataset.c = c; stage.style.background = c; } },
   hint(t) { hintEl.hidden = !t; if (t) hintEl.textContent = t; },
 };
@@ -921,7 +949,8 @@ function settings() {
   const g = byte(val("#lead-grey"));
   return { participant: participantId(), mode: document.querySelector("input[name=mode]:checked").value,
     leadin: Math.max(0, Number(val("#leadin")) || 0), lead: [g, g, g], wait: $("#wait").checked,
-    autodl: $("#autodl").checked, exitvr: $("#exitvr").checked, xrcompat: $("#xrcompat").checked };
+    autodl: $("#autodl").checked, exitvr: $("#exitvr").checked, xrcompat: $("#xrcompat").checked,
+    gazecheck: $("#gazecheck").checked };
 }
 async function startRun() {
   if (active) return;
@@ -929,6 +958,7 @@ async function startRun() {
   const cfg = settings();
   if (!cfg.participant) { $("#participant").focus(); return setStatus("Enter a participant ID first.", true); }
   const p = plan(true);
+  if (cfg.gazecheck) p.steps = p.steps.concat(gazeSteps(cfg.lead));
   cfg.hint = "Press Space or click when ready. Esc cancels.";
   const runId = `${safeName(cfg.participant)}_${cfg.mode}_${new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}`;
   const done = (result, r) => finishRun(runId, cfg, p, r, result);
@@ -1023,9 +1053,27 @@ async function startVR(p, cfg, done) {
   const material = new THREE.MeshBasicMaterial({ side: THREE.BackSide, toneMapped: false });
   const sphere = new THREE.Mesh(new THREE.SphereGeometry(20, 48, 24), material);   // the participant is at its centre
   sphere.frustumCulled = false; scene.add(sphere);
+  // The gaze target, fixed to the head: a black ball with a white one just in front of it, GAZE_DIST away (two small spheres
+  // look like a dot with a centre, and the slim three.js build has no flat shapes).
+  const GAZE_DIST = 2, rad = (d) => d * Math.PI / 180;
+  const dotMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false, depthTest: false });
+  const centreMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, depthTest: false });
+  const dotR = GAZE_DIST * Math.tan(rad(GAZE_DOT_DEG)), centreR = GAZE_DIST * Math.tan(rad(GAZE_CENTRE_DEG));
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(dotR, 24, 12), dotMaterial);
+  const centre = new THREE.Mesh(new THREE.SphereGeometry(centreR, 16, 8), centreMaterial);
+  dot.renderOrder = 1; centre.renderOrder = 2; dot.visible = centre.visible = false;
+  camera.add(dot, centre); scene.add(camera);
+  const place = (mesh, t, dist) => {
+    const az = rad(t.u * GAZE_AZ_DEG), el = rad(-t.v * GAZE_EL_DEG);
+    mesh.position.set(dist * Math.cos(el) * Math.sin(az), dist * Math.sin(el), -dist * Math.cos(el) * Math.cos(az));
+  };
   const io = {
     show(r, g, b) { material.color.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace); renderer.setClearColor(material.color); },
     hint() {},
+    target(t) {
+      dot.visible = centre.visible = !!t;
+      if (t) { place(dot, t, GAZE_DIST); place(centre, t, GAZE_DIST - 2 * dotR); }
+    },
   };
   const run = new Run(p, cfg, io, (r, self) => {
     if (cfg.exitvr) session.end().catch(() => {});
@@ -1035,6 +1083,7 @@ async function startVR(p, cfg, done) {
   session.addEventListener("selectstart", onSignal); session.addEventListener("squeezestart", onSignal);
   session.addEventListener("end", () => {
     renderer.setAnimationLoop(null); renderer.dispose(); material.dispose(); sphere.geometry.dispose();
+    dotMaterial.dispose(); centreMaterial.dispose(); dot.geometry.dispose(); centre.geometry.dispose();
     run.abort("VR session ended");
   });
   active = { run };
@@ -1048,7 +1097,9 @@ async function startVR(p, cfg, done) {
   renderer.setAnimationLoop((t, frame) => {
     if (!frame) return;
     countView(run.vr.view, session, frame, renderer.xr.getReferenceSpace());
-    run.frame(t); renderer.render(scene, camera); tickStatus(run);
+    run.frame(t);
+    renderer.xr.updateCamera(camera);       // this frame's head pose before rendering, so the head-fixed target is not a frame late
+    renderer.render(scene, camera); tickStatus(run);
   });
   setTimeout(() => {
     if (run.vr.view.frames || run.phase === "done") return;
@@ -1071,7 +1122,8 @@ function tickStatus(run) {
 
 /* ---------- run log ---------- */
 let runs = store.get("cal.runs", []);
-const COLUMNS = ["time", "duration", "r", "g", "b", "label", "index", "source_index", "planned_start_s", "planned_duration_s", "onset_unix_ms", "Y", "completed"];
+const COLUMNS = ["time", "duration", "r", "g", "b", "label", "index", "source_index", "planned_start_s", "planned_duration_s", "onset_unix_ms", "Y", "completed",
+  "phase", "target_u", "target_v", "target_x", "target_y", "target_az_deg", "target_el_deg"];
 const cellFor = (k, v) => (typeof v === "number" ? (k === "onset_unix_ms" ? v.toFixed(3) : k === "Y" ? v.toFixed(5) : String(round(v, 4))) : v);
 function runCsv(run) {
   const m = run.meta, lines = [];
@@ -1097,6 +1149,9 @@ function finishRun(runId, cfg, p, run, r) {
     started_iso: run.startedAtIso, sequence_start_unix_ms: r.t0_unix_ms.toFixed(3),
     planned_total_s: round(run.total, 3), actual_total_s: round(r.total_s, 3),
     lead_in_s: cfg.leadin, lead_in_rgb: cfg.lead.join(" "), waited_for_start_signal: cfg.wait,
+    gaze_check: cfg.gazecheck, gaze_step_s: cfg.gazecheck ? GAZE_STEP_S : "",
+    gaze_grid: cfg.gazecheck ? (cfg.mode === "vr" ? `±${GAZE_AZ_DEG}° × ±${GAZE_EL_DEG}° from the head's straight ahead, fixed to the head`
+      : `±${GAZE_SCREEN} of the screen from its centre`) : "",
     frames: r.frames, frame_interval_median_ms: r.frame_median_ms === null ? "" : r.frame_median_ms.toFixed(2),
     frame_interval_max_ms: r.frame_max_ms === null ? "" : r.frame_max_ms.toFixed(2),
     xr_frame_rate_hz: run.vr?.frameRate ?? "", xr_render_path: run.vr?.path ?? "",
@@ -1136,7 +1191,7 @@ $("#btn-clear").addEventListener("click", () => {
 });
 
 /* ---------- mode, saved settings, start-up ---------- */
-const SAVED = ["#participant", "#seed", "#scramble", "#leadin", "#lead-grey"], SAVED_CHECK = ["#avoid", "#wait", "#autodl", "#exitvr", "#xrcompat"];
+const SAVED = ["#participant", "#seed", "#scramble", "#leadin", "#lead-grey"], SAVED_CHECK = ["#avoid", "#wait", "#autodl", "#exitvr", "#xrcompat", "#gazecheck"];
 function saveSettings() {
   store.set("cal.settings", { mode: settings().mode, v: Object.fromEntries(SAVED.map((k) => [k, val(k)])), c: Object.fromEntries(SAVED_CHECK.map((k) => [k, $(k).checked])) });
 }

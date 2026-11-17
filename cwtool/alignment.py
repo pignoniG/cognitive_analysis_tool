@@ -132,8 +132,11 @@ def log_onsets(folder: str | Path) -> tuple[np.ndarray, str]:
         try:
             with open(run, newline="", encoding="utf-8") as f:
                 rows = [r for r in csv.reader(f) if r and not r[0].lstrip().startswith("#")]
-            column = [h.strip().lower() for h in rows[0]].index("onset_unix_ms")
-            times += [float(r[column]) / 1000.0 for r in rows[1:] if len(r) > column and r[column].strip()]
+            names = [h.strip().lower() for h in rows[0]]
+            column = names.index("onset_unix_ms")
+            phase = names.index("phase") if "phase" in names else None       # the gaze check changes no light
+            times += [float(r[column]) / 1000.0 for r in rows[1:] if len(r) > column and r[column].strip()
+                      and not (phase is not None and phase < len(r) and r[phase].strip().lower() == "gaze")]
             sources.append(run.name)
         except (OSError, UnicodeDecodeError, ValueError, IndexError):
             pass

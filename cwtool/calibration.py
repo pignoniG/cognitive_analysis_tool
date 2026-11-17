@@ -7,6 +7,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
@@ -254,6 +255,11 @@ def load_sequence(path: str | Path) -> Sequence:
 
     ms = False
     keep_col = None
+    if not numeric(rows[0]):
+        # the presenter's gaze check (rows with phase "gaze", after the light steps) is not part of the light sequence
+        phase_col = _column(rows[0], ("phase",))
+        if phase_col is not None:
+            rows = [rows[0]] + [r for r in rows[1:] if not (phase_col < len(r) and r[phase_col].strip().lower() == "gaze")]
     if numeric(rows[0]):
         t_col, rgb_cols, dur_col, label_col = 0, (1, 2, 3), None, None
     else:
@@ -308,6 +314,50 @@ def run_start_unix(path: str | Path) -> float | None:
         return float(rows[1][header.index("onset_unix_ms")]) / 1000.0
     except (ValueError, IndexError):
         return None
+
+
+@dataclass(frozen=True)
+class GazeTarget:
+    """One place of the presenter's gaze check (run file rows with phase "gaze")."""
+    onset_unix: float               # s, on the presenting computer's clock
+    duration: float                 # s
+    u: float                        # place on the unit grid: right
+    v: float                        # down
+    screen: Optional[tuple]         # (x, y) screen fraction from the top left, screen runs
+    direction: Optional[tuple]      # (azimuth, elevation) deg from the head's straight ahead (right, up), VR runs
+
+
+def gaze_targets(path: str | Path) -> list[GazeTarget]:
+    """The gaze check's targets in a calibration presenter run file (empty for a run without one)."""
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = [r for r in csv.reader(f) if r and r[0].strip() and not r[0].lstrip().startswith("#")]
+    if len(rows) < 2:
+        return []
+    header = [h.strip().lower() for h in rows[0]]
+    if "phase" not in header or "onset_unix_ms" not in header:
+        return []
+    col = {name: header.index(name) for name in header}
+
+    def number(r, name):
+        i = col.get(name)
+        try:
+            return float(r[i]) if i is not None and i < len(r) and r[i].strip() else None
+        except ValueError:
+            return None
+
+    out = []
+    for r in rows[1:]:
+        if r[col["phase"]].strip().lower() != "gaze":
+            continue
+        onset, u, v = number(r, "onset_unix_ms"), number(r, "target_u"), number(r, "target_v")
+        if onset is None or u is None or v is None:
+            continue
+        x, y = number(r, "target_x"), number(r, "target_y")
+        az, el = number(r, "target_az_deg"), number(r, "target_el_deg")
+        out.append(GazeTarget(onset / 1000.0, number(r, "duration") or 0.0, u, v,
+                              (x, y) if x is not None and y is not None else None,
+                              (az, el) if az is not None and el is not None else None))
+    return out
 
 
 RUN_FILE_MAX_BYTES = 2_000_000       # a run file is a few kilobytes; larger CSVs are not read to look for one
