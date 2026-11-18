@@ -13,9 +13,10 @@ def _run_file(path, vr=False):
     rows = ["# tool: test", "# gaze_check: true", HEADER,
             "0,5,200,200,200,Light,1,1,0,5,1700000000000,0.6,true,light,,,,,,",
             "5,5,20,20,20,Dark,2,2,5,5,1700000005000,0.01,true,light,,,,,,"]
+    rows.append("10,1,20,20,20,Gaze check cue (tone),3,,10,1,1700000010000,0.01,true,gaze,,,,,,")   # tone: no target
     for k, (u, v) in enumerate([(0, 0), (-1, -1), (1, 1)]):
         place = f",,{u * 15},{-v * 12}" if vr else f"{0.5 + u * 0.35},{0.5 + v * 0.35},,"
-        rows.append(f"{10 + 2 * k},2,128,128,128,Gaze target {k + 1},{3 + k},,{10 + 2 * k},2,{1700000010000 + 2000 * k},"
+        rows.append(f"{11 + 2 * k},2,128,128,128,Gaze target {k + 1},{4 + k},,{11 + 2 * k},2,{1700000011000 + 2000 * k},"
                     f"0.2,true,gaze,{u},{v},{place}")
     path.write_text("\n".join(rows) + "\n")
     return path
@@ -29,9 +30,9 @@ def test_the_light_sequence_leaves_the_gaze_check_out(tmp_path):
 
 def test_the_gaze_targets_are_read(tmp_path):
     screen = calibration.gaze_targets(_run_file(tmp_path / "s.csv"))
-    assert [(t.u, t.v) for t in screen] == [(0, 0), (-1, -1), (1, 1)]
+    assert [(t.u, t.v) for t in screen] == [(0, 0), (-1, -1), (1, 1)]      # the tone's row has no target
     assert screen[1].screen == pytest.approx((0.15, 0.15)) and screen[1].direction is None
-    assert screen[0].onset_unix == pytest.approx(1700000010.0) and screen[0].duration == 2
+    assert screen[0].onset_unix == pytest.approx(1700000011.0) and screen[0].duration == 2
     vr = calibration.gaze_targets(_run_file(tmp_path / "v.csv", vr=True))
     assert vr[2].direction == pytest.approx((15, -12)) and vr[2].screen is None
     old = tmp_path / "old.csv"

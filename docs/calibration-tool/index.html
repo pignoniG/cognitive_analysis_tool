@@ -214,7 +214,8 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
     <label class="check"><input type="checkbox" id="wait" checked> Wait for a start signal (<kbd>Space</kbd>, click, or VR trigger)</label>
     <label class="check"><input type="checkbox" id="autodl" checked> Download the CSV when the run ends</label>
     <label class="check" id="exit-wrap"><input type="checkbox" id="exitvr" checked> Leave VR at the end</label>
-    <label class="check" title="After the light steps, a dot moves through 9 places (2 s each) on the lead-in grey. Ask the participant to look at its centre. The run file logs where it was, so the analysis can check that the gaze lands on it in the video and propose an offset."><input type="checkbox" id="gazecheck" checked> Gaze check at the end (9 points)</label>
+    <label class="check" title="After the light steps, a short tone, a second of grey, then a dot moves through 9 places on the lead-in grey. Ask the participant to look at its centre. The run file logs where it was, so the analysis can check that the gaze lands on it in the video and propose an offset."><input type="checkbox" id="gazecheck" checked> Gaze check at the end (9 points)</label>
+    <label title="How long the dot stays at each of the 9 places">Seconds per point <input type="number" id="gazestep" min="1" max="10" step="0.5" value="3"></label>
     <label class="check" id="compat-wrap" title="Draw into the classic WebXR layer (XRWebGLLayer), which every runtime shows. Off: the WebXR Layers projection layer, which a Quest over Link in Chrome does not show."><input type="checkbox" id="xrcompat" checked> Compatible VR rendering</label>
   </div>
   <div class="row">
@@ -858,11 +859,32 @@ for (const id of ["#participant", "#seed", "#scramble", "#avoid"]) $(id).addEven
    centre; in VR it is a direction from the head, GAZE_AZ_DEG and GAZE_EL_DEG at the grid's edges, fixed to the head so it
    stays at the same place in the headset's picture (and its capture) whatever the participant does with the head. */
 const GAZE_POINTS = [[0, 0], [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]];
-const GAZE_STEP_S = 2, GAZE_SCREEN = 0.35, GAZE_AZ_DEG = 15, GAZE_EL_DEG = 12;
+const GAZE_STEP_S = 3, GAZE_SCREEN = 0.35, GAZE_AZ_DEG = 15, GAZE_EL_DEG = 12;
 const GAZE_DOT_DEG = 0.8, GAZE_CENTRE_DEG = 0.25;     // VR: angular radius of the black dot and of its white centre
-function gazeSteps(lead) {
-  return GAZE_POINTS.map(([u, v], k) => ({ r: lead[0], g: lead[1], b: lead[2], dur: GAZE_STEP_S, label: `Gaze target ${k + 1}`,
-    source: -1, phase: "gaze", target: { u, v } }));
+// Before the first dot: a short tone to call the participant's attention, then grey with no dot for GAZE_CUE_S, so the pupil's
+// response to the sound is over before the dots (and the light steps, which the fits use, are not touched by it).
+const GAZE_CUE_S = 1, CUE_HZ = 880, CUE_S = 0.2;
+function gazeSteps(lead, stepS = GAZE_STEP_S) {
+  const grey = { r: lead[0], g: lead[1], b: lead[2], source: -1, phase: "gaze" };
+  return [{ ...grey, dur: GAZE_CUE_S, label: "Gaze check cue (tone)", cue: true }].concat(GAZE_POINTS.map(([u, v], k) =>
+    ({ ...grey, dur: stepS, label: `Gaze target ${k + 1}`, target: { u, v } })));
+}
+/** A short tone (Web Audio). The context is made on the start click, which browsers require before any sound. */
+let audio = null;
+function prepareAudio() {
+  try { audio ??= new (window.AudioContext || window.webkitAudioContext)(); audio.resume?.().catch(() => {}); }
+  catch { audio = null; }
+}
+function beep() {
+  if (!audio) return false;
+  try {
+    const t = audio.currentTime, osc = audio.createOscillator(), gain = audio.createGain();
+    osc.frequency.value = CUE_HZ;
+    gain.gain.setValueAtTime(0, t); gain.gain.linearRampToValueAtTime(0.4, t + 0.01);     // ramps: no click at either end
+    gain.gain.setValueAtTime(0.4, t + CUE_S - 0.03); gain.gain.linearRampToValueAtTime(0, t + CUE_S);
+    osc.connect(gain).connect(audio.destination); osc.start(t); osc.stop(t + CUE_S + 0.01);
+    return true;
+  } catch { return false; }
 }
 /** Where a target is, for the run file: screen fraction (0-1 from the top left) on screen, direction (deg; right, up) in VR. */
 function targetPlace(t, mode) {
@@ -901,7 +923,10 @@ class Run {
     let changed = false;   // a step is logged even if a stalled frame jumped over its whole duration
     while (this.idx + 1 < this.starts.length && e >= this.starts[this.idx + 1]) { this.idx++; this.onsets[this.idx] = t; changed = true; }
     if (e >= this.total) return this.end(t, "completed");
-    if (changed) { const s = this.plan.steps[this.idx]; io.show(s.r, s.g, s.b); io.target(s.target ?? null); }
+    if (changed) {
+      const s = this.plan.steps[this.idx]; io.show(s.r, s.g, s.b); io.target(s.target ?? null);
+      if (s.cue) this.cuePlayed = beep();
+    }
   }
   abort(reason) { if (this.phase !== "done") this.end(performance.now(), `aborted (${reason})`); }
   end(t, status) {
@@ -950,7 +975,7 @@ function settings() {
   return { participant: participantId(), mode: document.querySelector("input[name=mode]:checked").value,
     leadin: Math.max(0, Number(val("#leadin")) || 0), lead: [g, g, g], wait: $("#wait").checked,
     autodl: $("#autodl").checked, exitvr: $("#exitvr").checked, xrcompat: $("#xrcompat").checked,
-    gazecheck: $("#gazecheck").checked };
+    gazecheck: $("#gazecheck").checked, gazestep: Math.min(10, Math.max(1, Number(val("#gazestep")) || GAZE_STEP_S)) };
 }
 async function startRun() {
   if (active) return;
@@ -958,7 +983,7 @@ async function startRun() {
   const cfg = settings();
   if (!cfg.participant) { $("#participant").focus(); return setStatus("Enter a participant ID first.", true); }
   const p = plan(true);
-  if (cfg.gazecheck) p.steps = p.steps.concat(gazeSteps(cfg.lead));
+  if (cfg.gazecheck) { p.steps = p.steps.concat(gazeSteps(cfg.lead, cfg.gazestep)); prepareAudio(); }
   cfg.hint = "Press Space or click when ready. Esc cancels.";
   const runId = `${safeName(cfg.participant)}_${cfg.mode}_${new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}`;
   const done = (result, r) => finishRun(runId, cfg, p, r, result);
@@ -1038,7 +1063,8 @@ async function startVR(p, cfg, done) {
   // The GL context must be XR-compatible from the start: making it so afterwards makes the browser recreate it
   // (Context Lost / Restored), which invalidates the session's render layer (InvalidStateError, a black headset).
   const canvas = document.createElement("canvas");
-  const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, xrCompatible: true });
+  // Multisampled: the gaze target's edges are smooth (the full-field colour has no edges, so its light is the same either way).
+  const gl = canvas.getContext("webgl2", { antialias: true, alpha: false, xrCompatible: true });
   if (!gl) throw new Error("WebGL 2 is not available.");
   const session = await sessionP;
   try { if (!gl.getContextAttributes()?.xrCompatible && gl.makeXRCompatible) await gl.makeXRCompatible(); }
@@ -1046,7 +1072,7 @@ async function startVR(p, cfg, done) {
     session.end().catch(() => {});
     throw new Error(`${e.message} The browser's graphics processor may not be the one the headset is connected to: run the browser on the same GPU as SteamVR / Varjo Base.`);
   }
-  const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: false });
+  const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: true });
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NoToneMapping;
   renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType("local"); renderer.xr.setFoveation(0);
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(70, 1, 0.1, 100);
@@ -1059,8 +1085,8 @@ async function startVR(p, cfg, done) {
   const dotMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false, depthTest: false });
   const centreMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, depthTest: false });
   const dotR = GAZE_DIST * Math.tan(rad(GAZE_DOT_DEG)), centreR = GAZE_DIST * Math.tan(rad(GAZE_CENTRE_DEG));
-  const dot = new THREE.Mesh(new THREE.SphereGeometry(dotR, 24, 12), dotMaterial);
-  const centre = new THREE.Mesh(new THREE.SphereGeometry(centreR, 16, 8), centreMaterial);
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(dotR, 64, 32), dotMaterial);
+  const centre = new THREE.Mesh(new THREE.SphereGeometry(centreR, 48, 24), centreMaterial);
   dot.renderOrder = 1; centre.renderOrder = 2; dot.visible = centre.visible = false;
   camera.add(dot, centre); scene.add(camera);
   const place = (mesh, t, dist) => {
@@ -1149,7 +1175,8 @@ function finishRun(runId, cfg, p, run, r) {
     started_iso: run.startedAtIso, sequence_start_unix_ms: r.t0_unix_ms.toFixed(3),
     planned_total_s: round(run.total, 3), actual_total_s: round(r.total_s, 3),
     lead_in_s: cfg.leadin, lead_in_rgb: cfg.lead.join(" "), waited_for_start_signal: cfg.wait,
-    gaze_check: cfg.gazecheck, gaze_step_s: cfg.gazecheck ? GAZE_STEP_S : "",
+    gaze_check: cfg.gazecheck, gaze_step_s: cfg.gazecheck ? cfg.gazestep : "",
+    gaze_cue: cfg.gazecheck ? `${CUE_HZ} Hz tone, ${CUE_S} s, then ${GAZE_CUE_S} s of grey before the first point${run.cuePlayed === false ? " (the tone could not be played)" : ""}` : "",
     gaze_grid: cfg.gazecheck ? (cfg.mode === "vr" ? `±${GAZE_AZ_DEG}° × ±${GAZE_EL_DEG}° from the head's straight ahead, fixed to the head`
       : `±${GAZE_SCREEN} of the screen from its centre`) : "",
     frames: r.frames, frame_interval_median_ms: r.frame_median_ms === null ? "" : r.frame_median_ms.toFixed(2),
@@ -1191,7 +1218,7 @@ $("#btn-clear").addEventListener("click", () => {
 });
 
 /* ---------- mode, saved settings, start-up ---------- */
-const SAVED = ["#participant", "#seed", "#scramble", "#leadin", "#lead-grey"], SAVED_CHECK = ["#avoid", "#wait", "#autodl", "#exitvr", "#xrcompat", "#gazecheck"];
+const SAVED = ["#participant", "#seed", "#scramble", "#leadin", "#lead-grey", "#gazestep"], SAVED_CHECK = ["#avoid", "#wait", "#autodl", "#exitvr", "#xrcompat", "#gazecheck"];
 function saveSettings() {
   store.set("cal.settings", { mode: settings().mode, v: Object.fromEntries(SAVED.map((k) => [k, val(k)])), c: Object.fromEntries(SAVED_CHECK.map((k) => [k, $(k).checked])) });
 }

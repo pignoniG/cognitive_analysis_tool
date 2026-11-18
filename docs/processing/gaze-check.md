@@ -7,10 +7,10 @@ off: a Neon inside a Meta Quest is fixed to the headset but not aligned with its
 
 ## In the presenters
 
-The [calibration presenter](../usage/calibration-tool.md#gaze-check) and the validation task's calibration end with 18 s on the
-lead-in grey in which a dot with a white centre moves through 9 places, 2 s each, the centre first. In VR the places are
+The [calibration presenter](../usage/calibration-tool.md#gaze-check) and the validation task's calibration end with a short tone, 1 s
+of lead-in grey, then a dot with a white centre moving through 9 places on that grey, 3 s each by default, the centre first. In VR the places are
 directions fixed to the head (±15° × ±12°), so they sit at fixed places of the headset's picture and of its capture. The run
-file logs each place (`phase` = `gaze`, `target_*`).
+file logs the tone's row (`phase` = `gaze`, no target) and each place (`phase` = `gaze`, `target_*`).
 
 ## In cwtool
 

@@ -1482,4 +1482,11 @@ is revised; they remain in the git history of this file.
   or by hand, saved with the recording (`cwtool_gaze_offset.json`) and applied when it is read (the video is then
   analysed again); `--gaze-offset` / `--save-gaze-offset` on the command line. Not yet tried on a real recording with the
   gaze check.
+- **First try in a Quest (18 November 2026):** the gaze check ran; the operator found the targets slightly low-res
+  and the dot moving too fast, and wanted a sound to call the participant's attention before it. Changed in both
+  presenters: the VR drawing is multisampled (the dot's edges were aliased; the full field has no edges, so its light is
+  unchanged) and the dot is smoother; 3 s per place by default (a setting in the calibration presenter, logged as
+  `gaze_step_s`); a tone (880 Hz, 0.2 s) then 1 s of grey with no dot before the first place, logged as a `gaze` row with
+  no target ("Gaze check cue (tone)") and in `gaze_cue`. The tone comes after the light steps, so the pupil's response to
+  it does not touch the fits. That recording's analysis is still to do.
 - **Status:** open (route and alignment implemented; needs the run file, the gaze check's analysis and more recordings).
