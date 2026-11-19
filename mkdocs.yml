@@ -4,7 +4,7 @@ site_url: https://pignonig.github.io/cognitive_analysis_tool/
 repo_url: https://github.com/pignoniG/cognitive_analysis_tool
 repo_name: pignoniG/cognitive_analysis_tool
 edit_uri: edit/master_v2.0/docs/
-copyright: Giovanni Pignoni
+copyright: Copyright © 2019–2026 Giovanni Pignoni · GNU GPL v3 or later
 
 theme:
   name: material

@@ -123,5 +123,16 @@ master's thesis in MIXD at NTNU Gjøvik (2018–2019).
 
 ## License
 
-MIT License, see [LICENSE.md](LICENSE.md). The icons are [Tabler Icons](https://tabler.io/icons) (MIT,
-`cwtool/gui/icons/LICENSE-tabler-icons.txt`).
+Copyright © 2019–2026 Giovanni Pignoni.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+version. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.
+
+Versions up to commit `3e0d150` (November 2026) were released under the MIT License, and copies of them obtained under
+it keep it.
+
+Third-party files keep their own licences: the icons are [Tabler Icons](https://tabler.io/icons) (MIT,
+`cwtool/gui/icons/LICENSE-tabler-icons.txt`), the calibration presenter's three.js build is MIT
+(`docs/calibration-tool/vendor/three.LICENSE`), and the AS7341 sketch draws on Adafruit's AS7341 library (BSD).
