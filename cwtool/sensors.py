@@ -20,6 +20,9 @@ from typing import Optional
 import numpy as np
 
 TIME_COLUMN = "unix time (s)"
+DEVICE_COLUMN = "device time (s)"   # files of sensors with their own clock (the AS7341, the Shimmer)
+CLOCK_KEY = "clock mapping"         # in session.json from the logger whose mapping follows the drift (open issue 62)
+OLD_WINDOW = 60.0                   # s: the window of the older loggers' minimum offset
 NOT_SENSORS = ("lux",)   # the lux log is read by the analysis itself (cwtool.lux)
 
 
@@ -241,13 +244,74 @@ def load_sensors(folder: Path, epoch_start: float, duration: float, margin: floa
     folder = resolved
     t0, t1 = epoch_start - margin, epoch_start + duration + margin
     settings = sensor_settings(folder)
+    lagging = clock_lagged(folder)
     out = []
     for path, kind in find_sensor_files(folder):
         try:
-            sensor = read_sensor(path, kind, t0, t1)
+            # the repair needs the offsets of the minute after the span
+            sensor = read_sensor(path, kind, t0 - 1.0, t1 + OLD_WINDOW + 5.0) if lagging else read_sensor(path, kind, t0, t1)
         except ValueError:
             continue
+        sensor.settings = dict(settings.get(sensor.name, {}))
+        if lagging and not sensor.long and DEVICE_COLUMN in sensor.data and len(sensor):
+            repaired, shift = repair_lagging_clock(sensor.unix, sensor.data[DEVICE_COLUMN])
+            sensor.unix = repaired
+            if shift is not None:
+                sensor.settings["clock repaired"] = (f"older logger's mapping lagged the device clock's drift (open "
+                                                     f"issue 62): times moved by {shift * 1000:+.0f} ms (median)")
+        if lagging:
+            sensor = sensor.select((sensor.unix >= t0) & (sensor.unix <= t1))
         if len(sensor):
-            sensor.settings = settings.get(sensor.name, {})
             out.append(sensor)
     return out
+
+
+def clock_lagged(folder: Path) -> bool:
+    """True for a logger session whose clock mapping lagged a drifting device clock: its ``session.json`` exists and
+    does not name the mapping (loggers before open issue 62). Without a manifest nothing is assumed."""
+    try:
+        info = json.loads((Path(folder) / "session.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return isinstance(info, dict) and CLOCK_KEY not in info
+
+
+def repair_lagging_clock(unix, device, window: float = OLD_WINDOW) -> tuple[np.ndarray, Optional[float]]:
+    """Unix times of a file written by the older logger, whose offset (Unix − device time) was the minimum over the
+    last ``window`` seconds: behind a drifting clock by window × drift (open issue 62). Returns (times, median shift
+    in s, None if nothing was changed).
+
+    The minimum stored at device time x + window covers x, so it is x's offset: ``true(x) = stored(x + window)``. In
+    the file's last ``window`` seconds, and in a stretch shorter than that, the offset is extrapolated with the
+    clock's drift, fitted where the stored offsets are past their first window. A stretch is a run of rows with the
+    device time increasing without a jump (the board restarts, and the mapping with it, when it reconnects).
+    """
+    unix = np.asarray(unix, dtype=float)
+    device = np.asarray(device, dtype=float)
+    ok = np.isfinite(unix) & np.isfinite(device)
+    if ok.sum() < 10:
+        return unix, None
+    idx = np.flatnonzero(ok)
+    x, off = device[idx], unix[idx] - device[idx]
+    breaks = np.flatnonzero((np.diff(x) <= 0) | (np.diff(x) > 5.0) | (np.abs(np.diff(off)) > 0.5)) + 1
+    stretches = np.split(np.arange(len(x)), breaks)
+    slopes, weights = [], []
+    for s in stretches:
+        later = s[x[s] > x[s[0]] + window]
+        if len(later) >= 10 and x[later[-1]] - x[later[0]] > 10.0:
+            slopes.append(np.polyfit(x[later], off[later], 1)[0])
+            weights.append(x[later[-1]] - x[later[0]])
+    if not slopes:
+        return unix, None
+    drift = float(np.average(slopes, weights=weights))
+    fixed = off.copy()
+    for s in stretches:
+        xs, os_ = x[s], off[s]
+        target = xs + window
+        inside = target <= xs[-1]
+        fixed[s[inside]] = np.interp(target[inside], xs, os_)
+        last_covers = max(xs[0], xs[-1] - window)      # the moment the last stored offset is the offset of
+        fixed[s[~inside]] = os_[-1] + drift * (xs[~inside] - last_covers)
+    out = unix.copy()
+    out[idx] = x + fixed
+    return out, float(np.median(fixed - off))

@@ -71,6 +71,9 @@ gains compare directly. They are not radiometric units: the bands differ in sens
 exactly 2× (the datasheet allows a few percent).
 
 **Clock.** The board's clock is mapped onto the computer's like the Shimmer's: from the time each line left the board
-and the time it arrived, taking the smallest difference over the last minute, so the USB delay's jitter does not enter
-and the stamp is that of the measurement, not of the arrival. A constant USB delay (a few ms) is not removed.
+and the time it arrived, along the lower envelope of their differences over the last minute (a line, since the board's
+clock drifts: the Nano clone's runs 0.32 % slow), so the USB delay's jitter does not enter and the stamp is that of the
+measurement, not of the arrival. A constant USB delay (a few ms) is not removed. Loggers before 22 November 2026 took
+the smallest difference over the last minute, which put this board's stamps about 0.19 s early; cwtool repairs those
+files when it reads them ([open issue 62](../OPEN_ISSUES.md#62-the-as7341s-timestamps-lag-its-boards-clock-drift-about-019-s-early)).
 `python -m cwtool.logger.clockcheck` reports the board's clock drift and the regularity.

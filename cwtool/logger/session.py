@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cwtool.logger.base import Source
+from cwtool.logger.base import CLOCK_MAPPING, Source
 
 LIVE_SECONDS = 60.0
 LIVE_POINTS = 16000   # per signal: 30 s of the plot at 512 Hz
@@ -316,6 +316,7 @@ class Logger:
             "utc offset (s)": start.utcoffset().total_seconds(),
             "host": platform.node(),
             "time source": "unix time of the computer running this logger; device clocks are mapped onto it",
+            "clock mapping": CLOCK_MAPPING,
             "sources": {
                 name: {"file": s.filename, "kind": s.kind, "columns": s.columns, "settings": s.settings,
                        "rows": self.counts.get(name, 0),

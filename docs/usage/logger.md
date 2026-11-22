@@ -205,9 +205,13 @@ both share a clock; for the Neon, whose timestamps come from the phone, see
 - **AS7341:** stamped by the board at the middle of each measurement; the board's clock is mapped onto the computer's
   as the Shimmer's is (below), from the time each line was sent and the time it arrived.
 - **Shimmer:** its own clock is regular but drifts, and Bluetooth delivers samples in bursts. `device time (s)` is the
-  device's clock (zero at the first sample) and `unix time (s)` maps it onto the computer's clock, using the smallest
-  difference between the two over the last minute (the sample that arrived with the least delay), so the burst delay
-  does not enter. Both columns are saved, so the mapping can be redone.
+  device's clock (zero at the first sample) and `unix time (s)` maps it onto the computer's clock along the lower
+  envelope of the difference between the two over the last minute: each second's smallest difference (the sample that
+  arrived with the least delay), and the line below them closest to them, so the burst delay does not enter and the
+  clock's drift is followed. Both columns are saved, so the mapping can be redone. `session.json` names the mapping
+  (`clock mapping`); sessions without it come from loggers that took the smallest difference alone, which lagged a
+  drifting clock by a minute's drift (0.19 s for the AS7341's board, a few ms for the Shimmer), and cwtool repairs
+  their times when it reads them (open issue 62).
 - **EmotiBit:** LSL's own clock synchronisation and de-jittering, then converted to Unix time. In a test the newest
   sample was about 0.35 s old when the logger received it; that is delivery delay, and whether the timestamps
   themselves are exact has not been measured.

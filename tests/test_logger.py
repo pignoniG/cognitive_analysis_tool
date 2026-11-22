@@ -12,6 +12,7 @@ import pytest
 
 from cwtool import lux
 from cwtool.logger import ClockMapper, Logger
+from cwtool.logger.base import CLOCK_MAPPING
 from cwtool.logger.sources import SimulatedSource
 from cwtool.logger.sources.lsl import LslSource
 from cwtool.logger.sources.lux import LuxSerialSource
@@ -67,6 +68,7 @@ def test_session_is_one_flat_folder_with_one_file_per_source(tmp_path):
     info = json.loads((session / "session.json").read_text())
     assert info["sources"]["lux"]["rows"] == 3 and info["sources"]["lux"]["file"] == "lux.csv"
     assert info["sources"]["lux"]["rows"] == 3 and info["end (unix s)"] >= info["start (unix s)"]
+    assert info["clock mapping"] == CLOCK_MAPPING      # files from this logger are not repaired (open issue 62)
 
 
 def test_live_buffer_without_recording(tmp_path):
@@ -111,6 +113,49 @@ def test_clock_mapper_ignores_late_bursts_and_follows_drift():
         offset = m.update(t, 1000.0 + t * 1.0001 + delay)
     # the true offset at the end is 1000 + 9.9 * 0.0001; the delay of the late samples (0.5 s) is not in it
     assert offset == pytest.approx(1000.0, abs=0.01)
+
+
+def test_clock_mapper_follows_a_fast_drift_without_lag():
+    # a Nano clone's clock, 0.321 % slow, 7.5 lines a second over USB (3 ms plus jitter): the first mapper (the minimum
+    # over 60 s) was 193 ms behind it (open issue 62)
+    rng = np.random.default_rng(0)
+    m = ClockMapper()
+    errors = []
+    for i in range(int(600 * 7.5)):
+        true = i / 7.5
+        device = true * (1 - 0.00321)
+        offset = m.update(device, 1000.0 + true + 0.003 + rng.exponential(0.002))
+        errors.append(device + offset - (1000.0 + true))
+    late = np.array(errors[int(70 * 7.5):])
+    assert np.all(np.abs(late - 0.003) < 0.002)    # the constant USB delay remains
+
+
+def test_repair_lagging_clock_undoes_the_old_mapping():
+    from collections import deque
+
+    from cwtool.sensors import repair_lagging_clock
+
+    rng = np.random.default_rng(1)
+    rate, drift = 7.5, -0.00321
+    true = np.arange(int(400 * rate)) / rate
+    device = true * (1 + drift)
+    host = 1000.0 + true + 0.003 + rng.exponential(0.002, len(true))
+    # the old mapping: the minimum of the per-second minima over the last 60 s
+    buckets, stored = deque(), []
+    for d, h in zip(device, host):
+        i, o = int(d), h - d
+        if buckets and buckets[-1][0] == i:
+            buckets[-1] = (i, min(buckets[-1][1], o))
+        else:
+            buckets.append((i, o))
+        while i - buckets[0][0] > 60:
+            buckets.popleft()
+        stored.append(d + min(o for _, o in buckets))
+    stored = np.array(stored)
+    assert np.median(stored[600:] - (1000.0 + true[600:])) < -0.18
+    fixed, shift = repair_lagging_clock(stored, device)
+    assert shift == pytest.approx(0.19, abs=0.02)
+    assert np.all(np.abs(fixed - (1000.0 + true) - 0.003) < 0.01)
 
 
 def test_lsl_without_stream_gives_clear_error():

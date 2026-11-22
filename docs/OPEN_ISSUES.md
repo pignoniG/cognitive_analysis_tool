@@ -1413,8 +1413,28 @@ is revised; they remain in the git history of this file.
 - **Proposal (no photometry needed):** measure the factor relative to the old housing: a steady, wide scene, the reading
   with and without the dome a few times in the same position; Ω_dome = 2.2 × (lux without / lux with) for the field the
   funnel saw. Then set `lux_solid_angle` per sensor build, and record the build in the session.
-- **Status:** open (needs the with/without measurement; how the dome is fitted, on the funnel or instead of it, not
-  known yet).
+- **With and without the dome on a screen (22 November 2026):** two runs of the time-course calibration (seed 2,
+  30 light steps) on a 27" screen at 45 cm, recorded with a Pupil Core, the TSL2591 with its dome in the first run and
+  without it in the second, the AS7341 under its dome in both (`recordings/2026_11_22/Sensor comparation`). Medians of
+  each step from 2 s after its onset:
+  - **Attenuation:** white read 7.37 lx with the dome and 22.34 lx without; the slopes of lux against the screen's Y
+    (gray steps) are 7.39 and 22.12, so the dome passes **1/3.0** of this field. The AS7341 read white the same in both
+    runs (clear 0.0206 and 0.0192), so the screen and the head barely moved. The ratio is for a screen that fills about
+    67° × 40° around the axis, not for a wide scene, so it is not yet Ω_dome.
+  - **Linearity:** both are proportional to Y above about Y = 0.05 (R² 0.9988 with the dome, 0.9995 without). **With
+    the dome the TSL2591 loses the dark end:** Gray 24, 33 and 40 (Y 0.009 to 0.021) all read 0.16 lx, Gray 12 0.05 lx;
+    without it they read 0.22, 0.37, 0.68 and 0.08 lx, proportional to Y down to Gray 12.
+  - **Spectrum:** the TSL2591's response is not photopic, with or without the dome: Red at 1.5× its luminance-matched
+    gray, Green at 0.7–0.8×, Blue at 1.4–1.5× where a rough V(λ) weighting of the AS7341's bands gives 0.7×. Red also
+    reads 1.5× on the AS7341, so the screen's red is likely brighter than the run file's sRGB Y says.
+  - **The AS7341 at this light:** the gain stayed at its maximum (512×) with 50 ms integrations in every light step,
+    leaving about 8 counts in the clear channel at Gray 12 and 0–1 in the spectral bands, so its dim steps are
+    quantised (issue 58). In the second run its NIR channel rose from 0 to 0.0005 at Gray 12 and the clear channel's
+    floor to 6 % of white, while the TSL2591 did not change: extra infrared, source not known. No saturation in either
+    run.
+  - **Its timestamps were early** by about 0.19 s: issue 62.
+- **Status:** open (the wide-scene measurement for Ω_dome; the AS7341's integration time for screens; how the dome is
+  fitted, on the funnel or instead of it, not known yet).
 
 ### 61. Neon inside a Meta Quest: the luminance has to come from the Quest's own video
 
@@ -1490,3 +1510,35 @@ is revised; they remain in the git history of this file.
   no target ("Gaze check cue (tone)") and in `gaze_cue`. The tone comes after the light steps, so the pupil's response to
   it does not touch the fits. That recording's analysis is still to do.
 - **Status:** open (route and alignment implemented; needs the run file, the gaze check's analysis and more recordings).
+
+### 62. The AS7341's timestamps lag its board's clock drift: about 0.19 s early
+
+- **Where:** `cwtool/logger/base.py` (`ClockMapper`), used by `cwtool/logger/sources/spectral.py` and
+  `cwtool/logger/sources/shimmer.py`.
+- **Why (22 November 2026):** in the dome comparison (issue 60) the AS7341's spectra changed before the screen did:
+  the first spectrum showing a step was stamped on average 0.13 s (its second integration, F5–F8) and 0.07 s (its first,
+  F1–F4) before the run file's onset, over 34 steps in two runs; the TSL2591, stamped on arrival, came 0.09 s after.
+  A spectrum is stamped at the middle of its two integrations, so it can lead a change by at most about 60 ms.
+- **Cause:** `ClockMapper` sets the offset (computer time − board time) to the minimum over the last 60 s, so that the
+  USB delay's jitter does not enter. That holds only if the board's clock runs at the computer's rate. The Nano clone's
+  clock (a ceramic resonator) runs **0.321 % slow** (3208 ppm; the offset grew 4.26 s over the 22-minute session), so the
+  offset keeps growing and the 60 s minimum is always the oldest one: 60 s × 0.00321 = **193 ms** behind. Every sample
+  after the first minute is stamped that much early. The Shimmer's crystal drifts by tens of ppm, so its lag is a few ms.
+- **Check:** the offset stored in the file 60 s later covers the moment of each spectrum. Taking it as the offset (and
+  extrapolating the last minute with the drift) puts the first changed spectrum at +0.06 s (F5–F8, range −0.01 to
+  +0.11 s) and +0.12 s (F1–F4) after the onset: within what the stamping at the middle of the spectrum allows, with
+  about 50 ms of display latency.
+- **Proposal:** (1) `ClockMapper` fits a line through the per-second minima of the window (the offset's lower envelope)
+  and evaluates it at the current device time, so the drift is followed without lag and the jitter still does not
+  enter; the session file records the mapping's version. (2) cwtool repairs files from older loggers when it reads them
+  (as7341 and Shimmer: the stored offset 60 s later, extrapolated at the end, as in the check above). (3) Optionally, the
+  lux sensor gets a board-clock stamp too, as it is now stamped on arrival (late by its integration and the USB delay).
+- **Now (22 November 2026):** (1) and (2) are done. `ClockMapper` takes each second's minimum offset over the last 60 s
+  and the line below them closest to them (the edge of their lower convex hull over their mean device time, as in Moon
+  et al. 1999), evaluated at the sample's device time; simulated with this board's drift and USB jitter, the stamps
+  are within 0.3 ms of the constant 3 ms USB delay (from 193 ms). `session.json` records `clock mapping`; for a session
+  without it, `cwtool.sensors.load_sensors` repairs the files with a `device time (s)` column
+  (`repair_lagging_clock`) and says so in the sensor's settings. On this recording the AS7341 moves by +192 ms and its
+  first changed spectrum comes 0.06 s (−0.01 to +0.11 s) after the run file's onsets. (3) is not done: the lux sensor is
+  still stamped on arrival.
+- **Status:** fixed in 2.0 (the lux sensor's stamping on arrival remains).
