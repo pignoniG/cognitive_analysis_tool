@@ -1430,9 +1430,31 @@ is revised; they remain in the git history of this file.
   - **The AS7341 at this light:** the gain stayed at its maximum (512×) with 50 ms integrations in every light step,
     leaving about 8 counts in the clear channel at Gray 12 and 0–1 in the spectral bands, so its dim steps are
     quantised (issue 58). In the second run its NIR channel rose from 0 to 0.0005 at Gray 12 and the clear channel's
-    floor to 6 % of white, while the TSL2591 did not change: extra infrared, source not known. No saturation in either
-    run.
+    floor to 6 % of white, while the TSL2591 did not change: extra infrared. The eye camera was adjusted between the
+    runs; the NIR floor appears then (about 640 s into the session) and stays, steady, until the end of the second run,
+    so it is most likely the Pupil Core's eye-camera illuminators (850 nm) shining onto the sensor. A sensor mounted on
+    an eye tracker can see that tracker's infrared: the NIR channel shows it, and the AS7341's clear channel must not be
+    used as the light without removing it. No saturation in either run.
   - **Its timestamps were early** by about 0.19 s: issue 62.
+  - **Which signal the pupil follows (22 November 2026):** the two Pupil Core sessions (001 with the dome, 002
+    without) were fitted on the calibration (time course, dynamics and dilation parts free, sensor only:
+    `lux_use_video` off) with three luminance signals in turn: the TSL2591's lux; the AS7341's bands weighted by V(λ) at
+    their peaks; the same weighted by the melanopic sensitivity (CIE S 026) at their peaks. The AS7341 estimates were
+    scaled to the TSL2591's white in each session; neither weighting corrects for the bands' own responsivity, so both
+    are rough. Fit RMS / correlation: 001 TSL2591 0.43 mm / 0.52, photopic 0.49 / 0.28, melanopic 0.48 / 0.31 (both AS7341
+    fits ran to the limits of the sensitivity and dilation τ); 002 0.49 / 0.52, 0.50 / 0.49, 0.48 / 0.54. All fits are
+    poor, for reasons the sensors do not explain: the pupil was not adapted in the first 21 s (4–5 mm, rising, against
+    2.5 mm later; the lead-in was 5 s), the screen's whole range moved the pupil only 0.25–0.39 mm per tenfold luminance
+    (gray steps), and the constriction τ and the fast dilation share ran to their limits. **Matched pairs:** each
+    colour step follows its luminance-matched gray, so the pupil's change across that change of colour says which
+    signal the pupil follows (last 3 s of each step, turned into mm with the gray steps' slope). Over the 12 pairs the
+    pupil got smaller at the colour by 0.12 mm on average (an order effect or a drift, as no signal predicts it); the
+    changes correlate with the TSL2591's prediction at r 0.74, the photopic estimate's 0.37, the melanopic's 0.06 and the
+    screen's Y (no change) 0.26. Blue constricted (−0.11 to −0.26 mm), as the melanopic weighting predicts, but red did
+    too (−0.10 to −0.42 mm), which it does not. **So:** on this data the AS7341 does not beat the TSL2591; with
+    pair changes of 0.1–0.2 mm against 0.15 mm of noise, and rough band weights, it does not show that it cannot either.
+    A test of the spectral question needs brighter light (more pupil per decade), a long lead-in, repeated pairs, and
+    the AS7341's bands calibrated (issue 58). Scripts and figures: kept outside the repository.
 - **Status:** open (the wide-scene measurement for Ω_dome; the AS7341's integration time for screens; how the dome is
   fitted, on the funnel or instead of it, not known yet).
 
@@ -1542,3 +1564,23 @@ is revised; they remain in the git history of this file.
   first changed spectrum comes 0.06 s (−0.01 to +0.11 s) after the run file's onsets. (3) is not done: the lux sensor is
   still stamped on arrival.
 - **Status:** fixed in 2.0 (the lux sensor's stamping on arrival remains).
+
+### 63. The lux log's smoothing undershoots below zero at dim steps, and the calibration fit then fails
+
+- **Where:** `cwtool/lux.py` (`smooth`, until now Savitzky–Golay, 11 samples, order 6, from 1.x), used by
+  `pipeline.luminance_from_lux` for the analysis and the calibration fit.
+- **Why (22 November 2026):** on the dome comparison's first session (TSL2591 under its dome, 0.03–7.4 lx) the smoothed
+  lux went below zero 29 times, down to −14.5 lx after the room light between runs, and inside the calibration at the
+  sharp bright-to-dim steps. A negative luminance gives NaN in Watson & Yellott's model (a power of a negative flux), and
+  `calfit.fit_calibration` stopped with "Residuals are not finite in the initial point." A sixth-order polynomial over 11
+  samples barely smooths and rings at a step; the dimmer the light after a step, the more of it the ringing takes below
+  zero, so a dome or a dark screen makes it likely.
+- **Now:** `smooth` is a running median of 5 samples (about 0.6 s), held at or above the log's smallest positive
+  reading. A median keeps a step's timing and height and cannot overshoot; it also removes single-sample spikes, and
+  is a little less noisy than the old filter (0.54 against 0.68 of white noise). The proposal's lower Savitzky–Golay
+  order was dropped: tried on a step, order 2 rings as much as order 6 (−7.3 against −6.1 after a step from 100 to 1),
+  since any order of 2 or more has negative weights. Effect: the two Core recordings of 29 and 30 September (lux
+  route) give the same ΔPD RMS (0.4315 and 0.9491 mm, from 0.4315 and 0.9492); the dome comparison's two calibrations,
+  which both failed with the old filter, fit with RMS 0.449 and 0.499 mm (0.434 and 0.490 with the old filter clipped
+  at 0.01 lx). Tested in `tests/test_lux_fit.py`.
+- **Status:** fixed in 2.0.

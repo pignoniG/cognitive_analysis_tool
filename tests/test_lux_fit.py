@@ -137,3 +137,15 @@ def test_fixation_fit_needs_the_video_route(tmp_path):
     rec = devices.load(write_core_recording(tmp_path / "core", GRAYS, FRAME_TIMES, lux=lux))
     with pytest.raises(ValueError, match="video route"):
         fit_lux_response(rec, _video(rec), params, 0.0, STEPS, fit_fixation=True)
+
+
+def test_lux_smoothing_keeps_steps_and_stays_positive():
+    from cwtool.lux import smooth
+    steps = np.r_[np.full(30, 100.0), np.full(30, 0.05), np.zeros(5), np.full(30, 50.0)]
+    out = smooth(steps)
+    assert out.min() == pytest.approx(0.05)                       # no undershoot, and darkness held at the floor
+    assert out.max() == pytest.approx(100.0)                      # no overshoot
+    assert out[29] == 100.0 and out[30] == pytest.approx(0.05)    # the step stays where it was
+    spike = np.full(40, 10.0)
+    spike[20] = 500.0
+    assert np.allclose(smooth(spike), 10.0)                       # a single-sample spike is removed

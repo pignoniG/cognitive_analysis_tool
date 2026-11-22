@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from scipy.signal import savgol_filter
+from scipy.ndimage import median_filter
 
 FILE_PATTERN = re.compile(r"^(\d{1,2}_\d{1,2}_\d{1,2}|lux)\.csv$")
 
@@ -102,10 +102,21 @@ def read_lux(folder: Path, epoch_start: float, duration: float, margin: float = 
 
 
 def smooth(values: np.ndarray) -> np.ndarray:
-    """Light smoothing of the ~10 Hz log (Savitzky-Golay, 11 samples, order 6, as in 1.x)."""
-    if len(values) < 11:
-        return values
-    return savgol_filter(values, 11, 6)
+    """Light smoothing of the ~10 Hz log: a running median of 5 samples, kept positive.
+
+    A median keeps a step's timing and height and cannot overshoot, so a step into dim light cannot take the
+    smoothed lux below zero, which gives NaN in the pupil model (open issue 63; 1.x and 2.0 up to November 2026
+    used a Savitzky-Golay filter, 11 samples, order 6, which rings at a step). The result is held at or above
+    the smallest positive reading, so a log with zeros (darkness) still gives a positive luminance."""
+    values = np.asarray(values, dtype=float)
+    if len(values) < 5:
+        out = values.copy()
+    else:
+        out = median_filter(values, size=5, mode="nearest")
+    positive = values[values > 0]
+    if len(positive):
+        out = np.maximum(out, positive.min())
+    return out
 
 
 def average_luminance(lux: np.ndarray, gain: float, offset: float, solid_angle: float) -> np.ndarray:
