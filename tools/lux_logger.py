@@ -9,7 +9,9 @@ are appended to one CSV per hour in the output folder, named
     unix time (ms), day, hour, minute, value
 
 This is the format written by the 1.x application and read by the Pupil Core /
-Neon lux import.
+Neon lux import. Both the earlier firmware (one number per line) and firmware 2
+(``TSL2591,...,<lux>`` lines) are read; only the lux is kept, stamped on arrival.
+The sensor logger (cwtool-logger) keeps firmware 2's counts and board times.
 
     python tools/lux_logger.py OUTPUT_FOLDER [--port PORT] [--baud 250000]
 """
@@ -70,8 +72,13 @@ def main() -> int:
                 line = ser.readline()
                 if not line:
                     continue
+                text = line.decode("utf-8", "replace").strip()
+                if text.startswith("#"):          # firmware 2's messages
+                    continue
+                if text.startswith("TSL2591,"):   # firmware 2: the lux is the last field (open issue 64)
+                    text = text.rsplit(",", 1)[-1]
                 try:
-                    value = float(line.decode("utf-8").strip())
+                    value = float(text)
                 except ValueError:
                     print(f"ignored: {line!r}", file=sys.stderr)
                     continue

@@ -1,343 +1,191 @@
-// Lux sensor logger: reads an Adafruit TSL2591 light sensor, switching its gain to suit the light, prints each
-// reading in lux on the serial port (250000 baud, one number per line: what the sensor logger and
-// tools/lux_logger.py read) and appends it to an hourly CSV file on the SD card (<month>_<day>_<hour>.csv: Unix
-// time in milliseconds, hour, minute, second, lux). The time comes from the board's DS1307 real-time clock (DS1307RTC).
-// Hardware: Arduino Nano + Deek-Robot data logging shield + TSL2591. See ../../ReadMe.txt and docs/hardware/lux-sensor.md.
+// Lux sensor logger: an Arduino Nano with a Deek-Robot data logging shield reads an Adafruit TSL2591 light sensor,
+// prints each reading on the serial port for the sensor logger (cwtool-logger, "+ Lux") and appends it to an
+// hourly CSV file on the SD card. See ../../ReadMe.txt and docs/hardware/lux-sensor.md.
+//
+// Serial: 250000 baud. Lines starting with '#' are messages; each reading is one line
+//
+//   TSL2591,<sent ms>,<mid ms>,<clock ms>,<gain>,<integration ms>,<full>,<ir>,<saturated>,<lux>
+//
+//   sent ms         the board's millis() just before the line is sent (the logger maps the board's clock onto the
+//                   computer's with it)
+//   mid ms          the board's millis() at the middle of the integration
+//   clock ms        the SD file's clock at millis() = 0: Unix time in ms from the real-time clock, read once at
+//                   start-up (0 if the real-time clock was not found); the SD file's time is clock ms + millis()
+//   gain            1, 25, 428 or 9876
+//   full, ir        the raw counts of the two photodiodes (visible + infrared, infrared)
+//   saturated       1 if a channel reached the full scale (37888 counts at 100 ms): the counts are clipped
+//   lux             Adafruit's formula, (full - ir) * (1 - ir / full) / (100 ms * gain / 408)
+//
+// SD card: <month>_<day>_<hour>.csv, rows
+//
+//   <Unix ms at mid-integration>,<hour>,<minute>,<second>,<lux>,<full>,<ir>,<gain>,<saturated>
+//
+// (readers of the earlier files, which ended at the lux, read these: the lux is still the fifth column).
+//
+// The gain is chosen for the next reading from the full channel of this one: lower above 80 % of full scale, higher
+// while the next gain would leave it under 50 % (open issue 64). Earlier versions stayed at 25x in dim light.
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include "Adafruit_TSL2591.h"
-#include <math.h>   
 #include <TimeLib.h>
-#include "RTClib.h"
 #include <SPI.h>
 #include <SD.h>
-
 #include <DS1307RTC.h>
+Adafruit_TSL2591 tsl = Adafruit_TSL2591(2591);
 
-Adafruit_TSL2591 tsl = Adafruit_TSL2591(2591); 
-
-bool timeSync = false;
-int  syncSecond= 61;
-int  syncSecondPrev= 61;
-uint64_t syncMillis = 0ULL;
-long syncMillisStamp = 0;  
-int frequency= 35;
-const int ledPin =  LED_BUILTIN;// the number of the LED pin
-int ledState = LOW;             // ledState used to set the LED
-const long ledInterval = 1000;           // interval at which to blink (milliseconds)
-long previousLedMillis = 0;
-float frameIntervalMillis = 1.0/frequency;  
-long prevFrameMillis = 0;  
-long frameCount = 1;
-
-File myFile;
+const char VERSION[] = "# TSL2591 lux logger 2";
+const uint16_t INTEGRATION_MS = 100;
+const uint32_t FULL_SCALE = 37888;          // counts at 100 ms (datasheet)
+const tsl2591Gain_t GAINS[4] = {TSL2591_GAIN_LOW, TSL2591_GAIN_MED, TSL2591_GAIN_HIGH, TSL2591_GAIN_MAX};
+const uint16_t GAIN_VALUES[4] = {1, 25, 428, 9876};
 const int chipSelect = 10;
 
+uint8_t gainIndex = 1;                      // 25x to start with
+uint64_t clockAtZero = 0;                   // Unix ms of millis() = 0, from the real-time clock
+bool sdReady = false;
+bool led = false;
+unsigned long lastLed = 0;
 
-
-float advancedRead(void)
-{
-  // More advanced data read example. Read 32 bits with top 16 bits IR, bottom 16 bits full spectrum
-  // That way you can do whatever math and comparisons you want!
-  uint32_t lum = tsl.getFullLuminosity();
-  uint16_t ir, full;
-  ir = lum >> 16;
-  full = lum & 0xFFFF;
-  return(tsl.calculateLux(full, ir));
+// A 64-bit number in decimal (Print has no 64-bit overload on every core).
+void print64(Print &out, uint64_t v) {
+  char buffer[21];
+  uint8_t i = sizeof(buffer) - 1;
+  buffer[i] = 0;
+  do {
+    buffer[--i] = '0' + (v % 10);
+    v /= 10;
+  } while (v > 0);
+  out.print(&buffer[i]);
 }
 
-
-
-
-
-void configureSensor(void){
-  tsl.setGain(TSL2591_GAIN_LOW);    // 1x gain (bright light)
-  //tsl.setGain(TSL2591_GAIN_MED);      // 25x gain
-  //tsl.setGain(TSL2591_GAIN_HIGH);   // 428x gain
-  //tsl.setGain(TSL2591_GAIN_MAX);   // 9876x gain
-  
-  // Changing the integration time gives you a longer time over which to sense light
-  // longer timelines are slower, but are good in very low light situtations!
-  tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);  // shortest integration time (bright light)
-  // tsl.setTiming(TSL2591_INTEGRATIONTIME_200MS);
-  //tsl.setTiming(TSL2591_INTEGRATIONTIME_300MS);
-  // tsl.setTiming(TSL2591_INTEGRATIONTIME_400MS);
-  // tsl.setTiming(TSL2591_INTEGRATIONTIME_500MS);
-  // tsl.setTiming(TSL2591_INTEGRATIONTIME_600MS);  // longest integration time (dim light)
-
-  /* Display the gain and integration time for reference sake */  
-  Serial.println(F("------------------------------------"));
-  Serial.print  (F("Gain:         "));
-  
-  tsl2591Gain_t gain = tsl.getGain();
-  switch(gain){
-  case TSL2591_GAIN_LOW:
-    Serial.println(F("1x (Low)"));
-    break;
-  case TSL2591_GAIN_MED:
-    Serial.println(F("25x (Medium)"));
-    break;
-  case TSL2591_GAIN_HIGH:
-    Serial.println(F("428x (High)"));
-    break;
-  case TSL2591_GAIN_MAX:
-    Serial.println(F("9876x (Max)"));
-    break;
-  }
-  Serial.print  (F("Timing:       "));
-  Serial.print((tsl.getTiming() + 1) * 100, DEC); 
-  Serial.println(F(" ms"));
-  Serial.println(F("------------------------------------"));
-  Serial.println(F(""));
-}
-
-void setup(void){
-  Serial.begin(250000);
-  //while (!Serial) { delay(1);}
-  pinMode(ledPin, OUTPUT);
-
-  if (tsl.begin()) { Serial.println(F("Found a TSL2591 sensor"));}
-  else { Serial.println(F("No sensor found ... check your wiring?"));}
-
-
-
-  Serial.print("Initializing SD card...");
-  // On the Ethernet Shield, CS is pin 4. It's set as an output by default.
-  // Note that even if it's not used as the CS pin, the hardware SS pin 
-  // (10 on most Arduino boards, 53 on the Mega) must be left as an output 
-  // or the SD library functions will not work. 
-  pinMode(SS, OUTPUT);
-   
-  if (!SD.begin(chipSelect)) {
-    Serial.println("initialization failed!");
+// Unix ms of millis() = 0: wait for the real-time clock's second to change, then take millis() at that moment.
+// The Nano's clock (a ceramic resonator) can run 0.3 % off, so the SD file's times drift from the real-time clock's
+// by seconds an hour; the sensor logger measures the drift (open issue 64).
+void syncClock() {
+  tmElements_t tm;
+  if (!RTC.read(tm)) {
+    Serial.println(F("# ERROR real-time clock not found or not set: the SD file's times start at 1970"));
     return;
   }
-  Serial.println("initialization done.");
-
-  configureSensor();
-  syncTime();
-}
-
-float unifiedSensorAPIRead(void){
-  /* Get a new sensor event */ 
-  float mLux=advancedRead();
-
-  
-  /* Display the results (light is measured in lux) */
-  //Serial.print(F("[ ")); Serial.print(event.timestamp); Serial.print(F(" ms ] "));
-
-  if (isnan(mLux)){
-    /* Light is too low for the current gain */
-  
-    tsl2591Gain_t gain = tsl.getGain();
-    switch(gain){
-      case TSL2591_GAIN_LOW:
-        tsl.setGain(TSL2591_GAIN_MED);
-        mLux=advancedRead();
-        break;
-      case TSL2591_GAIN_MED:
-        tsl.setGain(TSL2591_GAIN_HIGH);
-        mLux=advancedRead();
-        break;
-      case TSL2591_GAIN_HIGH:
-        tsl.setGain(TSL2591_GAIN_MAX);
-        mLux=advancedRead();
-        break;
-      case TSL2591_GAIN_MAX:
-        mLux=0;
-        break;
-      }
-  }
-
-  if (mLux <= 0) {
-    /* Light is too hight for the current gain */
-    tsl2591Gain_t gain = tsl.getGain();
-    switch(gain){
-      case TSL2591_GAIN_LOW:
-        mLux=100000;
-        break;
-      case TSL2591_GAIN_MED:
-        tsl.setGain(TSL2591_GAIN_LOW);
-        mLux=advancedRead();
-        break;
-      case TSL2591_GAIN_HIGH:
-        tsl.setGain(TSL2591_GAIN_MED);
-        mLux=advancedRead();
-        break;
-      case TSL2591_GAIN_MAX:
-        tsl.setGain(TSL2591_GAIN_HIGH);
-        mLux=advancedRead();
-        break;
+  uint8_t previous = tm.Second;
+  unsigned long start = millis();
+  while (millis() - start < 1500) {
+    if (RTC.read(tm) && tm.Second != previous) {
+      unsigned long at = millis();
+      setTime(tm.Hour, tm.Minute, tm.Second, tm.Day, tm.Month, tmYearToCalendar(tm.Year));
+      clockAtZero = (uint64_t)now() * 1000ULL - at;
+      Serial.print(F("# real-time clock "));
+      Serial.print(tmYearToCalendar(tm.Year));
+      Serial.print('-');
+      Serial.print(tm.Month);
+      Serial.print('-');
+      Serial.print(tm.Day);
+      Serial.print(' ');
+      Serial.print(tm.Hour);
+      Serial.print(':');
+      Serial.print(tm.Minute);
+      Serial.print(':');
+      Serial.print(tm.Second);
+      Serial.println(F(" (no time zone; set by hand)"));
+      return;
     }
   }
-
-
-  Serial.println(mLux);
-    tsl2591Gain_t gain = tsl.getGain();
-    switch(gain){
-      
-    case TSL2591_GAIN_LOW:
-      if(mLux<6000){
-        tsl.setGain(TSL2591_GAIN_MED);}
-      break;
-
-    case TSL2591_GAIN_MED:
-      break;
-
-    case TSL2591_GAIN_HIGH:
-      break;
-
-    case TSL2591_GAIN_MAX:
-      break;
-    }
-
-
-  return (mLux);
-
+  Serial.println(F("# ERROR real-time clock not running: the SD file's times start at 1970"));
 }
 
-void syncTime() {
-  tmElements_t tm;
-  if (RTC.read(tm)) {
-    syncSecond=int(tm.Second);
-    syncSecondPrev = syncSecond;
- 
-
-  Serial.println("syncTime()");
-  
-   
-  
-  
-  while(!timeSync){ 
-    tmElements_t tm;
-    RTC.read(tm);
-    syncSecond= int(tm.Second); 
-    if(syncSecondPrev!=syncSecond){
-
-      setTime(tm.Hour,tm.Minute,tm.Second,tm.Day,tm.Month,tmYearToCalendar(tm.Year));
-      syncMillis =now()*1000ULL;
-      syncMillisStamp =  millis();
-      prevFrameMillis = syncMillisStamp;
-    
-      timeSync=true;
-        Serial.println("Time synced!");
-     print2digits(tm.Hour);
-    Serial.write(':');
-    print2digits(tm.Minute);
-    Serial.write(':');
-    print2digits(tm.Second);
-    Serial.print(", Date (D/M/Y) = ");
-    Serial.print(tm.Day);
-    Serial.write('/');
-    Serial.print(tm.Month);
-    Serial.write('/');
-    Serial.print(tmYearToCalendar(tm.Year));
-    Serial.println();
-      }
-    syncSecondPrev = syncSecond; 
-  }}
+// Gain for the next reading from the full channel of this one.
+void adjustGain(uint16_t full, bool saturated) {
+  uint8_t next = gainIndex;
+  if (saturated || full > FULL_SCALE * 8 / 10) {
+    if (next > 0) next--;
+  } else {
+    uint32_t level = full;
+    while (next < 3 && level * GAIN_VALUES[next + 1] / GAIN_VALUES[next] <= FULL_SCALE / 2) {
+      level = level * GAIN_VALUES[next + 1] / GAIN_VALUES[next];
+      next++;
+    }
+  }
+  if (next != gainIndex) {
+    gainIndex = next;
+    tsl.setGain(GAINS[gainIndex]);
+  }
 }
 
+void writeSd(uint64_t unixMs, float lux, uint16_t full, uint16_t ir, uint16_t gain, bool saturated) {
+  if (!sdReady) return;
+  String fileName = String(month()) + "_" + String(day()) + "_" + String(hour()) + ".csv";
+  File f = SD.open(fileName, FILE_WRITE);
+  if (!f) return;
+  print64(f, unixMs);
+  f.write(',');
+  f.print(hour());
+  f.write(',');
+  f.print(minute());
+  f.write(',');
+  f.print(second());
+  f.write(',');
+  f.print(lux, 5);
+  f.write(',');
+  f.print(full);
+  f.write(',');
+  f.print(ir);
+  f.write(',');
+  f.print(gain);
+  f.write(',');
+  f.println(saturated ? 1 : 0);
+  f.close();
+}
 
-void loop(void){ 
-unsigned long currentMillis = millis();
-  
-    if (currentMillis - previousLedMillis >= ledInterval) {
-    // save the last time you blinked the LED
-    previousLedMillis = currentMillis;
+void setup(void) {
+  Serial.begin(250000);
+  pinMode(LED_BUILTIN, OUTPUT);
+  Serial.println(VERSION);
+  if (!tsl.begin()) {
+    Serial.println(F("# ERROR TSL2591 not found: check the wiring"));
+  }
+  tsl.setTiming(TSL2591_INTEGRATIONTIME_100MS);
+  tsl.setGain(GAINS[gainIndex]);
+  syncClock();
+  pinMode(SS, OUTPUT);
+  sdReady = SD.begin(chipSelect);
+  if (!sdReady) Serial.println(F("# ERROR SD card not found: readings go to the serial port only"));
+}
 
-    // if the LED is off turn it on and vice-versa:
-    if (ledState == LOW) {
-      ledState = HIGH;
-    } else {
-      ledState = LOW;
-    }
-
-    // set the LED with the ledState of the variable:
-    digitalWrite(ledPin, ledState);
+void loop(void) {
+  unsigned long now = millis();
+  if (now - lastLed >= 1000) {                // blinks once a second while it runs
+    lastLed = now;
+    led = !led;
+    digitalWrite(LED_BUILTIN, led);
   }
 
-  
-  float luxValue = unifiedSensorAPIRead();
+  uint16_t gain = GAIN_VALUES[gainIndex];
+  unsigned long start = millis();             // getFullLuminosity starts the integration, waits 120 ms, reads
+  uint32_t both = tsl.getFullLuminosity();
+  unsigned long mid = start + INTEGRATION_MS / 2;
+  uint16_t ir = both >> 16, full = both & 0xFFFF;
+  bool saturated = full >= FULL_SCALE || ir >= FULL_SCALE;
+  float lux = full > 0 ? tsl.calculateLux(full, ir) : 0.0;   // at the gain of this reading
+  adjustGain(full, saturated);
 
+  Serial.print(F("TSL2591,"));
+  Serial.print(millis());
+  Serial.print(',');
+  Serial.print(mid);
+  Serial.print(',');
+  print64(Serial, clockAtZero);
+  Serial.print(',');
+  Serial.print(gain);
+  Serial.print(',');
+  Serial.print(INTEGRATION_MS);
+  Serial.print(',');
+  Serial.print(full);
+  Serial.print(',');
+  Serial.print(ir);
+  Serial.print(',');
+  Serial.print(saturated ? 1 : 0);
+  Serial.print(',');
+  Serial.println(lux, 5);
 
-
-
-
-    if((currentMillis - prevFrameMillis)/1000.00 >= frameIntervalMillis) {
-
-      //Serial.print("sUtime = ");
-      //Serial.println (now());
-      //Serial.print("mUtime = ");
-      uint64_t millsUtime= currentMillis - syncMillisStamp + syncMillis;   
-      uint64_t xx = millsUtime/1000000000ULL;
-       //if (xx >0) Serial.print((long)xx);
-       //Serial.print((long)(millsUtime - xx*1000000000));
-       //Serial.println ();
-      
-      //Serial.print("Frame = ");
-      //Serial.print(frameCount);
-      //Serial.write('-');
-      //Serial.println(frameCount/((currentMillis - syncMillisStamp)/1000));
-      //DateTime rtcTime = rtc.now();
-       //Serial.print("Time = ");
-       //Serial.print(hour());
-       //Serial.write(':');
-       //Serial.print(minute());
-      //Serial.print(rtcTime.minute());
-            
-       //Serial.write(':');
-       //Serial.println(second());
-      //Serial.print(rtcTime.second());
-      //Serial.println();
-
-
-
-      prevFrameMillis=currentMillis;
-
-
-      String fileName = String(month()) +"_"+ String(day()) +"_"+ String(hour()) + ".csv";
-      //Serial.println(fileName);
-      myFile = SD.open(fileName , FILE_WRITE);
-        
-        
-      if (myFile) {
-
-        if (xx >0) myFile.print((long)xx);
-        myFile.print((long)(millsUtime - xx*1000000000));
-        myFile.write(',');
-        myFile.print(hour());
-        myFile.write(',');
-        myFile.print(minute());
-        myFile.write(',');
-        myFile.print(second());
-        myFile.write(',');
-        myFile.println(luxValue);
-        
-
-        myFile.close();
-
-         
-
-         
-        }  else {
-        // if the file didn't open, print an error:
-        //Serial.println("error opening test.csv");
-        }
-        
-        frameCount = frameCount+1;
-      
-     }
-
-
-
-  
-
-}
-
-void print2digits(int number) {
-  if (number >= 0 && number < 10) {
-    Serial.write('0');
-  }
-  Serial.print(number);
+  writeSd(clockAtZero + mid, lux, full, ir, gain, saturated);  // after the line, so it does not delay it
 }

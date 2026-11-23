@@ -13,13 +13,20 @@
 //               computer's with it)
 //   mid ms      the board's millis() at the middle of the measurement
 //   gain code   AGAIN: 0 = 0.5x, 1 = 1x, 2 = 2x, ... 10 = 512x (gain = 2^(code - 1))
-//   ATIME/ASTEP integration time = (ATIME + 1) * (ASTEP + 1) * 2.78 us; full scale = (ATIME + 1) * (ASTEP + 1)
+//   ATIME/ASTEP integration time = (ATIME + 1) * (ASTEP + 1) * 2.78 us; full scale = (ATIME + 1) * (ASTEP + 1), at most 65535
 //   saturated   1 if a channel reached full scale (digital) or the analog front end saturated: the counts are clipped
 //   then the raw ADC counts of the two measurements: F1-F4 with CLEAR and NIR, then F5-F8 with CLEAR and NIR
 //
-// The six ADCs cannot see all ten photodiodes at once, so a spectrum is two integrations of 50 ms, switched by the
-// sensor's multiplexer (SMUX): one spectrum every 133 ms. The gain is chosen automatically for the next spectrum
-// (the brightest channel between 30 % and 80 % of full scale; a saturated spectrum drops it by 8x at once).
+// The six ADCs cannot see all ten photodiodes at once, so a spectrum is two integrations, switched by the sensor's
+// multiplexer (SMUX). The gain and the integration are chosen automatically for the next spectrum, keeping the
+// integration as short as the light allows (open issue 65):
+//   - at 50 ms (one spectrum every 133 ms) the gain keeps the brightest channel between 30 % and 80 % of full scale
+//     (a saturated spectrum drops it by 8x at once);
+//   - only when the gain is at its maximum (512x) and the brightest channel is still under 30 % of the 50 ms full
+//     scale (5400 counts) is the integration doubled, to 100 ms and then 200 ms (a spectrum every 233 or 433 ms);
+//   - it is halved again as soon as the shorter integration would still give 60 % of that (10800 counts), and at once
+//     back to 50 ms on saturation; the gain is lowered only at 50 ms.
+// The integration of every spectrum is in its line (ASTEP), and the logger's basic counts divide by it.
 //
 // See docs/hardware/spectral-sensor.md. Register map: AMS AS7341 datasheet (DS000504); the SMUX tables are those of
 // AMS's application note and Adafruit's AS7341 library (BSD licence).
@@ -42,12 +49,19 @@ const uint8_t REG_ASTEP_L = 0xCA;
 const uint8_t PON = 0x01, SP_EN = 0x02, SMUXEN = 0x10;
 const uint8_t SMUX_WRITE = 0x10;   // SMUX_CMD = 2: write the configuration in RAM 0x00-0x13 to the multiplexer
 
-// Integration: (ATIME + 1) * (ASTEP + 1) * 2.78 us = 30 * 600 * 2.78 us = 50.0 ms; full scale 18000 counts.
+// Integration: (ATIME + 1) * (ASTEP + 1) * 2.78 us; ATIME = 29 and ASTEP 599, 1199, 2399 give 50, 100 and 200 ms,
+// with full scales of 18000, 36000 and 65535 counts (the ADC stops at 65535).
 const uint8_t ATIME = 29;
-const uint16_t ASTEP = 599;
-const uint32_t FULL_SCALE = (uint32_t)(ATIME + 1) * (ASTEP + 1);
-const uint16_t INTEGRATION_MS = 51;
+const uint8_t LEVELS = 3;
+const uint16_t ASTEPS[LEVELS] = {599, 1199, 2399};
+const uint16_t INTEGRATIONS_MS[LEVELS] = {51, 101, 201};
 const uint8_t GAIN_MAX = 10;       // 512x
+const uint32_t LOW_COUNTS = 18000UL * 3 / 10;   // 30 % of the 50 ms full scale
+
+uint32_t fullScale(uint8_t level) {
+  uint32_t fs = (uint32_t)(ATIME + 1) * (ASTEPS[level] + 1);
+  return fs > 65535 ? 65535 : fs;
+}
 
 // SMUX: which photodiode goes to which ADC (nibble value = ADC index + 1, 0 = not connected).
 const uint8_t SMUX_F1_F4[20] = {0x30, 0x01, 0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x50, 0x00,
@@ -56,6 +70,7 @@ const uint8_t SMUX_F5_F8[20] = {0x00, 0x00, 0x00, 0x40, 0x02, 0x00, 0x10, 0x03, 
                                 0x03, 0x00, 0x00, 0x00, 0x24, 0x00, 0x00, 0x50, 0x00, 0x06};
 
 uint8_t gain = 6;                  // 32x to start with
+uint8_t level = 0;                 // index of ASTEPS: 50 ms to start with
 bool sensorReady = false;
 bool led = false;
 
@@ -90,14 +105,17 @@ bool waitFor(uint8_t reg, uint8_t mask, uint8_t want, uint16_t timeoutMs) {
   return false;
 }
 
+bool writeAstep(uint16_t astep) {
+  return writeRegister(REG_ASTEP_L, astep & 0xFF) && writeRegister(REG_ASTEP_L + 1, astep >> 8);
+}
+
 bool setupSensor() {
   uint8_t id;
   if (!readRegister(REG_ID, id) || (id & 0xFC) != (0x09 << 2)) return false;
   return writeRegister(REG_ENABLE, PON)
          && writeRegister(REG_CFG0, 0x00)            // register bank 0x80+, normal power
          && writeRegister(REG_ATIME, ATIME)
-         && writeRegister(REG_ASTEP_L, ASTEP & 0xFF)
-         && writeRegister(REG_ASTEP_L + 1, ASTEP >> 8)
+         && writeAstep(ASTEPS[level])
          && writeRegister(REG_CFG1, gain);
 }
 
@@ -114,8 +132,9 @@ bool measure(const uint8_t *smux, uint8_t &astatus, uint16_t counts[6], unsigned
   if (!waitFor(REG_ENABLE, SMUXEN, 0, 50)) return false;          // SMUXEN clears when the switch is done
   if (!writeRegister(REG_ENABLE, PON | SP_EN)) return false;
   startMs = millis();
-  delay(INTEGRATION_MS - 3);                                      // no need to poll before the integration can end
-  if (!waitFor(REG_STATUS2, 0x40, 0x40, 4 * INTEGRATION_MS)) return false;
+  uint16_t integrationMs = INTEGRATIONS_MS[level];
+  delay(integrationMs - 3);                                       // no need to poll before the integration can end
+  if (!waitFor(REG_STATUS2, 0x40, 0x40, 4 * integrationMs)) return false;
   endMs = millis();
   uint8_t data[13];
   if (!readRegisters(REG_ASTATUS, data, 13)) return false;
@@ -124,21 +143,42 @@ bool measure(const uint8_t *smux, uint8_t &astatus, uint16_t counts[6], unsigned
   return true;
 }
 
-// Gain for the next spectrum from the brightest channel of this one.
-void adjustGain(uint16_t peak, bool saturated) {
-  uint8_t next = gain;
-  if (saturated) {
-    next = gain >= 3 ? gain - 3 : 0;
-  } else if (peak > FULL_SCALE * 8 / 10) {
-    if (gain > 0) next = gain - 1;
-  } else if (peak < FULL_SCALE * 3 / 10) {
-    uint32_t level = peak > 0 ? peak : 1;                         // double while it stays at most 60 % of full scale
-    while (next < GAIN_MAX && level * 2 <= FULL_SCALE * 6 / 10) {
-      level *= 2;
-      next++;
+// Gain and integration for the next spectrum from the brightest channel of this one: the shortest integration
+// that leaves enough counts, the gain changed only at the shortest.
+void adjust(uint16_t peak, bool saturated) {
+  uint8_t nextGain = gain, nextLevel = level;
+  uint32_t fs = fullScale(level);
+  if (level > 0) {
+    if (saturated) {
+      nextLevel = 0;
+    } else {
+      uint32_t counts = peak;
+      while (nextLevel > 0 && counts / 2 >= 2 * LOW_COUNTS) {     // halve while the shorter one keeps enough
+        counts /= 2;
+        nextLevel--;
+      }
+      if (nextLevel == level && peak > fs * 8 / 10) nextLevel--;
+    }
+  } else if (saturated) {
+    nextGain = gain >= 3 ? gain - 3 : 0;
+  } else if (peak > fs * 8 / 10) {
+    if (gain > 0) nextGain = gain - 1;
+  } else if (peak < fs * 3 / 10) {
+    uint32_t counts = peak > 0 ? peak : 1;                        // double while it stays at most 60 % of full scale
+    while (nextGain < GAIN_MAX && counts * 2 <= fs * 6 / 10) {
+      counts *= 2;
+      nextGain++;
+    }
+    if (gain == GAIN_MAX && peak < LOW_COUNTS) {                  // at the most gain: lengthen the integration
+      counts = peak;
+      while (nextLevel < LEVELS - 1 && counts < LOW_COUNTS) {
+        counts *= 2;
+        nextLevel++;
+      }
     }
   }
-  if (next != gain && writeRegister(REG_CFG1, next)) gain = next;
+  if (nextGain != gain && writeRegister(REG_CFG1, nextGain)) gain = nextGain;
+  if (nextLevel != level && writeAstep(ASTEPS[nextLevel])) level = nextLevel;
 }
 
 void connectSensor() {
@@ -156,11 +196,8 @@ void setup() {
   Wire.begin();
   Wire.setClock(400000);
   Wire.setWireTimeout(25000, true);                               // a stuck bus resets the I2C module, no hang
-  Serial.println(F("# AS7341 spectral logger 1"));
-  Serial.print(F("# integration ms "));
-  Serial.print(FULL_SCALE * 2.78 / 1000.0, 2);
-  Serial.print(F(", full scale "));
-  Serial.println(FULL_SCALE);
+  Serial.println(F("# AS7341 spectral logger 2"));
+  Serial.println(F("# integration 50, 100 or 200 ms, chosen with the gain"));
   connectSensor();
 }
 
@@ -170,7 +207,7 @@ void loop() {
     connectSensor();
     return;
   }
-  uint8_t statusA, statusB, usedGain = gain;
+  uint8_t statusA, statusB, usedGain = gain, usedLevel = level;
   uint16_t a[6], b[6];
   unsigned long startA, endA, startB, endB;
   if (!measure(SMUX_F1_F4, statusA, a, startA, endA) || !measure(SMUX_F5_F8, statusB, b, startB, endB)) {
@@ -183,8 +220,8 @@ void loop() {
     if (a[i] > peak) peak = a[i];
     if (b[i] > peak) peak = b[i];
   }
-  bool saturated = ((statusA | statusB) & 0x80) || peak >= FULL_SCALE;
-  adjustGain(peak, saturated);
+  bool saturated = ((statusA | statusB) & 0x80) || peak >= fullScale(usedLevel);
+  adjust(peak, saturated);
 
   unsigned long mid = startA + (endB - startA) / 2;
   Serial.print(F("AS7341,"));
@@ -196,7 +233,7 @@ void loop() {
   Serial.print(',');
   Serial.print(ATIME);
   Serial.print(',');
-  Serial.print(ASTEP);
+  Serial.print(ASTEPS[usedLevel]);
   Serial.print(',');
   Serial.print(saturated ? 1 : 0);
   for (uint8_t i = 0; i < 6; i++) {

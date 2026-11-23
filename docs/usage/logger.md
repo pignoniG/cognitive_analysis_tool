@@ -62,12 +62,13 @@ not magnified.
 ### Lux sensor
 
 The [TSL2591 logger](../hardware/lux-sensor.md) on a USB port. *+ Lux* finds the board by its name (Adafruit, Arduino,
-CH340 "USB2.0-Serial"); choose the port by hand if several are connected. About 10 readings per second.
+CH340 "USB2.0-Serial"); choose the port by hand if several are connected. About 8 readings per second. With
+firmware 2 the plot can also show the raw counts and the gain.
 
 ### AS7341 spectral sensor
 
 The [AS7341 on an Arduino Nano](../hardware/spectral-sensor.md): eight visible bands, clear and near infrared, 7.5
-spectra per second, with the gain set by the board. *+ Spectral* asks each USB serial port for the firmware, the Nano's
+spectra per second (fewer in dim light, firmware 2), with the gain and the integration set by the board. *+ Spectral* asks each USB serial port for the firmware, the Nano's
 USB chips first, and takes the one that answers (under 2 s; up to 5 s for each other device it tries); choose the port
 to skip the search. If the board answers but the sensor does not, the firmware's message (check the wiring) is shown. The plot shows
 the clear channel first; any band, NIR or the gain can be chosen.
@@ -180,7 +181,7 @@ flushed every second, so a crash loses little. Every data file starts with a hea
 
 | File | Columns |
 |---|---|
-| `lux.csv` | `unix time (s)`, `lux` |
+| `lux.csv` | `unix time (s)`, `lux`; with firmware 2 also `device time (s)`, `full`, `ir` (raw counts), `gain`, `saturated` ([details](../hardware/lux-sensor.md#firmware)) |
 | `as7341.csv` | `unix time (s)`, `device time (s)`, `F1 415 nm` … `F8 680 nm`, `clear`, `nir` (basic counts), `gain`, `integration (ms)`, `saturated` ([details](../hardware/spectral-sensor.md#what-the-logger-saves)) |
 | `shimmer.csv` | `unix time (s)`, `device time (s)`, then one column per enabled channel (`accel_ln_x`, `gyro_mpu9150_x`, `exg_ads1292r_1_ch1_24bit`, ...), raw values |
 | `emotibit.csv` | `unix time (s)`, `signal`, `value`: one row per sample, with the stream name (`EDA`, `PPG_RED`, ...) as the signal, so signals of different rates share the file |
@@ -201,7 +202,9 @@ All times are the Unix time of the computer running the logger. Run it on the co
 both share a clock; for the Neon, whose timestamps come from the phone, see
 [clock synchronisation](../devices/pupil-neon.md#clocks).
 
-- **Lux:** stamped when the line arrives over USB.
+- **Lux:** firmware 2 (November 2026): stamped by the board at the middle of each integration and mapped as the
+  AS7341's is; `session.json` also gives the offset of the board's SD file from the computer's clock. Earlier
+  firmware: stamped when the line arrives over USB.
 - **AS7341:** stamped by the board at the middle of each measurement; the board's clock is mapped onto the computer's
   as the Shimmer's is (below), from the time each line was sent and the time it arrived.
 - **Shimmer:** its own clock is regular but drifts, and Bluetooth delivers samples in bursts. `device time (s)` is the
@@ -227,8 +230,8 @@ A recorded session can be checked for the quality of its timestamps:
 python -m cwtool.logger.clockcheck SESSION_FOLDER [--save]
 ```
 
-It reports, for each file, the sampling rate and how much the time between samples varies (for the lux sensor, whose
-lines are stamped when they arrive, this is its timestamp jitter); for the Shimmer, how fast its own clock runs against
+It reports, for each file, the sampling rate and how much the time between samples varies (for the lux sensor with
+the earlier firmware, whose lines are stamped when they arrive, this is its timestamp jitter); for the Shimmer, how fast its own clock runs against
 the computer's (ppm) and how far the mapping wanders around a straight line; and the **offset between the Shimmer and
 the EmotiBit**, from the movement both accelerometers feel.
 

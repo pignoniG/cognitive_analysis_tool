@@ -3,7 +3,8 @@
     python -m cwtool.logger.clockcheck SESSION_FOLDER
 
 * **Regularity** of each file (lux, AS7341, Shimmer, EmotiBit signals): the rate, and how much the time between samples
-  varies. The lux sensor is stamped when its line arrives over USB, so this is its timestamp jitter.
+  varies. With its earlier firmware the lux sensor is stamped when its line arrives over USB, so this is its timestamp
+  jitter (firmware 2 is stamped by the board).
 * **The AS7341 board's clock against the computer's**, as for the Shimmer below.
 * **The Shimmer's clock against the computer's:** its own clock (``device time (s)``) is regular but drifts; the file's
   ``unix time (s)`` maps it onto the computer's. How fast the clock runs (ppm), and how far the mapping wanders around a

@@ -36,13 +36,21 @@ arduino-cli upload -p /dev/cu.usbserial-XXXX --fqbn arduino:avr:nano:cpu=atmega3
 The Arduino IDE 2 includes `arduino-cli` in `Arduino IDE.app/Contents/Resources/app/lib/backend/resources/`. The Nano's
 LED blinks while spectra are sent.
 
-**What it does.** The sensor has six ADCs for ten photodiodes, so a spectrum is two 50 ms integrations, the
-multiplexer switched between them: F1–F4 with clear and NIR, then F5–F8 with clear and NIR. One spectrum every 133 ms (7.5 per second): the two integrations, the switching and the sending.
+**What it does.** The sensor has six ADCs for ten photodiodes, so a spectrum is two integrations, the multiplexer
+switched between them: F1–F4 with clear and NIR, then F5–F8 with clear and NIR. At 50 ms each, one spectrum every
+133 ms (7.5 per second): the two integrations, the switching and the sending.
 The gain (0.5× to 512×) is chosen for the next spectrum from the brightest channel of this one: it is kept between 30 %
-and 80 % of full scale (18 000 counts), and a saturated spectrum lowers it 8× at once, so a light switched on is
-followed within a few spectra. A spectrum measured while saturated is kept and flagged.
+and 80 % of full scale (18 000 counts at 50 ms), and a saturated spectrum lowers it 8× at once, so a light switched on
+is followed within a few spectra. A spectrum measured while saturated is kept and flagged.
 
-**Serial format** (250 000 baud). Lines starting with `#` are messages (`# AS7341 spectral logger 1` at start-up,
+**Dim light** (firmware 2, [open issue 65](../OPEN_ISSUES.md#65-as7341-50-ms-integrations-leave-dim-scenes-at-01-counts-in-the-spectral-bands)):
+the integration stays as short as the light allows. Only when the gain is at 512× and the brightest channel is still
+under 5400 counts (30 % of the 50 ms full scale) is the integration doubled, to 100 ms and then 200 ms (a spectrum every
+233 or 433 ms; full scale 36 000 and 65 535 counts). It is halved again as soon as the shorter integration would still
+give 10 800 counts, and goes back to 50 ms at once on saturation; the gain is lowered only at 50 ms. Firmware 1 kept
+50 ms, which left the bands of a dim screen at 0–1 counts.
+
+**Serial format** (250 000 baud). Lines starting with `#` are messages (`# AS7341 spectral logger 2` at start-up,
 `# ERROR ...` if the sensor is not found, after which it retries every second). Each spectrum is one line:
 
 ```text

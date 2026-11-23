@@ -1455,8 +1455,11 @@ is revised; they remain in the git history of this file.
     pair changes of 0.1–0.2 mm against 0.15 mm of noise, and rough band weights, it does not show that it cannot either.
     A test of the spectral question needs brighter light (more pupil per decade), a long lead-in, repeated pairs, and
     the AS7341's bands calibrated (issue 58). Scripts and figures: kept outside the repository.
-- **Status:** open (the wide-scene measurement for Ω_dome; the AS7341's integration time for screens; how the dome is
-  fitted, on the funnel or instead of it, not known yet).
+- **Decision (23 November 2026):** both sensors keep their domes, also for screens. The TSL2591's dark end under the
+  dome was lost to its firmware's gain, not to the dome (issue 64); the AS7341 is to lengthen its integration in dim
+  light (issue 65).
+- **Status:** open (the wide-scene measurement for Ω_dome; how the dome is fitted, on the funnel or instead of it, not
+  known yet; the firmware changes in issues 64 and 65).
 
 ### 61. Neon inside a Meta Quest: the luminance has to come from the Quest's own video
 
@@ -1584,3 +1587,102 @@ is revised; they remain in the git history of this file.
   which both failed with the old filter, fit with RMS 0.449 and 0.499 mm (0.434 and 0.490 with the old filter clipped
   at 0.01 lx). Tested in `tests/test_lux_fit.py`.
 - **Status:** fixed in 2.0.
+
+### 64. TSL2591 firmware: the gain stays at 25× in dim light, only lux is sent, and readings are stamped on arrival
+
+- **Where:** `Lux Sensor/Adalogger FeatherWing/Light_sd_log_direct` (Feather M4, the board in use) and
+  `Lux Sensor/Arduino Nano/Light_sd_log_direct_nano` (the same logic); `cwtool/logger/sources/lux.py`,
+  `tools/lux_logger.py`, `cwtool/lux.py`.
+- **Why (23 November 2026):** looking for the cause of the dome's lost dark end (issue 60):
+  - **Gain.** The firmware starts at 1×, goes to 25× when a reading is under 6000 lx, and goes higher only when
+    `calculateLux` returns NaN, which happens only when the full channel reads exactly 0. At 25× and 100 ms one count of
+    (full − IR) is 408 / (100 × 25) = **0.163 lx**, so under the dome Gray 24, 33 and 40 all read one count (0.16 lx);
+    428× would resolve them 17 times more finely. Going down, overflow is detected only at 0xFFFF, which a 100 ms
+    integration never reaches (its full scale is 37888 counts), so a saturated reading at 1× is not seen as one; when
+    one is, 100000 lx is sent as a stand-in.
+  - **Only lux, with 2 decimals.** The lux is computed on the board, `(full − IR) × (1 − IR / full) / cpl` (Adafruit's
+    alternate formula), and the counts, the gain and its changes are lost. Extra infrared, such as the eye camera's
+    illuminators that the AS7341 saw in issue 60, cannot be seen in it, and the lux cannot be recomputed.
+  - **Time.** The serial line has no time: the logger stamps it on arrival (the part of issue 62 still open). The SD
+    file's time is the real-time clock read once at start-up plus `millis()`, taken before the read starts, so about
+    50 ms before the middle of the 100 ms integration (more when the gain retries). The SD card is opened and closed for
+    every reading in the same loop, which delays the serial line by a varying amount. The real-time clock is set by
+    hand, ignores time zones and drifts; 1.x corrected the SD file with a time lag set by hand. The SD file's time is
+    also written as two numbers, the milliseconds' billions and the rest, without the rest's leading zeros: when the
+    Unix time in ms modulo 10⁹ is under 10⁸ (about 28 hours in every 11.6 days) a digit is lost, the time falls decades
+    off, and cwtool leaves those readings out without a word.
+- **Proposal (decided 23 November 2026: dome kept, gain fixed, raw channels and the board's time logged; to be shown
+  before it is written):**
+  1. **Gain from the counts**, as the AS7341 firmware does: after each reading, step down when the full channel is
+     above 80 % of full scale (37888 at 100 ms), step up when the next gain (×25, ×17, ×23) would leave it under 50 %;
+     no repeat reading, the next one is at the new gain. Saturation is sent as a flag, not 100000 lx.
+  2. **A tagged line with the raw channels and the board's time:**
+     `TSL2591,<board unix ms at mid-integration>,<gain>,<integration ms>,<full>,<IR>,<saturated>,<lux>`. The board time
+     is the SD file's clock (real-time clock at start-up + `millis()`), stamped at the middle of the integration. The
+     logger maps it with `ClockMapper` like the AS7341's and writes `device time (s)`, `full`, `ir`, `gain`,
+     `saturated` after `lux` in `lux.csv` (cwtool keeps reading the first two columns). A line with one number is the
+     old firmware and is read as now.
+  3. **The SD file** gets the same mid-integration time and full, IR, gain after the lux column (cwtool reads the lux
+     from the fifth column, so old readers still work).
+  4. **The SD file's offset from the logger.** The serial line's board time is the SD file's clock, so the logger knows
+     the offset between that clock and the computer's (`ClockMapper`'s line) from the first seconds and all along. It
+     writes it in `session.json` (offset at the start and end, drift); cwtool can then align the board's SD file of the
+     same boot without a time lag set by hand, for example to fill a gap in the serial stream. Measuring the offset
+     once at connection would not be enough on its own: the Nano's clock ran 0.32 % slow (11.5 s an hour, issue 62);
+     the Feather M4's is crystal-based and probably within tens of ppm (about 0.1 s an hour), but it has not been
+     measured; the per-line mapping covers both and gives the connection offset too.
+- **Now (23 November 2026):** written as proposed, for the Feather and the Nano (firmware 2, `# TSL2591 lux logger 2`;
+  the SD time's lost zeros fixed too); `cwtool.logger.sources.lux` reads both formats, decides the columns from the
+  first reading, and writes `SD file clock` (computer − SD file time at the start, after 10 s of readings, and at the
+  end; the board clock's drift in ppm) into the source's settings in `session.json`; `tools/lux_logger.py` keeps the
+  lux of both. Tests in `tests/test_logger.py` (a board 100 ppm slow with 2–12 ms of USB delay: the stamps within 3 ms
+  of the integration's middle). Both compile: the Nano's (73 % of the flash, 59 % of the RAM) and the Feather M4's
+  (adafruit:samd 1.7.17, 8 % of the flash), with no warnings from the sketches. The Moteino sketches in the Arduino archive
+  are other projects (an O₂ sensor, a LoRa radio), not this sensor.
+- **On the board (23 November 2026):** the Feather M4 flashed; under the dome in the room (31 lx) it went from 25× to
+  428× at once (5500 counts, about 0.01 lx a count; firmware 1 would have stayed at 25×, 0.16 lx a count). A 60 s
+  recording with the sensor logger: `lux.csv` with the seven columns, 8.19 readings a second, the interval's standard
+  deviation 0.4 ms (the board's stamps; stamped on arrival the lines vary by milliseconds), `session.json` with the
+  firmware and `SD file clock`. Found on the way:
+  - **The Feather's clock runs about 460 ppm slow** (464 ppm from the mapped stamps, 442 in `SD file clock`; residual
+    about the line 0.8 ms): 1.7 s an hour, so the SD file's times drift by that much from the real-time clock's within a
+    session. The Feather M4 has no 32 kHz crystal of its own.
+  - **Its real-time clock reads 2096** (`clock ms` 4002538670455): not set, or its CR1220 is flat. The SD file's times
+    are then 70 years off; the logger's `SD file clock` offset still aligns them.
+- **Light test (23 November 2026, 75 s):** the sensor covered by a hand, uncovered, a phone torch brought close and
+  taken away. Covered: 9876×, 420 counts, 0.054 lx (firmware 1 would have read one count, 0.16 lx, or 0). Uncovered:
+  down to 428× in one reading (30 lx). Torch: down to 25× in one reading, up to 589 lx. Back to 428× in one reading.
+  No reading lost (longest interval 125 ms), no zero or negative lux. The one reading at 99 % of full scale (37589
+  counts at 9876×, as the hand came off) is consistent with the light still rising, not clearly clipped; the
+  saturation flag was not reached (the torch came on gradually), so saturation and 1× are still untested.
+- **Status:** the Feather tested; still to test: saturation (a sudden bright light), the stamps against the run file's
+  onsets, the SD file against `lux.csv`, and the Nano version on a board; the Feather's CR1220 to replace (most likely
+  flat), then its real-time clock to set (RTClib's `pcf8523` example) and the logger firmware to flash again.
+
+### 65. AS7341: 50 ms integrations leave dim scenes at 0–1 counts in the spectral bands
+
+- **Where:** `Lux Sensor/Arduino Nano/AS7341_spectral_nano` (`ATIME`, `ASTEP`, `adjustGain`);
+  `cwtool/logger/sources/spectral.py` reads the integration time from every line already.
+- **Why (22 November 2026):** on the screen at 45 cm (issue 60) the gain stayed at its maximum (512×) through every step
+  with two 50 ms integrations, leaving about 8 counts in the clear channel at Gray 12 and 0–1 in the spectral bands: the
+  dim spectra are quantisation.
+- **Proposal (decided 23 November 2026: automatic; to be shown before it is written):** when the gain is at 512× and the
+  brightest channel stays under 30 % of full scale, double the integration (`ASTEP`: 50 → 100 → 200 ms); when it goes
+  above 80 %, halve it first, and lower the gain only at 50 ms. The full scale follows the integration (18000, 36000,
+  65535 counts). At 200 ms a spectrum takes about 430 ms (2.3 a second) against 133 ms now; bright scenes keep 133 ms.
+  Basic counts already divide by the integration time, and the board stamps the middle of the two integrations, so the
+  logger and cwtool need no change beyond the documentation. Longest integration: 200 ms (decided 23 November 2026,
+  with the integration kept as short as the light allows).
+- **Now (23 November 2026):** written (`# AS7341 spectral logger 2`): at 512× with the brightest channel under 5400
+  counts (30 % of the 50 ms full scale) the integration doubles, to 100 and 200 ms; it halves as soon as the shorter
+  one would still give 10 800 counts, and returns to 50 ms at once on saturation; the gain changes only at 50 ms.
+  Compiles (21 % of the flash).
+- **On the board (23 November 2026):** flashed (`cpu=atmega328old`). In the room it started at 50 ms, raised the gain to
+  512×, and went to 200 ms on the next spectrum (the brightest channel from 981 to 3925 counts; at 100 ms it would still
+  have been under 5400). 60 s with the sensor logger: 2.30 spectra a second, all at 200 ms and 512×, the board's clock
+  3100 ppm slow as before (issue 62), mapped within 0.2 ms.
+- **Light test (23 November 2026, the same 75 s as issue 64):** covered, 200 ms at 512×; at the torch it went to 50 ms
+  in one spectrum, the next spectrum (50 ms, 512×) was saturated and flagged, and the gain dropped to 64× and then rose
+  to 128×; when the torch went away the gain rose to 256× and 512×, then the integration lengthened to 100 ms (the room
+  a little brighter than in the first test, so 100 ms was enough). One saturated spectrum in all.
+- **Status:** tested on the board.

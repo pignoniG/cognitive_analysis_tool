@@ -606,3 +606,69 @@ def test_a_device_back_with_other_channels_is_not_written_into_the_old_file():
     log.add(Changing())
     assert wait(lambda: "other channels" in log.errors.get("flaky", ""))
     log.shutdown()
+
+
+def test_lux_firmware_2_lines_are_parsed_and_the_old_ones_still_read():
+    from cwtool.logger.sources.lux import parse_line
+
+    new = parse_line("TSL2591,123456,123380,1795373000000,428,100,812,95,0,0.68312")
+    assert new == {"sent": 123456, "mid": 123380, "clock": 1795373000000, "gain": 428, "integration (ms)": 100,
+                   "full": 812, "ir": 95, "saturated": 0, "lux": 0.68312}
+    assert parse_line("7.37") == {"lux": 7.37}
+    for junk in ("# TSL2591 lux logger 2", "Found a TSL2591 sensor", "TSL2591,1,2,3", "Gain:         25x", ""):
+        assert parse_line(junk) is None
+
+
+class FakeSerial:
+    def __init__(self, lines):
+        self.lines = [ln.encode() + b"\n" for ln in lines]
+
+    def readline(self):
+        return self.lines.pop(0) if self.lines else b""
+
+    def close(self):
+        pass
+
+
+def test_lux_firmware_2_is_stamped_by_the_board_and_gives_the_sd_clock_offset():
+    # the board's clock runs 100 ppm slow; lines arrive 2 to 12 ms after they are sent; the SD clock is 3 s behind
+    clock_ms = 1_795_373_000_000
+    start = clock_ms / 1000 + 3.0
+    lines, hosts = ["# TSL2591 lux logger 2"], [start]
+    rng = np.random.default_rng(1)
+    for i in range(600):                                  # 73 s at 8.2 readings a second
+        mid = 1000 + i * 122
+        sent = mid + 70
+        true_sent = start + (sent / 1000) / (1 - 100e-6)
+        lines.append(f"TSL2591,{sent},{mid},{clock_ms},25,100,{500 + i},{40},0,{1.5 + i / 100:.5f}")
+        hosts.append(true_sent + 0.002 + rng.uniform(0, 0.010))
+    src = LuxSerialSource(port="fake")
+    src._ser = FakeSerial(lines[:2])
+    src.settings = {}
+    src._handshake()                                      # the format comes from the first reading
+    rows = [src.row(h, parse_line_of(ln.encode())) for h, ln in zip(hosts[1:], lines[1:])]
+    assert src.columns == ["unix time (s)", "lux", "device time (s)", "full", "ir", "gain", "saturated"]
+    assert src.settings["firmware"] == "TSL2591 lux logger 2"
+    last = rows[-1]
+    true_mid = start + last[2] / (1 - 100e-6)
+    assert abs(last[0] - true_mid) < 0.003                # the integration's middle, not the arrival
+    sd = src.settings["SD file clock"]
+    assert abs(sd["computer − SD file time at end (s)"] - (3.0 + last[2] * 100e-6)) < 0.003
+    assert abs(sd["board clock drift (ppm)"] - 100) < 60
+
+
+def parse_line_of(raw: bytes):
+    from cwtool.logger.sources.lux import parse_line
+    return parse_line(raw.decode())
+
+
+def test_lux_old_firmware_keeps_two_columns():
+    src = LuxSerialSource(port="fake")
+    src._ser = FakeSerial(["Found a TSL2591 sensor", "------", "12.5"])
+    src.settings = {}
+    src._handshake()
+    assert src.columns == ["unix time (s)", "lux"]
+    host, fields = src._pending[0]
+    assert src.row(host, fields) == (host, 12.5)
+    assert src.row(host, {"sent": 1, "mid": 1, "clock": 0, "gain": 1, "integration (ms)": 100, "full": 1,
+                          "ir": 0, "saturated": 0, "lux": 1.0}) is None   # reflashed while connected

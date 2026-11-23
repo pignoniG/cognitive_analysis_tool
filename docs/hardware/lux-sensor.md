@@ -16,13 +16,15 @@ The firmware and 3D-printable mount are in the repository's `Lux Sensor/` folder
 | Clock | the computer's, the same as the eye tracker's | the board's real-time clock: drifts seconds per day, no time zones |
 | Cable | 3–4 m ribbon cable to the computer | 1.5 m, logger carried by the participant |
 
-Either way the readings (about 10 per second) are logged with the time of each. The sensor logger writes one `lux.csv`
-per recording (`unix time (s)`, `lux`, with a header). The SD card logger and `tools/lux_logger.py` write one CSV per
-hour, `<month>_<day>_<hour>.csv`, with the Unix time in milliseconds in the first column and lux in the fifth. The
-analysis reads both.
+Either way the readings (about 8 per second) are logged with the time of each. The sensor logger writes one `lux.csv`
+per recording (`unix time (s)`, `lux`, with a header; with firmware 2 also `device time (s)`, `full`, `ir`, `gain`,
+`saturated`). The SD card logger and `tools/lux_logger.py` write one CSV per hour, `<month>_<day>_<hour>.csv`, with the
+Unix time in milliseconds in the first column and lux in the fifth (firmware 2 adds the full and IR counts, the gain and
+the saturation flag after it). The analysis reads both.
 
 With the SD card logger, set the real-time clock to local time and correct the remaining offset with the
-**time lag** parameter (for example, 3600 s for a clock one hour off).
+**time lag** parameter (for example, 3600 s for a clock one hour off). When the board was also connected to the sensor
+logger during the session, `session.json` gives that offset (`SD file clock`, below).
 
 ## Bill of materials
 
@@ -57,6 +59,28 @@ Only the microcontroller and sensor are needed when always logging to a computer
 Flash the board with the Arduino IDE. The sketches need the `Adafruit_Sensor` and `Adafruit_TSL2591` libraries, and
 the RTC library for the board's clock (`RTC_PCF8523` from RTClib for the FeatherWing, `DS1307RTC` for the Nano
 shield). Set the clock once with the RTC library's example sketch.
+
+**Firmware 2 (November 2026, [open issue 64](../OPEN_ISSUES.md#64-tsl2591-firmware-the-gain-stays-at-25-in-dim-light-only-lux-is-sent-and-readings-are-stamped-on-arrival)).**
+Each reading is a 100 ms integration. The gain (1×, 25×, 428×, 9876×) is chosen for the next reading from the full
+channel of this one: lower above 80 % of the full scale (37 888 counts), higher while the next gain would leave it under
+50 %. Earlier firmware stayed at 25× in dim light, where one count is 0.16 lx, and could not see saturation at 1×.
+Each reading is one serial line (250 000 baud; lines starting with `#` are messages):
+
+```text
+TSL2591,<sent ms>,<mid ms>,<clock ms>,<gain>,<integration ms>,<full>,<ir>,<saturated>,<lux>
+```
+
+with the board's `millis()` when the line was sent and at the middle of the integration, the Unix time (ms) of
+`millis()` = 0 on the real-time clock (0 without one), and the raw counts of the two photodiodes (visible + infrared,
+infrared). The lux is Adafruit's formula, (full − IR)(1 − IR / full) / (100 × gain / 408). The SD file's time is that
+of the middle of the integration (earlier firmware took it before the integration, about 50 ms early, and dropped the
+leading zeros of the last nine digits of the time, so the readings of about 28 hours in every 11.6 days got a wrong time).
+
+The sensor logger stamps firmware 2's readings at the middle of the integration, mapping the board's clock onto the
+computer's as for the [AS7341](spectral-sensor.md#what-the-logger-saves), and writes into `session.json` the offset between the
+SD file's clock and the computer's at the start and the end of the session and the board clock's drift
+(`SD file clock`). Earlier firmware's readings are stamped when they arrive, and `lux.csv` keeps two columns.
+`tools/lux_logger.py` reads both and keeps the lux only.
 
 Adafruit's guides: [Feather M4 setup](https://learn.adafruit.com/adafruit-feather-m4-express-atsamd51/setup),
 [Adalogger RTC](https://learn.adafruit.com/adafruit-adalogger-featherwing/adafruit2-rtc-with-arduino),
