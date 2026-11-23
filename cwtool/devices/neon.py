@@ -370,17 +370,22 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
     if not width or not height:
         width, height = SCENE_SIZE
     t_gaze = rel(gaze_ts)
+    projection = None
     if xr:
+        saved_projection = quest.load_projection(folder)
+        projection = saved_projection or quest.default_projection(capture)
         azimuth, elevation = _gaze_angles(gaze_px, matrix, (width, height))
-        gaze_norm = quest.gaze_to_capture(azimuth, elevation)
+        gaze_norm = quest.gaze_to_capture(azimuth, elevation, projection)
     else:
         gaze_norm = gaze_px / np.array([width, height], dtype=float)
     gaze = bin_samples(t_gaze, gaze_norm, t0, rate, n)
     outside = ~((gaze >= -0.05) & (gaze <= 1.05)).all(axis=1)
     gaze[outside] = np.nan
 
-    # Not worn: no pupil or gaze. Gaze and eye state share the eye camera's timestamps.
-    if len(t_gaze):
+    # Not worn: no pupil or gaze. Gaze and eye state share the eye camera's timestamps. In a headset frame the flag is not
+    # used: on 23 November 2026 it was 0 for half the samples, switching 457 times, with the eyelids open and the same pupil
+    # sizes (open issue 61); the blinks are still removed.
+    if len(t_gaze) and not xr:
         not_worn = bin_samples(t_gaze, (np.asarray(worn) < 0.5).astype(float), t0, rate, n) > 0
         for a in (left, right):
             a[not_worn] = np.nan
@@ -398,6 +403,11 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
                          "pupil's clock by its name (to a second); align it with the presenter's run file or the pupil's "
                          "response. The gaze is placed in the capture by its direction, without a calibration in the "
                          "headset: check it, and set the gaze offset if it is off (open issue 61).")
+            notes.append("The Neon's 'worn' flag is not used in a headset (it is unreliable there); blinks are removed.")
+            notes.append("The capture's projection (where directions fall in it): " + projection.describe() + (
+                f", measured by a gaze check ({quest.PROJECTION_FILE})" if saved_projection is not None else
+                ", the Link capture's measured on 23 November 2026" if projection is quest.LINK_PROJECTION else
+                ", nominal") + ".")
             if utc_offset is None:
                 notes.append("The phone's time zone could not be read from the recording's name: the capture's name was read "
                              "in this computer's zone.")
@@ -411,7 +421,8 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
             pupil_unit="mm",
             pupil_scale=1.0,
             luminance_source="display",
-            field_of_view=quest.CAPTURE_FOV,
+            field_of_view=projection.field_of_view,
+            projection=projection.as_tuple(),
             circular_scene=False,
             native_rate=rate,
             adapting_field=quest.HEADSET_FOV,

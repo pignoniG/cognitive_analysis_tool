@@ -14,6 +14,7 @@ from cwtool.params import Parameters
 from cwtool.recording import Event
 from cwtool.sensors import Sensor
 from cwtool.trim import Trim
+from conftest import needs_neurokit
 
 EPOCH = 1_700_000_000.0
 GAIN = 4.0
@@ -63,6 +64,7 @@ def test_the_gain_comes_from_the_session_or_a_note_says_it_was_assumed():
     assert gain == 4.0 and "assumed" in notes[0]
 
 
+@needs_neurokit
 def test_r_peaks_are_found_within_a_few_ms_and_the_intervals_are_recovered():
     rr = rr_series()
     t, mv, truth = synthetic_ecg(rr)
@@ -76,6 +78,7 @@ def test_r_peaks_are_found_within_a_few_ms_and_the_intervals_are_recovered():
     assert np.allclose(beats.unix - beats.device, EPOCH + 0.3, atol=1e-5)
 
 
+@needs_neurokit
 def test_beats_that_are_half_as_tall_as_the_largest_are_still_found():
     """Breathing and posture change the height of the R wave by a factor of two within a minute. The detector must not
     depend on the squared slope of the tallest beats (a beat of half the height has a quarter of its energy)."""
@@ -95,12 +98,14 @@ def test_beats_that_are_half_as_tall_as_the_largest_are_still_found():
     assert len(beats.device) <= len(truth) + 1                          # and no T waves taken for beats
 
 
+@needs_neurokit
 def test_an_inverted_ecg_gives_the_same_beats():
     t, mv, truth = synthetic_ecg(rr_series(60), flip=True)
     beats = hrv.beats_of(to_sensor(t, mv))
     assert len(beats.device) == len(truth) and np.abs(beats.device - truth).max() < 0.006
 
 
+@needs_neurokit
 def test_short_gaps_are_bridged_and_long_ones_end_the_stretch():
     t, mv, truth = synthetic_ecg(rr_series(60))
     lost = np.zeros(len(t), bool)
@@ -115,6 +120,7 @@ def test_short_gaps_are_bridged_and_long_ones_end_the_stretch():
     assert np.isnan(beats.rr[first_after]) and not beats.ok[first_after]       # nothing is measured across the gap
 
 
+@needs_neurokit
 def test_a_missed_beat_and_an_extra_one_are_not_trusted():
     rr = rr_series(100)
     t, mv, truth = synthetic_ecg(rr)
@@ -168,6 +174,7 @@ def test_the_spectrum_puts_breathing_in_hf_and_slow_waves_in_lf():
     assert all(np.isnan(v) for v in hrv.spectrum(times[:30], rr[:30] * 1000.0))     # 30 s: too short
 
 
+@needs_neurokit
 def test_a_short_window_is_flagged_and_has_no_spectrum():
     t, mv, _ = synthetic_ecg(rr_series(50))
     results, beats = hrv.analyse(to_sensor(t, mv), EPOCH + 0.3, [("whole", 0.0, 50.0)])
@@ -182,12 +189,14 @@ def test_a_short_window_is_flagged_and_has_no_spectrum():
     assert "few cycles" in notes_for(90) and notes_for(300) == ""
 
 
+@needs_neurokit
 def test_a_low_sampling_rate_gets_a_note():
     t, mv, _ = synthetic_ecg(rr_series(40), fs=51.2)
     beats = hrv.beats_of(to_sensor(t, mv))
     assert any("too coarse" in n for n in beats.notes)
 
 
+@needs_neurokit
 def test_windows_and_the_trim_decide_which_intervals_count():
     rr = rr_series(200)
     t, mv, truth = synthetic_ecg(rr)
@@ -206,6 +215,7 @@ def test_windows_and_the_trim_decide_which_intervals_count():
     assert beats.ok[after] and np.isfinite(beats.rr[after])
 
 
+@needs_neurokit
 def test_the_files_have_the_measures_and_the_beats(tmp_path):
     t, mv, _ = synthetic_ecg(rr_series(130))
     sensor = to_sensor(t, mv)
@@ -221,6 +231,7 @@ def test_the_files_have_the_measures_and_the_beats(tmp_path):
     assert float(beat_rows[1]["timestamp_unix"]) - float(beat_rows[1]["timestamp_relative"]) == pytest.approx(EPOCH + 0.3)
 
 
+@needs_neurokit
 def test_export_adds_the_hrv_files_for_a_shimmer_with_an_ecg(tmp_path, monkeypatch):
     from test_export_package import _load
     from conftest import write_varjo_recording
@@ -300,6 +311,7 @@ def test_the_heart_rate_and_the_moving_rmssd_of_known_intervals():
     assert len(hrv.time_series(_beats_of_intervals([1000.0, 1000.0]), EPOCH).hr) == 0
 
 
+@needs_neurokit
 def test_the_hrv_is_worked_out_on_everything_and_then_cut_at_the_markers():
     rr = [0.8] * 40 + [1.0] * 70                          # a step in the heart rate, inside the part that is left out
     t, mv, truth = synthetic_ecg(rr)

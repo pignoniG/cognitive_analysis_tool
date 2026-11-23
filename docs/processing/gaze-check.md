@@ -24,10 +24,18 @@ When the recording's folder (or its scene video's) holds a run file with a gaze 
    its weighted centre above half the peak). A blob weaker than 6 robust noise units is not taken: the place is left out and
    said.
 3. **The gaze.** The median of the tracker's gaze in the window (at least 20 samples), and its spread.
-4. **The offset.** Each place's difference, dot minus gaze, as an angle through the device's field of view (a tracker turned
+4. **The offset.** Each place's difference, dot minus gaze, as an angle through the video's projection (a tracker turned
    on the head, or in a headset, moves the gaze by the same angle everywhere); their median is the offset that moves the gaze
-   onto the dots. Reported with the median error before and after moving the gaze by it, and the places' spread around it:
+   onto the dots. **In VR** the run file gives each place's direction from the head, so the gaze is compared with those
+   directions instead, in the head's degrees: no assumed field of view enters, and a place whose dot is not found in the video
+   still counts. Reported with the median error before and after moving the gaze by it, and the places' spread around it:
    more than 2° means one shift does not fit them all (the mapping is off by more than a shift). At least 3 places are needed.
+
+5. **The video's projection (VR).** The dots found sit at known directions, so they measure where the head's directions fall
+   in the video: a pinhole's centre and focal length on each axis, fitted to the dots (at least 5, spanning both axes, within
+   1 % of the width). On 23 November 2026 a Quest capture over Link fitted to within 1 px: 79° × 50°, the head's straight ahead
+   at (0.510, 0.389), not the 110° × 78° centred that had been assumed. When it differs from the projection in use, the
+   summary says so.
 
 The result is shown under the scene video line in the Data tab (green, or red when the median error is over 2° or there is no
 offset), printed by `cwtool RECORDING`, and written to `<name>_export.json` under `gaze check`, with each place.
@@ -44,12 +52,19 @@ folder, as the trim is) and not with the participant's parameters.
   check then reports what is left ("with the session's offset ... applied").
 - **On the command line:** the saved offset is applied; `--gaze-offset RIGHT DOWN` uses another one for that run (`0 0`:
   none), `--save-gaze-offset` saves it (or, without it, the check's proposed total, applied from the next run).
+- **The projection** of a headset's capture, when the check measured one that differs: *From gaze check* stages it with the
+  offset and *Apply* saves it too (`cwtool_capture_projection.json`); on the command line `--save-projection`. The gaze is
+  placed through it when the recording is read.
 
-The gaze is moved by the angle, through the device's field of view, so the same offset is the same angle anywhere in the
+The gaze is moved by the angle, through the video's projection, so the same offset is the same angle anywhere in the
 picture. The export records it under `gaze offset (deg, right, down)`, and every result carries a note saying it was applied.
 
 ## When it works
 
 The dot must be the only thing that changes between the places: a head-fixed dot in a headset's capture, or a monitor seen by
 glasses' scene camera with the head still. A head that moves shifts the background and lowers the dots' contrast; those places
-are left out. Tested on synthetic videos only so far.
+are left out. Tested on synthetic videos and on one Quest recording over Link (23 November 2026: 9 of 9 dots found, gaze 2.8°
+off the directions, 0.7° after the offset).
+
+The gaze check also places the pupil in time when the video has a clock of its own (a Quest capture): the gaze's saccades to
+the dots give the difference between the presenter's computer's clock and the tracker's ([log alignment](log-alignment.md)).

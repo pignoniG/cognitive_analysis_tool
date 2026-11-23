@@ -46,6 +46,9 @@ def main(argv: list[str] | None = None) -> int:
                          "(0 0: none)")
     ap.add_argument("--save-gaze-offset", action="store_true",
                     help="save --gaze-offset with the recording (or, without it, the gaze check's proposed total offset)")
+    ap.add_argument("--save-projection", action="store_true",
+                    help="save the scene video's projection measured by the gaze check (a Quest capture in VR) with the "
+                         "recording; the gaze is placed through it from the next run")
     ap.add_argument("--no-align-log", action="store_true",
                     help="do not move the presenter's log (events, sensors, Unix times) onto the video's clock (Varjo)")
     ap.add_argument("--workers", type=int, default=0, help="parallel video chunks (default: one per CPU core)")
@@ -96,6 +99,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.save_gaze_offset and not args.gaze_offset and checked.total_offset_deg() is not None:
             print(f"saved {gazecheck.save_offset(rec.folder, checked.total_offset_deg(), 'gaze check')}; it applies "
                   "from the next run (the video is analysed again with the moved gaze)")
+        if args.save_projection:
+            if checked.projection is not None and rec.separate_video_clock:
+                from cwtool.devices import quest
+                from cwtool.projection import Projection
+                print(f"saved {quest.save_projection(rec.folder, Projection.from_tuple(checked.projection))}; it applies "
+                      "from the next run (the video is analysed again with the gaze placed through it)")
+            else:
+                print("gaze check: no projection measured to save (it needs a VR run's dots in a headset's capture)",
+                      file=sys.stderr)
         for note in checked.notes:
             print(f"gaze check: {note}", file=sys.stderr)
     elif not why.startswith("no calibration run file"):

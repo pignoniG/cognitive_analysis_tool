@@ -24,11 +24,19 @@ from typing import Optional
 
 import numpy as np
 
+from cwtool.projection import Projection
+
 NAME_PATTERN = re.compile(r"^(?P<app>com\.(?:oculus|meta)\.[\w.]+)-(?P<date>\d{8})-(?P<time>\d{6})-\d+\.mp4$", re.IGNORECASE)
 # Field of the capture (deg, h × v). The Quest 3 shows about 110° × 96° per eye (Meta); the capture is a 16:9 crop of one
 # eye's view whose exact field Meta does not give: with the eye's horizontal field kept, a 16:9 crop of the same focal length
 # spans about 78° vertically. Nominal, used to place the gaze and size its circle (open issue 61).
 CAPTURE_FOV = (110.0, 78.0)
+# A capture over Link (``com.meta.pclinkservice.server``), measured by the gaze check's 9 head-fixed dots on 23 November 2026
+# (1920 × 1080, fitted to within 1 px with square pixels, focal length 1159 px): 79° × 50°, the head's straight ahead at
+# (979, 420) px, 20° above and 30° below it. Used for Link captures until a gaze check measures the session's own.
+LINK_PROJECTION = Projection(0.5097, 0.3887, 0.6037, 1.0734)
+NOMINAL_PROJECTION = Projection.from_fov(CAPTURE_FOV)
+PROJECTION_FILE = "cwtool_capture_projection.json"
 HEADSET_FOV = (110.0, 96.0)       # the field the eye adapts to: the headset's, as for the Varjo's own field of view
 NEON_XR_FRAMES = ("quest",)       # words in the Neon's frame name (info.json "frame_name") that mean a headset frame
 SEARCH_BEFORE = 600.0             # s: a capture may start this long before the eye tracker's recording
@@ -98,12 +106,43 @@ def find_capture(folders, start: float, end: float, utc_offset: Optional[float])
     return best
 
 
-def gaze_to_capture(azimuth: np.ndarray, elevation: np.ndarray, fov=CAPTURE_FOV) -> np.ndarray:
-    """Gaze directions (deg; azimuth right, elevation up) as normalised capture coordinates (0–1, origin top left), for a
-    pinhole view of field ``fov`` looking along the tracker's straight ahead. The rotation between the tracker's frame and
-    the headset's view is not known: the operator's gaze offset corrects what it leaves (open issue 61)."""
-    az, el = np.radians(np.asarray(azimuth, dtype=float)), np.radians(np.asarray(elevation, dtype=float))
-    half_w, half_h = np.tan(np.radians(fov[0] / 2)), np.tan(np.radians(fov[1] / 2))
-    x = 0.5 + np.tan(az) / (2 * half_w)
-    y = 0.5 - np.tan(el) / np.cos(az) / (2 * half_h)
-    return np.column_stack([x, y])
+def default_projection(capture: Optional[Path]) -> Projection:
+    """The projection a capture is taken to have when its session has none measured: the Link capture's measured one for a
+    Link capture, else the nominal field (CAPTURE_FOV) centred."""
+    return LINK_PROJECTION if capture is not None and app_of(capture).startswith("com.meta.pclinkservice") else NOMINAL_PROJECTION
+
+
+def load_projection(folder: Optional[Path]) -> Optional[Projection]:
+    """The capture's projection saved with the recording in ``folder`` (measured by a gaze check), or None."""
+    import json
+    path = Path(folder) / PROJECTION_FILE if folder is not None else None
+    if path is None or not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+        proj = Projection.from_tuple((data["cx"], data["cy"], data["fx"], data["fy"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return proj if proj.fx > 0 and proj.fy > 0 else None
+
+
+def save_projection(folder: Path, projection: Optional[Projection], source: str = "gaze check") -> Path:
+    """Save the capture's projection with the recording; None removes it."""
+    import json
+    from datetime import datetime
+    path = Path(folder) / PROJECTION_FILE
+    if projection is None:
+        path.unlink(missing_ok=True)
+        return path
+    h, v = projection.field_of_view
+    path.write_text(json.dumps({"cx": round(projection.cx, 5), "cy": round(projection.cy, 5), "fx": round(projection.fx, 5),
+                                "fy": round(projection.fy, 5), "field (deg)": [round(h, 1), round(v, 1)],
+                                "source": source, "saved": datetime.now().isoformat(timespec="seconds")}, indent=2))
+    return path
+
+
+def gaze_to_capture(azimuth: np.ndarray, elevation: np.ndarray, projection: Projection = NOMINAL_PROJECTION) -> np.ndarray:
+    """Gaze directions (deg; azimuth right, elevation up) as normalised capture coordinates (0–1, origin top left), through
+    ``projection`` along the tracker's straight ahead. The rotation between the tracker's frame and the headset's view is not
+    known: the session's gaze offset, measured by the gaze check, corrects it (open issue 61)."""
+    return projection.from_direction(azimuth, elevation)

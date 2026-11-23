@@ -61,6 +61,27 @@ def test_an_offset_beyond_the_search_is_not_guessed():
     assert al is None or abs(al.offset) <= alignment.COARSE_RANGE            # never a made-up value outside the search
 
 
+def test_with_the_logged_colours_a_far_offset_is_found_and_not_a_step_away():
+    """Steps of one length line up one step away too (on 23 November 2026 a capture named 10.5 s off was placed 8 s
+    away by the ±5 s search): with the run file's colours the search reaches ±60 s and the colours pick the step."""
+    rng = np.random.default_rng(3)
+    levels = [0 if k % 2 == 0 else int(rng.integers(40, 255)) for k in range(30)]
+    seconds = [70.0 + 8.0 * k for k in range(30)]
+    video = _video(levels, seconds, jitter=0.5)
+    for offset in (10.5, -37.2, 1.3):
+        logged = _logged(seconds, offset)
+        colours = (logged, np.repeat(np.asarray(levels, dtype=float)[:, None], 3, axis=1), np.full(len(levels), 8.0))
+        al, message = alignment.estimate(_recording(video), video, logged, "run.csv", colours)
+        assert al is not None, message
+        assert al.offset == pytest.approx(offset, abs=0.02)
+    logged = _logged(seconds, 10.5)
+    plain, _ = alignment.estimate(_recording(video), video, logged, "run.csv")
+    assert plain is None or abs(plain.offset - 10.5) > 1                   # without colours it cannot reach it
+    other = (logged, np.repeat(rng.integers(0, 255, (len(levels), 1)).astype(float), 3, axis=1), np.full(len(levels), 8.0))
+    refused, message = alignment.estimate(_recording(video), video, logged, "run.csv", other)
+    assert refused is None or refused.offset == pytest.approx(10.5, abs=0.02)   # another run's colours never mislead
+
+
 def test_logged_changes_that_did_not_happen_and_missing_ones_do_not_matter():
     levels, seconds = _steps()
     video = _video(levels, seconds)

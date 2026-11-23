@@ -229,7 +229,8 @@ def test_analyse_button_becomes_reanalyse_and_reset_view_is_on_the_plots(app, va
     assert w.cancel_button.isHidden()                  # nothing running
     w.analyse(use_cache=False)
     assert not w.cancel_button.isHidden()              # shown while the analysis runs
-    assert wait_for(app, lambda: not (w._task and w._task.isRunning()))
+    # the analysis, then the alignment and the result in the background: done when the opening steps are
+    assert wait_for(app, lambda: w.open_panel.running() is None and not (w._task and w._task.isRunning()))
     app.processEvents()
     assert w.cancel_button.isHidden()
     w.resize(1200, 800)
@@ -542,7 +543,9 @@ def test_every_plot_can_be_switched_and_the_axes_line_up(app, tmp_path):
     w.plot_checks["lum"].setChecked(True)
     app.processEvents()
     assert plots.lum.isVisible()
-    # the left axes are as wide and start at the same place, whatever their numbers are
+    # the left axes are as wide and start at the same place, whatever their numbers are (once the plot just shown is
+    # laid out: Qt lays out on a later pass)
+    wait_for(app, lambda: plots.lum.getAxis("left").width() > 0, 2)
     widths = {p.getAxis("left").width() for p in plots._plots}
     assert len(widths) == 1
     lefts = {round(p.vb.sceneBoundingRect().left()) for p in plots._plots if p.isVisible()}
@@ -738,3 +741,44 @@ def test_cancel_stops_a_long_task_quietly_and_is_offered_only_when_it_can_work(a
     assert w.cancel_button.isHidden()
     assert wait_for(app, lambda: not w._task.isRunning())
     w.close()
+
+
+def test_opening_shows_its_steps_over_the_plots_until_the_first_result(app, varjo_folder):
+    w = MainWindow()
+    w.open_recording(varjo_folder)
+    assert w.open_panel.isVisibleTo(w) and w.open_panel.states["read"] == "running"
+    assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None)
+    assert not w.open_panel.isVisibleTo(w)
+    assert all(w.open_panel.states[k] == "done" for k in ("read", "video", "analyse", "align", "result"))
+    w.open_recording(varjo_folder)                     # again: the saved analysis is used, and the step says so
+    assert wait_for(app, lambda: w.open_panel.states.get("analyse") == "done")
+    assert "saved analysis" in w.open_panel.details["analyse"].text()
+    assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None)
+    w.close()
+
+
+def test_a_recording_without_its_video_says_so_at_its_step(app, varjo_folder, tmp_path):
+    import shutil
+    folder = tmp_path / "no_video"
+    shutil.copytree(varjo_folder, folder)
+    for video in folder.glob("varjo_capture_*"):
+        video.unlink()
+    w = MainWindow()
+    w.open_recording(folder)
+    assert wait_for(app, lambda: w.open_panel.states.get("video") in ("failed", "done") or
+                    w.open_panel.states.get("read") == "failed")
+    if w.open_panel.states.get("read") == "failed":
+        pytest.skip("this device's reader needs the video to read the recording")
+    assert w.open_panel.states["video"] == "failed" and "No scene video" in w.open_panel.details["video"].text()
+    assert w.open_panel.isVisibleTo(w) and w.open_panel.states["analyse"] == "skipped"
+    w.close()
+
+
+def test_the_progress_line_has_the_percentage_frames_and_time_left(app):
+    from cwtool.gui.open_progress import OpenProgress
+    panel = OpenProgress()
+    panel.start_analysis(1000)
+    panel._started -= 10                               # ten seconds in
+    panel.set_fraction(0.25)
+    text = panel.details["analyse"].text()
+    assert "25%" in text and "250 of 1 000 frames" in text and "0:10 elapsed" in text and "about 0:30 left" in text

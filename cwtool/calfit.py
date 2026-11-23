@@ -179,10 +179,17 @@ def _luminance_model(rec: Recording, video: VideoResult, params: Parameters, mod
     return lux
 
 
+def dilation_parts_by_default(rec: Recording) -> bool:
+    """Whether the calibration fit frees the two parts of the dilation by default: yes in XR (the luminance is the
+    headset's display). On the Neon in a Quest (open issue 61) one dilation time constant went to its limit (120 s) and the
+    window's RMS was 0.58 mm, against 0.32 mm with the parts free."""
+    return rec.profile.luminance_source == "display"
+
+
 def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, start: float,
                     sequence: calibration.Sequence, fit_dynamics: bool = True, fit_transient: bool = False,
                     fit_gains: Optional[bool] = None, fit_gamma: bool = False, fit_black: bool = False,
-                    fit_fixation: bool = False, fit_offset: Optional[bool] = None, fit_dilation_parts: bool = False,
+                    fit_fixation: bool = False, fit_offset: Optional[bool] = None, fit_dilation_parts: Optional[bool] = None,
                     cancelled: Optional[Callable[[], bool]] = None) -> CalibrationFit:
     """Fit the participant's light response and timing together on the calibration ``sequence`` starting at ``start``.
 
@@ -194,7 +201,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     ΔPD worse (replicate blocks 0.41 mm apart against 0.26 without it, open issue 55). The latency comes from the constriction onsets at the sequence's brightening steps when there are
     enough (it is sharper than the whole response), else it is fitted with the rest. ``fit_dilation_parts`` also fits the
     share and the time constant of the dilation's fast part, which only a sequence that dims after moderate as well as after
-    bright light determines (the time-course calibration, :data:`cwtool.calibration.TIME_COURSE`)."""
+    bright light determines (the time-course calibration, :data:`cwtool.calibration.TIME_COURSE`); by default it is on for
+    XR recordings (:func:`dilation_parts_by_default`)."""
     end = start + sequence.duration
     prep = prepare(rec, video, params)
     if prep.scale is None:
@@ -256,6 +264,8 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
         free += ["attack", "release"]
     if fit_transient:
         free += ["transient", "escape"]
+    if fit_dilation_parts is None:
+        fit_dilation_parts = dilation_parts_by_default(rec)
     fit_dilation_parts = fit_dilation_parts and fit_dynamics
     if fit_dilation_parts:
         free += ["dilation_fast_share", "dilation_fast"]

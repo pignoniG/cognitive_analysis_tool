@@ -129,25 +129,37 @@ DataCalibration_1/
 **The capture.** The Quest names it after the app that recorded it (`com.oculus.vrshell` for the headset's own view,
 passthrough included; `com.meta.pclinkservice.server` for a PC app over Link) and the local time the capture started,
 to the second. It holds one eye's view, 1920 × 1080, at a variable rate of about 30 fps, so its frames are timed from
-their timestamps in the file. Keep the name: it is how the capture is found and placed in time. A capture copied into
+their timestamps in the file. Keep the name: it is how the capture is found and placed in time (a capture renamed, as
+on 23 November 2026, is not found). Its sound is the headset's: a tone the presenter plays on the PC is not in it. A capture copied into
 the Cloud export folder is never taken as the Neon's scene video.
 
 **Time.** Time zero is the capture's start as named, read in the phone's time zone (from the recording's name and its
 UTC start). That places the capture within about a second. The app then aligns it (the switch *Align the capture to the
 pupil* in Data → Scene video):
 
-- the **pupil** by its response: the lag at which the pupil's speed follows the picture's changes best, less an assumed
-  latency of 0.5 s. This needs a picture that changes (a calibration run). Only the sum of this offset and the latency is
-  determined by the light, so the calibration's fitted latency holds what the assumption misses;
 - the **presenter's files** (the run file, the logger's sensors) by the calibration presenter's run file, next to the
-  capture or in the export folder, as the Varjo's log alignment does. It is not used for the pupil: on the first
-  recording the presenter's computer was 1.5 s ahead of the Neon's phone, and the pupil placed by the run file responded
-  before the light. The difference between the two clocks is reported; sync both before a session.
+  capture or in the export folder, as the Varjo's log alignment does, its steps told apart by their colours (searched over
+  ±60 s). It is not used for the pupil directly: on 16 November the presenter's computer was 1.5 s ahead of the Neon's
+  phone, on 23 November 3.0 s behind;
+- the **pupil** by the calibration's gaze check, when the run file has one: the gaze's saccades to the dots give the
+  difference between the two clocks to a few tens of ms ([log alignment](../processing/log-alignment.md));
+- otherwise the **pupil** by its response: the lag at which the pupil's speed follows the picture's changes best, less an
+  assumed latency of 0.5 s. This needs a picture that changes (a calibration run). Only the sum of this offset and the
+  latency is determined by the light, so the calibration's fitted latency holds what the assumption misses.
+
+The difference between the two clocks is reported; sync both before a session.
+
+**Worn.** The Neon's `worn` flag is not used inside the headset: on 23 November 2026 it was 0 for half the samples,
+switching 457 times, with the eyelids open and the same pupil sizes. Blinks are still removed.
 
 **Gaze.** The Neon gives the gaze in its scene camera's image. Its direction (through the camera matrix) is placed in
-the capture as if the capture looked straight ahead with a field of 110° × 78° (the Quest 3's horizontal field; the
-16:9 capture's vertical one). The Neon's frame is fixed to the headset but not aligned with its view, so the gaze can be
-off: check it in the video preview ([open issue 61](../OPEN_ISSUES.md)).
+the capture through the capture's **projection**: where the head's directions fall in it. A capture over Link
+(`com.meta.pclinkservice.server`) covers **79° × 50°**, with the head's straight ahead at (0.510, 0.389) of the picture,
+above its middle (measured by the gaze check on 23 November 2026, to within 1 px); other captures are taken as 110° × 78°
+centred (nominal). The calibration's [gaze check](../processing/gaze-check.md) measures the session's own projection from
+its dots, and *From gaze check* → *Apply* (or `--save-projection`) saves it with the recording
+(`cwtool_capture_projection.json`), used from then on. The Neon's frame is fixed to the headset but not aligned with its
+view: the gaze check's offset, in the head's degrees, corrects that (on 23 November 1.8° left and 2.3° up, leaving 0.7°).
 
 **Luminance.** As for a display: relative, from the capture's pixels, scaled by the participant's calibration fit;
 no photometry is needed. The adapting field is the headset's, 110° × 96°.
@@ -165,5 +177,6 @@ the task; stop the Neon, then the capture. Put the capture and the run file next
 | Circular scene | no |
 | Rate | measured (nominally 200 Hz) |
 
-On the XR route (`pupil_neon_xr`): luminance from the display (the Quest's capture), field of view 110° × 78°
-(nominal, the capture), adapting field 110° × 96°.
+On the XR route (`pupil_neon_xr`): luminance from the display (the Quest's capture), field of view from the capture's
+projection (79° × 50° over Link, 110° × 78° nominal otherwise, or the one saved from a gaze check), adapting field
+110° × 96°.

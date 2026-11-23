@@ -40,8 +40,8 @@ sees what the analysis sees.
 | Red, green and blue weights | yes (a weak prior around 1, a relative balance with mean 1) | no |
 | Pupil offset | no: the model's level is the sensitivity's | yes: the sensor's luminance is not absolute enough |
 | Latency | from the constriction onsets at the brightening steps (at least 3), else fitted | same |
-| Dilation (slow part) and constriction τ | with *Include the time constants* (default); the fast part of the dilation (60 %, 1 s) is held fixed | same |
-| The fast part of the dilation (share, τ) | only when asked (`fit_dilation_parts`), with the time-course calibration | same |
+| Dilation (slow part) and constriction τ | with *Include the time constants* (default) | same; the fast part of the dilation (60 %, 1 s) is held fixed |
+| The fast part of the dilation (share, τ) | yes in XR (*Also fit the two parts of the dilation* on): with one dilation τ the Neon in a Quest's went to its limit (open issue 61) | only when asked (`fit_dilation_parts`), with the time-course calibration |
 | Transient and escape τ | only when asked | same |
 | Gamma, the display's black | only when asked | — |
 | Fixation weight | — | only when asked |

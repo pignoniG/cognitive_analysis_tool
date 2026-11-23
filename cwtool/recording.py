@@ -37,6 +37,9 @@ class DeviceProfile:
     # iris it does not measure (the Varjo's pupil is that ratio times a fixed 12 mm): a participant's measured iris
     # (``Parameters.iris_diameter``) then rescales the pupil. None: the device measures the pupil itself.
     assumed_iris: Optional[float] = None
+    # Where directions fall in the scene video when it is not the field of view centred (``cwtool.projection``: centre and
+    # focal length, normalised; a Quest capture, open issue 61). None: field_of_view, centred.
+    projection: Optional[tuple] = None
 
     @property
     def field_area(self) -> float:

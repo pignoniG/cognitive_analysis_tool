@@ -10,9 +10,18 @@ place this module
 2. takes the gaze in the same window (the median of the tracker's gaze, normalised to the video);
 3. gives the difference, dot minus gaze.
 
-The median difference over the places found, as an angle (through the device's field of view), is the offset that would
-move the gaze onto the dots; its spread and the residual after removing it
-say whether one offset is enough. Nothing is applied here: the operator decides (open issue 61).
+The median difference over the places found, as an angle, is the offset that would move the gaze onto the dots; its spread
+and the residual after removing it say whether one offset is enough. Nothing is applied here: the operator decides (open
+issue 61).
+
+In VR the presenter logs each place's direction from the head (``target_az_deg``, ``target_el_deg``) and the dot is fixed to
+the head, so (open issue 61, 23 November 2026):
+
+- the offset is measured in the head's degrees, between those directions and the gaze's, without going through the
+  video's assumed field of view (the gaze needs no dot found in the video);
+- the dots found in the video, at known directions, measure the video's projection (``cwtool.projection``): a Quest
+  capture over Link covers 79° × 50°, not centred on the head's straight ahead. It is reported, and saved with the
+  recording on request (``cwtool.devices.quest.save_projection``), so the gaze is placed through it from then on.
 
 This works when the dot is the only thing that changes between the places: a head-fixed dot in a headset's capture (Varjo,
 Quest), or a monitor seen by glasses' scene camera with the head still. A moving head shifts the background and lowers
@@ -21,7 +30,6 @@ the dots' contrast; places whose dot is not clear are left out and said.
 
 from __future__ import annotations
 
-import math
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -30,6 +38,7 @@ import cv2
 import numpy as np
 
 from cwtool import calibration
+from cwtool.projection import Projection, direction_to_angles, fit, of_profile
 from cwtool.recording import Recording
 from cwtool.video import FrameClock
 
@@ -41,6 +50,9 @@ MIN_CONTRAST = 6.0      # the dot's peak against the difference's robust noise (
 MIN_GAZE_SAMPLES = 20   # gaze samples a window needs
 MIN_PLACES = 3          # places needed for an offset
 NOISE_FLOOR = 1.0       # grey levels: the noise is never taken as smaller (a clean synthetic or static picture)
+MIN_PROJECTION_DOTS = 5         # dots at known directions needed to measure the video's projection
+MAX_PROJECTION_RESIDUAL = 0.01  # normalised widths: a projection that leaves the dots further off is not trusted
+PROJECTION_NOTE = (2.0, 0.01)   # deg of field, normalised centre: a measured projection this far from the one in use is news
 
 
 @dataclass
@@ -56,6 +68,8 @@ class Place:
     gaze: Optional[tuple]              # (x, y) median gaze in the window, None without enough samples
     gaze_spread: float                 # normalised: median distance of the gaze samples from their median
     samples: int
+    target_deg: Optional[tuple] = None  # picture angles (deg; right, down) of the place's logged direction (VR runs)
+    gaze_deg: Optional[tuple] = None    # picture angles of the median gaze, through the video's projection
 
     @property
     def difference(self) -> Optional[tuple]:
@@ -76,12 +90,18 @@ class GazeCheck:
     error_after_deg: float             # the same with the offset added
     source: str                        # the run file
     notes: list = field(default_factory=list)
+    applied_deg: Optional[tuple] = None   # the session's gaze offset already applied to the gaze compared
+    reference: str = "dots"            # what the gaze is compared with: "dots" (found in the video) or "directions" (logged)
+    projection: Optional[tuple] = None  # the video's projection measured from the dots (cx, cy, fx, fy), when it could be
+    projection_residual: float = float("nan")   # normalised: the dots' median distance from the fitted projection
+    projection_used: Optional[tuple] = None     # the projection the gaze was placed with
 
     @property
     def found(self) -> int:
+        if self.reference == "directions":
+            return sum(p.gaze is not None for p in self.places)
         return sum(p.difference is not None for p in self.places)
 
-    applied_deg: Optional[tuple] = None   # the session's gaze offset already applied to the gaze compared
 
     def summary(self) -> str:
         applied = (f" (with the session's offset of {self.applied_deg[0]:+.1f}° right, {self.applied_deg[1]:+.1f}° down "
@@ -89,9 +109,23 @@ class GazeCheck:
         if self.offset_deg is None:
             return f"gaze check{applied}: {self.found} of {len(self.places)} places usable, too few for an offset"
         dx, dy = self.offset_deg
-        return (f"gaze check{applied}: {self.found} of {len(self.places)} places; gaze off the dots by "
+        against = "the dots' directions" if self.reference == "directions" else "the dots"
+        text = (f"gaze check{applied}: {self.found} of {len(self.places)} places; gaze off {against} by "
                 f"{self.error_before_deg:.1f}° (median); a further {dx:+.1f}° right, {dy:+.1f}° down would leave "
                 f"{self.error_after_deg:.1f}° (places' spread {self.spread_deg:.1f}°)")
+        if self.projection_differs():
+            text += f"; the video's projection measured: {Projection.from_tuple(self.projection).describe()}"
+        return text
+
+    def projection_differs(self) -> bool:
+        """Whether the projection measured from the dots differs from the one the gaze was placed with."""
+        if self.projection is None:
+            return False
+        if self.projection_used is None:
+            return True
+        new, old = Projection.from_tuple(self.projection), Projection.from_tuple(self.projection_used)
+        field = max(abs(a - b) for a, b in zip(new.field_of_view, old.field_of_view))
+        return field > PROJECTION_NOTE[0] or max(abs(new.cx - old.cx), abs(new.cy - old.cy)) > PROJECTION_NOTE[1]
 
     def total_offset_deg(self) -> Optional[tuple]:
         """The session's offset that would put the gaze on the dots: the one applied plus the one found."""
@@ -116,18 +150,6 @@ def _run_file(rec: Recording) -> Optional[Path]:
         if found is not None and calibration.gaze_targets(found):
             return found
     return None
-
-
-def _angles(xy: np.ndarray, fov: tuple) -> np.ndarray:
-    """Normalised video coordinates as angles (deg; right, down) through a pinhole of field ``fov``."""
-    xy = np.asarray(xy, dtype=float)
-    tw, th = math.tan(math.radians(fov[0] / 2)), math.tan(math.radians(fov[1] / 2))
-    return np.degrees(np.column_stack([np.arctan((xy[..., 0] - 0.5) * 2 * tw), np.arctan((xy[..., 1] - 0.5) * 2 * th)]))
-
-
-def _distance_deg(a, b, fov) -> float:
-    pa, pb = _angles(np.atleast_2d(a), fov), _angles(np.atleast_2d(b), fov)
-    return float(np.hypot(*(pa - pb)[0]))
 
 
 def _window_frames(cap, clock: FrameClock, start: float, end: float, n_frames: int) -> Optional[np.ndarray]:
@@ -198,29 +220,33 @@ def check(rec: Recording, run_file: Optional[Path] = None, dot_deg: float = 1.6)
     finally:
         cap.release()
     means = [w[4] for w in windows if w[4] is not None]
-    if len(means) < MIN_PLACES:
+    directions = all(t.direction is not None for t in targets)
+    if len(means) < MIN_PLACES and not directions:
         return None, f"the video covers only {len(means)} of the gaze check's {len(targets)} places"
-    background = np.median(np.stack(means), axis=0)
-    fov = rec.profile.field_of_view
-    radius_px = background.shape[1] * (dot_deg / 2) / fov[0]
+    background = np.median(np.stack(means), axis=0) if len(means) >= MIN_PLACES else None
+    proj = of_profile(rec.profile)
+    fov = proj.field_of_view
+    radius_px = background.shape[1] * (dot_deg / 2) / fov[0] if background is not None else 0.0
 
     places, notes = [], []
     gaze = np.asarray(rec.gaze, dtype=float)
     time = np.asarray(rec.time, dtype=float)
     for k, t, start, end, mean in windows:
         dot, contrast = (None, 0.0)
-        if mean is not None:
+        if mean is not None and background is not None:
             dot, contrast = _find_dot(np.abs(mean - background), radius_px)
             if contrast < MIN_CONTRAST:
                 dot = None
         inside = (time >= start) & (time <= end) & np.isfinite(gaze).all(axis=1)
-        g, spread = None, float("nan")
+        g, spread, g_deg = None, float("nan"), None
         if inside.sum() >= MIN_GAZE_SAMPLES:
             g = tuple(float(v) for v in np.median(gaze[inside], axis=0))
             spread = float(np.median(np.hypot(*(gaze[inside] - g).T)))
-        places.append(Place(k + 1, t.u, t.v, float(start), float(end), dot, contrast, g, spread, int(inside.sum())))
+            g_deg = tuple(float(v) for v in proj.to_angles(np.array(g)))
+        target = tuple(float(v) for v in direction_to_angles(*t.direction)[0]) if t.direction is not None else None
+        places.append(Place(k + 1, t.u, t.v, float(start), float(end), dot, contrast, g, spread, int(inside.sum()),
+                            target, g_deg))
 
-    usable = [p for p in places if p.difference is not None]
     lost = [p.index for p in places if p.dot is None]
     if lost:
         notes.append(f"The dot was not clear in the video at places {', '.join(map(str, lost))} (a moving head, or the "
@@ -228,23 +254,45 @@ def check(rec: Recording, run_file: Optional[Path] = None, dot_deg: float = 1.6)
     no_gaze = [p.index for p in places if p.gaze is None]
     if no_gaze:
         notes.append(f"Too little gaze at places {', '.join(map(str, no_gaze))}.")
+
+    # The video's projection from the dots at known directions (VR): where the head's directions fall in the video.
+    measured, residual = None, float("nan")
+    with_dot = [(t.direction, p.dot) for t, p in zip(targets, places) if t.direction is not None and p.dot is not None]
+    if len(with_dot) >= MIN_PROJECTION_DOTS:
+        dirs = np.array([d for d, _ in with_dot])
+        if len(np.unique(dirs[:, 0])) >= 2 and len(np.unique(dirs[:, 1])) >= 2:
+            fitted, residual = fit(dirs, np.array([p for _, p in with_dot]))
+            if fitted.fx > 0 and fitted.fy > 0 and residual <= MAX_PROJECTION_RESIDUAL:
+                measured = fitted.as_tuple()
+            else:
+                notes.append(f"The dots do not fit one projection (median {residual:.3f} of the width off): the video's "
+                             "projection was not measured.")
+
+    # The offset is an angle (a tracker turned on the head, or in a headset, shifts the gaze by the same angle everywhere):
+    # each place's difference in picture angles, their median, and the error left when the gaze is moved by it as the
+    # session's offset would move it (:func:`shift_gaze`, an addition in picture angles). In VR the places' logged
+    # directions are the reference, in the head's degrees; otherwise the dots found, through the video's projection.
+    if directions:
+        usable = [p for p in places if p.gaze is not None]
+        reference = np.array([p.target_deg for p in usable]) if usable else np.zeros((0, 2))
+    else:
+        usable = [p for p in places if p.difference is not None]
+        reference = proj.to_angles(np.array([p.dot for p in usable])) if usable else np.zeros((0, 2))
+    kind = "directions" if directions else "dots"
     if len(usable) < MIN_PLACES:
         return GazeCheck(places, None, None, float("nan"), float("nan"), float("nan"), run_file.name, notes,
-                         rec.gaze_offset), f"only {len(usable)} places usable"
-    # The offset is an angle (a tracker turned on the head, or in a headset, shifts the gaze by the same angle everywhere):
-    # each place's difference in degrees, their median, and the error left when the gaze is moved by it as the session's
-    # offset would move it (:func:`shift_gaze`).
-    dots = np.array([p.dot for p in usable])
-    gazes = np.array([p.gaze for p in usable])
-    diffs_deg = _angles(dots, fov) - _angles(gazes, fov)
+                         applied_deg=rec.gaze_offset, reference=kind, projection=measured,
+                         projection_residual=residual, projection_used=proj.as_tuple()), f"only {len(usable)} places usable"
+    seen = np.array([p.gaze_deg for p in usable])
+    diffs_deg = reference - seen
     offset_deg = tuple(float(v) for v in np.median(diffs_deg, axis=0))
-    moved = shift_gaze(gazes, offset_deg, fov)
-    before = float(np.median([_distance_deg(d, g, fov) for d, g in zip(dots, gazes)]))
-    after = float(np.median([_distance_deg(d, g, fov) for d, g in zip(dots, moved)]))
-    spread = float(np.median(np.hypot(*(diffs_deg - offset_deg).T)))
-    centre = np.array([[0.5, 0.5]])
-    offset = tuple(float(v) for v in (shift_gaze(centre, offset_deg, fov) - centre)[0])
-    return GazeCheck(places, offset, offset_deg, spread, before, after, run_file.name, notes, rec.gaze_offset), "checked"
+    before = float(np.median(np.hypot(*diffs_deg.T)))
+    after = float(np.median(np.hypot(*(diffs_deg - offset_deg).T)))
+    centre = np.array([[proj.cx, proj.cy]])
+    offset = tuple(float(v) for v in (shift_gaze(centre, offset_deg, proj) - centre)[0])
+    return GazeCheck(places, offset, offset_deg, after, before, after, run_file.name, notes,
+                     applied_deg=rec.gaze_offset, reference=kind, projection=measured, projection_residual=residual,
+                     projection_used=proj.as_tuple()), "checked"
 
 
 # The operator's gaze offset, per recording (session): how a tracker sits on the head, or in a headset, changes between
@@ -279,13 +327,13 @@ def save_offset(folder: Path, offset_deg: Optional[tuple], source: str = "operat
     return path
 
 
-def shift_gaze(gaze: np.ndarray, offset_deg: tuple, fov: tuple) -> np.ndarray:
-    """Gaze in normalised video coordinates moved by ``offset_deg`` (deg; right, down), in angle through a pinhole of
-    field ``fov``, so the same offset is the same angle anywhere in the picture."""
+def shift_gaze(gaze: np.ndarray, offset_deg: tuple, projection) -> np.ndarray:
+    """Gaze in normalised video coordinates moved by ``offset_deg`` (deg; right, down) in picture angles, through
+    ``projection`` (a :class:`~cwtool.projection.Projection`, or a field of view centred), so the same offset is the same
+    angle anywhere in the picture."""
+    proj = projection if isinstance(projection, Projection) else Projection.from_fov(projection)
     gaze = np.asarray(gaze, dtype=float)
-    a = _angles(gaze.reshape(-1, 2), fov) + np.asarray(offset_deg, dtype=float)
-    tw, th = math.tan(math.radians(fov[0] / 2)), math.tan(math.radians(fov[1] / 2))
-    out = np.column_stack([0.5 + np.tan(np.radians(a[:, 0])) / (2 * tw), 0.5 + np.tan(np.radians(a[:, 1])) / (2 * th)])
+    out = proj.from_angles(proj.to_angles(gaze.reshape(-1, 2)) + np.asarray(offset_deg, dtype=float))
     return out.reshape(gaze.shape)
 
 
@@ -296,6 +344,6 @@ def apply_offset(rec: Recording, offset_deg: Optional[tuple] = None) -> Recordin
     if offset is None or tuple(offset) == (0.0, 0.0):
         return rec
     dx, dy = offset
-    return replace(rec, gaze=shift_gaze(rec.gaze, offset, rec.profile.field_of_view), gaze_offset=(float(dx), float(dy)),
+    return replace(rec, gaze=shift_gaze(rec.gaze, offset, of_profile(rec.profile)), gaze_offset=(float(dx), float(dy)),
                    notes=list(rec.notes) + [f"The gaze is moved by {dx:+.2f}° right, {dy:+.2f}° down (the session's gaze "
                                             f"offset, {OFFSET_FILE})."])

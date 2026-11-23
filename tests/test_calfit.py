@@ -154,9 +154,11 @@ def test_a_two_part_dilation_is_followed(tmp_path):
                                    pupil_mm=lambda x: float(pd[min(int(x * rate), len(t) - 1)]))
     rec = devices.load(folder)
     video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec))
-    two = calfit.fit_calibration(rec, video, replace(p, constriction_stages=1), PHOTO.LEAD, seq, fit_gains=False)
+    # the parts held (XR frees them by default; freed, the one-τ start finds the fast part and fits as well)
+    two = calfit.fit_calibration(rec, video, replace(p, constriction_stages=1), PHOTO.LEAD, seq, fit_gains=False,
+                                 fit_dilation_parts=False)
     one = calfit.fit_calibration(rec, video, replace(p, constriction_stages=1, dilation_fast_share=0.0), PHOTO.LEAD, seq,
-                                 fit_gains=False)
+                                 fit_gains=False, fit_dilation_parts=False)
     assert two.values["attack"] == pytest.approx(20.0, rel=0.3)
     assert two.values["sensitivity"] == pytest.approx(3.0, rel=0.15)
     assert two.fit_rms_after < 0.05 and two.fit_rms_after < one.fit_rms_after / 2

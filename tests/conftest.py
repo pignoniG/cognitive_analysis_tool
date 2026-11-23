@@ -3,6 +3,7 @@ isolated settings file for the GUI tests.
 """
 
 import csv
+import importlib.util
 from pathlib import Path
 
 import cv2
@@ -10,6 +11,16 @@ import numpy as np
 import pytest
 
 
+def _has_neurokit() -> bool:
+    try:
+        return importlib.util.find_spec("neurokit2") is not None
+    except ValueError:          # in sys.modules as None: blocked
+        return False
+
+
+# The tests that detect R peaks need NeuroKit2 (the hrv extra): without it they are skipped, and the app's would wait on
+# its "install NeuroKit2" dialog.
+needs_neurokit = pytest.mark.skipif(not _has_neurokit(), reason='needs NeuroKit2: pip install "cwtool[hrv]"')
 
 # Header of a Varjo Base eye tracking export (April 2026).
 VARJO_HEADER = (

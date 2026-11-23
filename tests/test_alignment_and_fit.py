@@ -258,3 +258,11 @@ def test_anticipated_constrictions_are_left_out_of_the_latency(tmp_path):
     fit = fit_calibration(rec, video, params, start=0.0, sequence=seq)
     assert fit.delay == pytest.approx(true_delay, abs=0.05)
     assert any("left out of the latency" in n and n.startswith("2 ") for n in fit.notes)
+
+
+def test_the_two_parts_of_the_dilation_are_fitted_by_default_in_xr_only():
+    from types import SimpleNamespace
+    from cwtool.calfit import dilation_parts_by_default
+    assert dilation_parts_by_default(SimpleNamespace(profile=varjo.PROFILE))
+    glasses = SimpleNamespace(profile=SimpleNamespace(luminance_source="lux_sensor"))
+    assert not dilation_parts_by_default(glasses)

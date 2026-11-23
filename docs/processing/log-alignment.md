@@ -15,7 +15,12 @@ The pupil model itself is not affected: it takes its luminance from the video, s
    calibration presenter's run file, in the recording's folder (the n-back log has onset times too, but they are digits, not
    changes of the picture, and are not used).
 2. **A first guess.** The changes of the picture are found in the video, and the offset (searched over ±5 s, the smaller on a
-   tie) at which most logged changes have a video change beside them is taken.
+   tie) at which most logged changes have a video change beside them is taken. When the calibration presenter's run file
+   gives each step's colour, the search reaches **±60 s** and an offset counts only if the picture after the changes has the
+   logged colours (their correlation over the steps and channels, at least 0.6; the picture's median from 0.3 to 2 s after
+   each change), weighted by how well: steps of one length also line up one step away, and the colours tell them apart. On 23
+   November 2026 a capture whose start was 10.5 s from the one assumed was placed 8.01 s away by the ±5 s search, with 22 of
+   34 changes agreeing to 5 ms ([open issue 61](../OPEN_ISSUES.md)).
 3. **Each change.** For every logged change the luminance of the video's background area before and after is measured (the
    median of the stretch from 3 s to 0.8 s before, and from 0.8 s to 3 s after, kept within the neighbouring steps), and the
    moment it crosses the middle of the two levels is found, to better than the video's frame. Changes of less than 10 code
@@ -23,7 +28,8 @@ The pupil model itself is not affected: it takes its luminance from the video, s
 4. **The estimate.** The median of the offsets (those further than 5 robust standard deviations are dropped), its standard
    error (never below 5 ms, below a frame nothing can be claimed), the spread, and the slope over the recording (Theil–Sen,
    reported; the constant median is the offset used). At least 5 changes are needed; if the log is not found in the video
-   (it belongs to another recording, or the clocks are more than 5 s apart) nothing is done and the window says why.
+   (it belongs to another recording, or the clocks are further apart than the search) nothing is done and the window says
+   why.
 
 ## What it changes
 
@@ -44,14 +50,22 @@ and the presenter's log on its computer's ([Neon inside a Meta Quest](../devices
 clocks, and the first recording showed the computer's 1.5 s ahead of the phone's: aligned by the run file, the pupil's response
 came before the light (the fitted latency went to zero and the fit got worse, 0.36 against 0.24 mm). So:
 
-- **the pupil** (and the tracker's own events) is placed on the capture by **its response** to the picture;
 - **what the computer wrote** (the run file, the logger's lux and sensors, the exported Unix times) by the run file's own offset,
-  when a run file is next to the capture or the export; the difference between the two is reported as the clocks' difference.
+  when a run file is next to the capture or the export;
+- **the pupil** (and the tracker's own events), when the run file ends with the [gaze check](gaze-check.md), by **the gaze's
+  saccades** to its dots: the gaze (on the tracker's clock) is matched to the logged places (on the computer's), first by its
+  correlation with them over ±20 s, then saccade by saccade, at the moment it is half-way from one place to the next. The
+  median of those moments after the logged onsets, less a saccade latency of 0.2 s, is how far the tracker's clock is ahead
+  of the computer's; at least 4 saccades agreeing within 0.15 s (robust SD) are needed. A saccade's latency is short and
+  steady, unlike the pupil's, so the pupil's offset is no longer confounded with its latency. On 23 November 2026 the 8
+  saccades came 3.191 s after the onsets (SD 0.017 s): the phone 3.0 s ahead of the computer;
+- otherwise the pupil by **its response** to the picture.
 
-Only when the pupil's response cannot be used (a picture that hardly changes) does the run file place the pupil too, with a
-warning that it assumes the two clocks agree. The pupil's response is estimated as follows: the lag at which the pupil's speed best follows the changes of the picture's log luminance (low-passed with
-0.4 s), searched from −2.5 to +3.5 s, less an assumed latency of 0.5 s; its uncertainty is half the width of the correlation's
-peak. It needs at least 5 large changes of the picture and a correlation of 0.2, and it is coarser: the fitted latency of the
+The difference between the computer's and the tracker's clocks is reported. Only when neither the gaze check nor the pupil's
+response can be used (a picture that hardly changes) does the run file place the pupil too, with a warning that it assumes
+the two clocks agree. The pupil's response is estimated as follows: the lag at which the pupil's speed best follows the changes of the picture's log luminance (low-passed with
+0.4 s), searched from −8 to +8 s (the name's second and the clocks' difference: 3 s on 23 November), less an assumed latency
+of 0.5 s; its uncertainty is half the width of the correlation's peak. It needs at least 5 large changes of the picture and a correlation of 0.2, and it is coarser: the fitted latency of the
 calibration then holds what the assumed one misses. The switch reads *Align the capture to the pupil* for these recordings.
 
 ## In the window and on the command line

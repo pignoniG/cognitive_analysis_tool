@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog  # noqa: E402
 
 from cwtool.gui.main_window import MainWindow  # noqa: E402
 from cwtool.trim import TRIM_FILE, Trim  # noqa: E402
-from conftest import write_varjo_recording  # noqa: E402
+from conftest import needs_neurokit, write_varjo_recording  # noqa: E402
 from test_export_package import write_session  # noqa: E402
 
 
@@ -186,6 +186,7 @@ def test_the_hrv_button_needs_an_ecg_and_a_low_rate_ecg_is_flagged(app, window):
     assert not w.hrv_button.isEnabled()
 
 
+@needs_neurokit
 def test_compute_hrv_shows_the_table_and_the_beats_and_the_export_uses_them(app, window, monkeypatch):
     from cwtool import hrv, pipeline
     from cwtool.recording import Event

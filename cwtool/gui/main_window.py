@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import traceback
+from datetime import datetime
 from dataclasses import asdict, replace
 from functools import partial
 from pathlib import Path
@@ -11,7 +12,7 @@ import numpy as np
 from PySide6.QtCore import QSettings, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QKeySequence, QPalette
 from PySide6.QtWidgets import QWidgetAction
-from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox,
+from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox,
                                QHBoxLayout, QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu,
                                QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget,
                                QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
@@ -20,6 +21,7 @@ from cwtool import __version__, alignment, calfit, calibration, devices, gazeche
 from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.icons import icon, tinted
+from cwtool.gui.open_progress import OpenProgress
 from cwtool.gui.side_panel import breakable, PreviewHolder, Rail, Step
 from cwtool.gui.trim_panel import TrimPanel
 from cwtool.gui.plots import ResultPlots, rms_in
@@ -27,7 +29,7 @@ from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
 from cwtool.params import DISPLAY_FIELDS, DeviceMismatch, DisplayPhotometry, Parameters
 from cwtool.trim import TRIM_FILE, Trim
-from cwtool.video import VideoResult, analyse_video
+from cwtool.video import CACHE_JSON, VideoResult, analyse_video
 
 RECOMPUTE_DELAY_MS = 150
 # Signals shown when sensor data is imported (the ECG channel of a Shimmer, the EmotiBit's EDA and PPG), the first
@@ -42,6 +44,20 @@ HRV_COLUMNS = (("Window", "label", "{}"), ("s", "seconds", "{:.0f}"), ("HR", "me
 
 # Median distance (deg) between gaze and the gaze check's dots above which the check is shown as a warning.
 GAZE_CHECK_NOTE_DEG = 2.0
+
+
+def _frame_count(rec) -> int | None:
+    """The scene video's frame count, for the progress of its analysis; None if it cannot be read quickly."""
+    if rec.scene_frame_times is not None:
+        return len(rec.scene_frame_times)
+    try:
+        import cv2
+        capture = cv2.VideoCapture(str(rec.scene_video))
+        frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        capture.release()
+        return frames or None
+    except Exception:
+        return None
 
 
 def route_badge(rec) -> str:
@@ -378,7 +394,9 @@ class MainWindow(QMainWindow):
         self.fit_parts_check = QCheckBox("Also fit the two parts of the dilation")
         self.fit_parts_check.setToolTip("Fit the share and the time constant of the dilation's fast part too (otherwise held at "
                                         "60 % and 1 s). Only a sequence that dims after moderate as well as after bright "
-                                        "light determines them: the time-course calibration (open issue 56)")
+                                        "light determines them: the time-course calibration (open issue 56). On by "
+                                        "default for XR recordings: on the Neon in a Quest one dilation time constant "
+                                        "went to its limit (open issue 61)")
         self.fit_gamma_check = QCheckBox("Also fit gamma")
         self.fit_gamma_check.setToolTip("Fit the display gamma from the spacing of the grey steps (usually weakly "
                                         "determined; keep the nominal value unless it clearly fails)")
@@ -518,7 +536,18 @@ class MainWindow(QMainWindow):
         self.trim_panel.cursor_time = self.plots.cursor_time
         right_layout.addLayout(strip)
         right_layout.addWidget(self.warnings_label)
-        right_layout.addWidget(self.plots, 1)
+        # Opening a recording shows its steps where the plots will be, until the first result
+        # (over the plots, which keep their size and layout underneath)
+        self.open_panel = OpenProgress()
+        self.open_panel.cancel_requested.connect(self.cancel_task)
+        self.open_panel.setAutoFillBackground(True)
+        self.open_panel.hide()
+        plot_area = QWidget()
+        overlap = QGridLayout(plot_area)
+        overlap.setContentsMargins(0, 0, 0, 0)
+        overlap.addWidget(self.plots, 0, 0)
+        overlap.addWidget(self.open_panel, 0, 0)
+        right_layout.addWidget(plot_area, 1)
         # the plots are switched on and off from three drop-downs under them; the choices are checkable actions
         self.plots_bar = QWidget()
         bar = QHBoxLayout(self.plots_bar)
@@ -824,7 +853,33 @@ class MainWindow(QMainWindow):
             """Background task: read the recording."""
             return devices.load(folder, lux_folder=lux_folder)
 
+        self._show_opening(f"Opening {folder.name}")
+        self.open_panel.start("read", str(folder))
         self._start_task(load, self._recording_loaded, f"Loading {folder.name}…")
+
+    def _show_opening(self, title: str, done: tuple = ()) -> None:
+        """Show the steps of opening a recording in the plot area (``done``: steps already ticked)."""
+        self.open_panel.begin(title, done)
+        self.open_panel.show()
+        self.open_panel.raise_()
+
+    def _opening_steps_done(self, rec) -> tuple:
+        """The reading and video steps of the open recording, ticked, with what they found."""
+        duration = rec.time[-1] - rec.time[0] if len(rec.time) else 0
+        read = f"{rec.device}, {duration / 60:.1f} min, {len(rec.time):,} samples".replace(",", " ")
+        how = f" ({rec.route})" if rec.route else ""
+        return (("read", read), ("video", f"{rec.scene_video.name}{how}")) if rec.scene_video is not None \
+            else (("read", read),)
+
+    @staticmethod
+    def _missing_video(rec) -> str:
+        """Why the recording has no scene video, and where it was looked for."""
+        if "Quest" in rec.route:
+            return (f"No Quest capture found in {rec.folder} or {rec.folder.parent}. A capture is recognised by the name "
+                    "the Quest gives it (com.meta.pclinkservice.server-…-0.mp4, com.oculus.…): a renamed capture is not "
+                    "found. Nothing can be analysed without it.")
+        return f"No scene video found in {rec.folder}. Nothing can be analysed without it."
+
 
     def _recording_loaded(self, rec) -> None:
         previous_device = self._params_device
@@ -832,6 +887,8 @@ class MainWindow(QMainWindow):
         self.recording, self.video, self.result = rec, None, None
         self._raw_recording, self.log_alignment, self._alignment_message = rec, None, ""
         self.gaze_check, self._gaze_check_message = None, ""
+        self._staged_projection = None
+        self.fit_parts_check.setChecked(calfit.dilation_parts_by_default(rec))
         self._show_gaze_offset(rec)
         self.gaze_from_check.setEnabled(False)
         self.align_check.setVisible(alignment.applicable(rec))
@@ -878,8 +935,12 @@ class MainWindow(QMainWindow):
         if len(rec.time):
             self.plots.set_cursor(float(rec.time[0]))
         self._update_state()
+        steps = self._opening_steps_done(rec)
+        for key, detail in steps:
+            self.open_panel.done(key, detail)
         if rec.scene_video is None:
             self.video_label.setText("No scene video found in this recording.")
+            self.open_panel.failed("video", self._missing_video(rec))
         else:
             self.analyse(use_cache=True)
 
@@ -889,10 +950,17 @@ class MainWindow(QMainWindow):
         """
         rec = self.recording
         settings = self.params_panel.video_settings().for_recording(rec)
+        if self.open_panel.states.get("video") != "done" or self.open_panel.states.get("analyse") != "pending":
+            self._show_opening(f"Analysing {rec.name}", self._opening_steps_done(rec))   # not part of an opening
         if use_cache:
             cached = VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times,
                                              rec.gaze)
             if cached is not None:
+                try:
+                    saved = datetime.fromtimestamp((rec.folder / CACHE_JSON).stat().st_mtime).strftime("%d %B %Y, %H:%M")
+                except OSError:
+                    saved = "earlier"
+                self.open_panel.done("analyse", f"using the saved analysis from {saved}")
                 self._video_ready(cached, "cached analysis")
                 return
 
@@ -905,13 +973,49 @@ class MainWindow(QMainWindow):
             res.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze)
             return res
 
-        self._start_task(work, lambda res: res and self._video_ready(res, "analysed"),
-                         f"Analysing {rec.scene_video.name}…", show_progress=True, cancellable=True)
+        self.open_panel.start_analysis(_frame_count(rec))
+        self._start_task(work, lambda res: res and self._analysed(res),
+                         f"Analysing {rec.scene_video.name}…", show_progress=True, cancellable=True,
+                         on_progress=self.open_panel.set_fraction)
+
+    def _analysed(self, video: VideoResult) -> None:
+        self.open_panel.done("analyse", f"{len(video.time):,} samples analysed".replace(",", " "))
+        self._video_ready(video, "analysed")
 
     def _video_ready(self, video: VideoResult, how: str) -> None:
+        """The video is analysed: align, check the gaze and compute the first result in the background, then show them."""
+        raw, align_on, params = self._raw_recording, self.align_check.isChecked(), self.params_panel.params()
+        self.open_panel.start("align")
+
+        def work(progress, cancelled):
+            """Background task: the alignment, the gaze check and the first result."""
+            found = self._alignment_work(raw, video, align_on)
+            try:
+                return found, pipeline.run(found[2], video, params), None
+            except Exception as e:
+                return found, None, (e, traceback.format_exc())
+
+        self._start_task(work, lambda out: self._opened(video, params, *out), "Aligning and checking the gaze…")
+
+    def _opened(self, video: VideoResult, params: Parameters, found: tuple, result, error) -> None:
+        """Show the alignment, the gaze check and the first result found in the background."""
+        if self._raw_recording is None or found[2].folder != self._raw_recording.folder:
+            return                                   # another recording was opened meanwhile
         self.video = video
-        self._apply_alignment()
-        self.recompute()
+        self._show_alignment(*found)
+        al, message, _, checked, check_message = found
+        lines = [al.summary() if al is not None else (f"log not aligned: {message}" if message else "nothing to align")]
+        lines.append(checked.summary() if checked is not None else (check_message or "no gaze check"))
+        self.open_panel.done("align", "\n".join(lines))
+        if self.params_panel.params() != params:     # edited meanwhile
+            self.recompute()
+        else:
+            self._show_result(result, error)
+        if self.result is not None:
+            self.open_panel.done("result")
+            self.open_panel.hide()
+        else:
+            self.open_panel.failed("result", str(error[0]) if error else "the analysis gave no result")
         self._update_state()
 
     def _video_text(self) -> str:
@@ -935,16 +1039,27 @@ class MainWindow(QMainWindow):
         raw = self._raw_recording
         if raw is None or self.video is None:
             return
+        self._show_alignment(*self._alignment_work(raw, self.video, self.align_check.isChecked()))
+
+    @staticmethod
+    def _alignment_work(raw, video: VideoResult, align_on: bool) -> tuple:
+        """The alignment, the aligned recording and its gaze check: (alignment, its message, aligned recording, gaze check,
+        its message). No widgets: it also runs in the background."""
         al, message = None, ""
-        if self.align_check.isChecked() and alignment.applicable(raw):
-            al, message = alignment.find(raw, self.video)
-        self.log_alignment, self._alignment_message = al, message
+        if align_on and alignment.applicable(raw):
+            al, message = alignment.find(raw, video)
         aligned = alignment.align(raw, al) if al is not None else raw
-        checked, self._gaze_check_message = gazecheck.check(aligned)
-        self.gaze_check = checked
-        self.gaze_from_check.setEnabled(checked is not None and checked.total_offset_deg() is not None)
+        checked, check_message = gazecheck.check(aligned)
         if checked is not None:
             aligned = replace(aligned, gaze_check=checked.as_dict())
+        return al, message, aligned, checked, check_message
+
+    def _show_alignment(self, al, message: str, aligned, checked, check_message: str) -> None:
+        """Use the alignment and the gaze check found by :meth:`_alignment_work`."""
+        self.log_alignment, self._alignment_message = al, message
+        self._gaze_check_message = check_message
+        self.gaze_check = checked
+        self.gaze_from_check.setEnabled(checked is not None and checked.total_offset_deg() is not None)
         if aligned is not self.recording:
             self.recording = aligned
             self.plots.show_events(aligned.events)
@@ -972,7 +1087,9 @@ class MainWindow(QMainWindow):
             box.setSuffix(f"° {name}")
             box.valueChanged.connect(self._gaze_offset_edited)
         self.gaze_from_check = QPushButton("From gaze check")
-        self.gaze_from_check.setToolTip("Fill in the offset the gaze check found (added to the one applied now)")
+        self.gaze_from_check.setToolTip("Fill in the offset the gaze check found (added to the one applied now); in a "
+                                        "headset's capture also the capture's projection measured from the dots, saved "
+                                        "on Apply")
         self.gaze_from_check.clicked.connect(self._gaze_offset_from_check)
         self.gaze_apply = QPushButton("Apply")
         self.gaze_apply.setToolTip("Save the offset with the recording and analyse the video again with the moved gaze")
@@ -1010,6 +1127,12 @@ class MainWindow(QMainWindow):
         if total is not None:
             self.gaze_dx.setValue(total[0])
             self.gaze_dy.setValue(total[1])
+        # A headset capture's projection measured from the dots goes with it, saved on Apply (open issue 61).
+        rec = self._raw_recording
+        self._staged_projection = check.projection if check is not None and check.projection_differs() and \
+            rec is not None and rec.separate_video_clock else None
+        if self._staged_projection is not None:
+            self.gaze_apply.setEnabled(True)
 
     def _apply_gaze_offset(self) -> None:
         rec = self._raw_recording
@@ -1019,6 +1142,12 @@ class MainWindow(QMainWindow):
             all(abs(a - b) < 0.005 for a, b in zip(self.gaze_check.total_offset_deg(), (self.gaze_dx.value(), self.gaze_dy.value()))) \
             else "operator"
         gazecheck.save_offset(rec.folder, (self.gaze_dx.value(), self.gaze_dy.value()), source)
+        staged = getattr(self, "_staged_projection", None)
+        if staged is not None:
+            from cwtool.devices import quest
+            from cwtool.projection import Projection
+            quest.save_projection(rec.folder, Projection.from_tuple(staged))
+            self._staged_projection = None
         if self._task is not None and self._task.isRunning():      # an analysis of the old gaze is of no use now
             self.cancel_task()
             self._task.wait(30000)
@@ -1040,11 +1169,13 @@ class MainWindow(QMainWindow):
     # Tasks
 
     def _start_task(self, fn, on_success, message: str, show_progress: bool = False, bar=None,
-                    cancellable: bool = False) -> None:
+                    cancellable: bool = False, on_progress=None) -> None:
         """Run ``fn(progress, cancelled)`` in the background; ``bar`` is the progress bar to drive (default: the video
         analysis' one in the Data tab). The Cancel button is offered only for a task that checks ``cancelled``."""
         if self._task is not None and self._task.isRunning():
-            return
+            if not self._task.finishing:
+                return
+            self._task.wait(5000)            # it reported and is returning: this task follows from its report
         self.statusBar().showMessage(message)
         self._task_message = message
         self._task_cancellable = cancellable
@@ -1052,6 +1183,8 @@ class MainWindow(QMainWindow):
         self._task = Task(fn, self)
         self._bar = bar or self.progress
         self._task.progressed.connect(lambda p: self._bar.setValue(int(p * 1000)))
+        if on_progress is not None:
+            self._task.progressed.connect(on_progress)
         self._task.succeeded.connect(on_success)
         self._task.failed.connect(self._task_failed)
         self._task.finished.connect(self._task_finished)
@@ -1064,10 +1197,15 @@ class MainWindow(QMainWindow):
         """A background task raised: tell the user, except when it only stopped because they cancelled it."""
         if self._task is not None and self._task.is_cancelled():
             return
+        step = self.open_panel.running()
+        if step is not None:
+            self.open_panel.failed(step, errors.split_message(message)[0])
         self._error("Error", message)
 
     def _task_finished(self) -> None:
         if self._task is not None and self._task.is_cancelled():
+            if self.open_panel.running() is not None:
+                self.open_panel.cancelled("Cancelled: press Analyse video to start again.")
             self.statusBar().showMessage("Cancelled.", 4000)
             self._task_message = None
         self.progress.hide()
@@ -1094,16 +1232,25 @@ class MainWindow(QMainWindow):
         if self.recording is None or self.video is None:
             return
         try:
-            self.result = pipeline.run(self.recording, self.video, self.params_panel.params())
+            result, error = pipeline.run(self.recording, self.video, self.params_panel.params()), None
         except Exception as e:
+            result, error = None, (e, traceback.format_exc())
+        self._show_result(result, error)
+
+    def _show_result(self, result, error) -> None:
+        """Show a result of the pipeline, or its failure ``(exception, traceback)``."""
+        if error is not None:
+            e, trace = error
             self.result = None
             self.statusBar().showMessage(f"Analysis failed: {e}")
             self.plots.clear_result()
             if str(e) != self._last_failure:       # one box per cause, not one per edit of the parameters
                 self._last_failure = str(e)
-                self._error("The analysis failed", f"{e}\n\n{traceback.format_exc()}")
+                self._error("The analysis failed", f"{e}\n\n{trace}")
         else:
+            self.result = result
             self._last_failure = None
+            self.open_panel.hide()
             self.plots.show_result(self.result)
             self.plot_checks["ratio"].setEnabled(self.plots.ratio_available())
             self._update_sequence_rms()

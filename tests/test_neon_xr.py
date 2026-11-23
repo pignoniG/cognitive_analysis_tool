@@ -50,11 +50,12 @@ def test_gaze_straight_ahead_is_the_middle_of_the_capture():
     assert xy[2] == pytest.approx([0.5, 1.0])               # half the field down: the bottom edge
 
 
-def _xr_recording(tmp_path, frame_name="Quest3 XR", capture_offset=0.4, with_capture=True):
+def _xr_recording(tmp_path, frame_name="Quest3 XR", capture_offset=0.4, with_capture=True, app="com.oculus.vrshell",
+                  **neon):
     """A Cloud Neon export in a folder whose parent holds a Quest capture started ``capture_offset`` s after the Neon's
     first eye sample (the name is truncated to the second, as the Quest writes it)."""
     local = datetime.fromtimestamp(START_NS / 1e9).strftime("%Y-%m-%d_%H-%M-%S")    # the export is named in local time
-    folder = write_neon_recording(tmp_path / "session" / f"{local}-a1b2c3d4", GRAYS, FRAME_TIMES)
+    folder = write_neon_recording(tmp_path / "session" / f"{local}-a1b2c3d4", GRAYS, FRAME_TIMES, **neon)
     info = json.loads((folder / "info.json").read_text())
     if frame_name:
         info["frame_name"] = frame_name
@@ -62,7 +63,7 @@ def _xr_recording(tmp_path, frame_name="Quest3 XR", capture_offset=0.4, with_cap
     capture = None
     if with_capture:
         start = START_NS / 1e9 + capture_offset
-        capture = _write_capture(folder.parent / _capture_name(start), [10] * 30 + [250] * 30)
+        capture = _write_capture(folder.parent / _capture_name(start, app), [10] * 30 + [250] * 30)
     return folder, capture
 
 
@@ -81,6 +82,39 @@ def test_the_capture_next_to_the_recording_makes_it_xr(tmp_path):
     ok = np.isfinite(rec.gaze[:, 0])
     assert ok.any() and np.allclose(rec.gaze[ok], rec.gaze[ok][0])   # a constant gaze stays constant
     assert any("Neon inside a headset" in n for n in rec.notes)
+    assert rec.profile.projection == pytest.approx(quest.NOMINAL_PROJECTION.as_tuple())    # not a Link capture: nominal
+
+
+def test_the_worn_flag_is_not_used_in_a_headset(tmp_path):
+    """Inside the Quest frame the flag was 0 for half the samples with the eyes open (open issue 61): it is not used there,
+    while glasses still drop the samples it marks."""
+    folder, _ = _xr_recording(tmp_path, not_worn=[(0.5, 1.5)])
+    rec = devices.load(folder)
+    assert np.isfinite(rec.pupil_left).mean() > 0.95
+    assert any("'worn' flag is not used" in n for n in rec.notes)
+    glasses = devices.load(write_neon_recording(tmp_path / "glasses", GRAYS, FRAME_TIMES, not_worn=[(0.5, 1.5)]))
+    assert np.isfinite(glasses.pupil_left).mean() < 0.8
+
+
+def test_a_link_capture_has_its_measured_projection_and_a_saved_one_wins(tmp_path):
+    from cwtool.projection import Projection
+    folder, _ = _xr_recording(tmp_path, app="com.meta.pclinkservice.server")
+    rec = devices.load(folder)
+    assert rec.profile.projection == pytest.approx(quest.LINK_PROJECTION.as_tuple())
+    assert rec.profile.field_of_view == pytest.approx((79.3, 50.0), abs=0.5)
+    assert any("Link capture's measured" in n for n in rec.notes)
+    straight = quest.gaze_to_capture(np.array([0.0]), np.array([0.0]), quest.LINK_PROJECTION)[0]
+    assert straight == pytest.approx([0.5097, 0.3887])               # the head's straight ahead is above the middle
+    saved = Projection(0.5, 0.45, 0.6, 1.0)
+    quest.save_projection(folder, saved)
+    assert quest.load_projection(folder) == saved
+    again = devices.load(folder)
+    assert again.profile.projection == pytest.approx(saved.as_tuple())
+    assert any("measured by a gaze check" in n for n in again.notes)
+    ok = np.isfinite(rec.gaze[:, 0]) & np.isfinite(again.gaze[:, 0])
+    assert not np.allclose(rec.gaze[ok], again.gaze[ok])
+    quest.save_projection(folder, None)
+    assert quest.load_projection(folder) is None
 
 
 def test_a_headset_frame_without_a_capture_says_so(tmp_path):
@@ -205,3 +239,44 @@ def test_a_run_file_on_another_clock_moves_only_the_computers_files(tmp_path):
     assert moved.time[0] == pytest.approx(found.offset)                          # the pupil by its own offset
     assert moved.epoch_start == pytest.approx(epoch - found.log_offset)          # the computer's files by the log's
     assert moved.lux_time[0] == pytest.approx(10.0 + found.log_offset)
+
+
+def test_the_gaze_checks_saccades_place_the_pupil(tmp_path):
+    """The presenter's computer is 3 s behind the tracker's phone (as on 23 November 2026) and the capture's name 12 s off:
+    the run file's colours place the capture on the computer's clock (beyond the old ±5 s search), and the gaze check's
+    saccades, 0.2 s after each dot, give the clocks' difference, so the pupil is placed without the pupil's latency."""
+    from cwtool.devices import neon
+    from cwtool.recording import DeviceProfile, Recording
+    rng = np.random.default_rng(5)
+    epoch, log_offset, tracker_ahead = 1_700_000_000.0, 12.0, 3.0
+    seconds = [20.0 + 8.0 * k for k in range(30)]                          # on the capture's clock
+    levels = [0.0 if k % 2 == 0 else float(rng.uniform(0.1, 1.0)) for k in range(30)]
+    places = [(0, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0)]
+    first = seconds[-1] + 9.0
+    gaze_at = [first + 3.0 * k for k in range(len(places))]
+    video = _video(levels + [0.2], seconds + [first - 1.0], end=gaze_at[-1] + 6.0)
+    rows = ["time,duration,r,g,b,label,onset_unix_ms,phase,target_u,target_v,target_az_deg,target_el_deg"]
+    for k, (s, y) in enumerate(zip(seconds, levels)):
+        code = round(max(y, 0.0) ** (1 / 2.2) * 255)
+        rows.append(f"{s},8,{code},{code},{code},step {k},{(epoch + s - log_offset) * 1000:.3f},light,,,,")
+    for k, ((u, v), s) in enumerate(zip(places, gaze_at)):
+        rows.append(f"{s},3,128,128,128,Gaze target {k + 1},{(epoch + s - log_offset) * 1000:.3f},gaze,{u},{v},{15 * u},"
+                    f"{-12 * v}")
+    (tmp_path / "calibration_run_x.csv").write_text("\n".join(rows) + "\n")
+    t = np.arange(0, gaze_at[-1] + 6.0, 1 / 200)                           # the tracker's clock
+    gaze = np.full((len(t), 2), 0.5)
+    for (u, v), s in zip(places, gaze_at):
+        reached = s - log_offset + tracker_ahead + alignment.SACCADE_LATENCY
+        gaze[t >= reached] = (0.5 + 0.1 * u, 0.5 + 0.1 * v)
+    gaze += rng.normal(0, 0.003, gaze.shape)
+    rec = Recording(name="x", profile=DeviceProfile(name=neon.XR_NAME, pupil_unit="mm", pupil_scale=1.0,
+                                                    luminance_source="display", field_of_view=quest.CAPTURE_FOV),
+                    folder=tmp_path, time=t, epoch_start=epoch, pupil_left=np.full(len(t), 4.0),
+                    pupil_right=np.full(len(t), 4.0), gaze=gaze, separate_video_clock=True)
+    found, message = alignment.find(rec, video)
+    assert found is not None and found.source == alignment.GAZE_SOURCE, message
+    assert found.log_offset == pytest.approx(log_offset, abs=0.03)
+    assert found.offset == pytest.approx(log_offset - tracker_ahead, abs=0.03)
+    assert found.clock_difference == pytest.approx(-tracker_ahead, abs=0.03) and found.n == 8
+    assert "gaze check's 8 saccades" in found.summary()
+    assert any("behind the tracker's" in n for n in found.notes())

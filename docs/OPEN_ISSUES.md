@@ -1534,7 +1534,88 @@ is revised; they remain in the git history of this file.
   `gaze_step_s`); a tone (880 Hz, 0.2 s) then 1 s of grey with no dot before the first place, logged as a `gaze` row with
   no target ("Gaze check cue (tone)") and in `gaze_cue`. The tone comes after the light steps, so the pupil's response to
   it does not touch the fits. That recording's analysis is still to do.
-- **Status:** open (route and alignment implemented; needs the run file, the gaze check's analysis and more recordings).
+- **Second try, with the 3 s gaze check (23 November 2026, P01, Quest 3 over Link, full calibration with the gaze check):**
+  Neon Cloud export (482 s), run file and capture (493 s, 1920×1080, 30 fps variable). The capture had been renamed to
+  the run file's name (`calibration_run_P01_vr_20261123-091543.mp4`; its `OCULUS_ATTRIBUTION_ID` tag shows it is a Quest
+  capture), so its start was not in the name. Analysed from a copy with the capture named back as a Link capture. Found:
+  - **The tone is not in the capture's audio** (the presenter ran on the PC, the capture records the headset's sound), so
+    it cannot place the capture.
+  - **The Neon's `worn` flag is unreliable in the Quest frame:** 0 for 51 % of the samples, switching 457 times, with the
+    eyelids open (median aperture 5.7 mm when 0, 5.3 mm when 1) and the same pupil sizes. cwtool drops `worn` = 0, so the
+    pupil counted as tracked 39 % of the time; ignoring the flag (blinks still removed) leaves 4–6 % in gaps.
+  - **The run file's alignment can lock a whole step off.** With a capture start 10.5 s from the name's (here: the name I
+    gave), the coarse search (±5 s) does not reach it and settles 8.01 s away, where 22 of 34 changes still meet a change
+    (the steps are 8 s long); the per-change offsets then agree (±5 ms), so nothing says it is wrong. Named within a
+    second, it aligns on 30 changes: the capture runs 1.472 s before the run file's clock (the sequence's first step at
+    148.34 s of the capture, the last at 431.38 s, as the run file's 283.01 s apart).
+  - **The pupil's response did not place the capture** (r 0.02 within PUPIL_LAGS −2.5 to 3.5 s); searched from −3 to 6 s
+    it finds −4.26 ± 0.13 s (60 changes), so the clocks' difference was outside the range.
+  - **The gaze check gives the clocks' difference directly.** The Neon's gaze (azimuth, elevation, its own clock) follows
+    the run file's targets with r 0.996 and 0.991 at a lag of 3.2 s; each of the 8 saccades crosses half-way 3.191 s
+    (SD 0.017 s) after the run file's onset. Less a saccade latency of about 0.2 s, **the phone's clock was about 3.0 s
+    ahead of the presenter PC's** (on 16 November the other way, 1.5 s). The capture then sits about 4.45 s before the
+    pupil's clock, and the pupil's response (−4.26 s with an assumed 0.5 s latency) agrees with a latency of about 0.3 s.
+    Unlike the light, the saccade's latency is short and steady, so the offset and the pupil's latency are no longer
+    confounded.
+  - **The gaze is accurate in the headset:** after a constant offset of 1.8° left and 2.3° up, the 9 places are 0.8° off
+    (median), 3–4.6° at the two lower-left ones; the gains are 1.07 and 1.09.
+  - **The capture's field of view is not 110° × 78°.** The 9 dots (head-fixed, ±15° × ±12°), found with contrast 81–94,
+    fit a pinhole to within 1 px: square pixels, focal length 1159 px, the head's straight ahead at (979, 420) px, i.e.
+    **79° × 50°**, 20° above and 30° below the straight ahead. With 110° × 78° the dots, the gaze and the gaze-weighted
+    luminance are placed too close to the centre; the check's degrees are wrong by the same factor.
+  - With the run file's offset (the fallback when the pupil fails), the pupil and gaze stay 3 s off the capture: the gaze
+    check then sees the gaze one place behind (the gaze at each place is the previous one's) and reports 22° of error.
+- **Proposal (23 November 2026):** (1) Neon in a headset: ignore `worn` (the blinks and the eyelid aperture stay). (2) The
+  run file's alignment: a coarse search over ±60 s that also needs the colours to match (each step's colour against the
+  capture's on either side of a change), so a whole-step lock cannot pass. (3) With a gaze check, place the pupil by the
+  gaze: the clocks' difference is the saccades' median crossing less a fixed 0.2 s latency, and the pupil's offset is the
+  run file's less it; the pupil's response stays the fallback, searched over a wider range (−8 to 8 s). (4) The capture's
+  projection from the gaze check's dots (centre and focal length, as above), saved with the recording like the gaze
+  offset and used for the gaze and the luminance weighting; without a check, the Link capture's 79° × 50° with the
+  centre at (0.51, 0.39). (5) The gaze offset is then measured in the head's degrees (the dots' known directions), not
+  through an assumed field of view.
+- **Now (23 November 2026):** all five done. (1) `neon.load` does not use `worn` on the XR route (a note says so).
+  (2) `alignment.estimate` takes the run file's step colours (`log_colours`): searched over ±60 s, an offset counts only
+  where the picture's colour after the changes correlates with the logged one (≥ 0.6), weighted by it. (3)
+  `alignment.estimate_from_gaze`: the gaze's lag behind the places (±20 s), then each saccade's half-way time; the median
+  less 0.2 s is the tracker's clock ahead of the computer's, and the pupil's offset is the run file's less it; `find` uses
+  it before the pupil's response, whose search is now −8 to 8 s. (4) `cwtool.projection` (centre and focal length);
+  `DeviceProfile.projection`; Link captures default to the one measured here, others to 110° × 78° centred; the gaze check
+  fits the projection from the dots, and *Apply* or `--save-projection` saves it (`cwtool_capture_projection.json`), read
+  by the Neon reader. (5) In VR the gaze check compares the gaze with the logged directions in picture angles of the head.
+  On this recording, with the capture named 12 s off: the run file at +10.528 s (30 changes), the clocks 2.99 s apart (8
+  saccades, ±6 ms), the gaze check 9 of 9 places, 2.8° off and 0.7° after +1.9° right, +2.2° down; the projection measured
+  (0.5097, 0.3887, 0.6037, 1.0729), 0.4 ‰ of the width from the dots. Tests in `tests/test_gazecheck.py`,
+  `tests/test_neon_xr.py`, `tests/test_alignment.py`. Not done: finding a renamed capture (here by its
+  `OCULUS_ATTRIBUTION_ID` tag); the capture has to keep the Quest's name.
+- **Calibration fit on this recording (23 November 2026, gaze offset +1.9° right, +2.2° down applied, full calibration,
+  34 steps):** with the defaults the whole recording's ΔPD RMS is 1.18 mm and the light explains 85 % of it. Fitted
+  (dynamics on), by alignment:
+
+  | Alignment of the pupil | Pupil offset | Window RMS | r | Latency | Whole ΔPD RMS | Light left (R²) |
+  |---|---|---|---|---|---|---|
+  | gaze check's saccades (new) | +7.541 s | 0.323 mm | 0.87 | 0.256 s (16 onsets) | 0.379 mm | 0.25 |
+  | pupil's response | +7.740 s | 0.323 mm | 0.87 | 0.442 s (15 onsets) | 0.380 mm | 0.24 |
+  | run file only (the earlier fallback) | +10.528 s | 0.347 mm | 0.85 | 1.5 s (no onsets) | 0.500 mm | 0.17 |
+
+  The dilation in two parts (`fit_dilation_parts`) is needed here: with one dilation time constant it went to its limit
+  (120 s) and the window RMS was 0.583 mm (r 0.76, whole ΔPD 0.647 mm), with the blue weight 40 times the red and green
+  (0.069, 0.068, 2.86). With two parts: sensitivity 0.99, weights 0.47, 0.36, **2.17**, dilation τ 30 s, constriction τ
+  0.08 s. The gaze check and the pupil's response fit equally (only the offset plus the latency is set by the light); the
+  gaze check fixes the offset, so the latency is measured: constriction onsets at 0.28 s median (IQR 0.25–0.31 s), a
+  latency of 0.26 s, where the pupil's response assumes 0.5 s and the fit gave 0.44 s. The run file alone leaves the pupil
+  3 s late: no onsets, latency 1.5 s, and the whole ΔPD 0.50 mm. The blue weight (2.2 against about 0.4 for red and green)
+  stays high whatever the alignment; whether it is the capture's colours against the displays' or the pupil's melanopic
+  drive (issue 60) is not known. The two parts of the dilation are now fitted by default in XR (`calfit.dilation_parts_by_default`,
+  the app's checkbox set when a recording opens); glasses with a lux sensor keep them fixed. On the Varjo the old sequence's
+  parts made the session worse (issue 56): its next runs should be fitted both ways.
+  With the capture's original name (`com.meta.pclinkservice.server-20261123-101529-0.mp4`, 1 s after the Neon's start) the
+  chain gives the same result as from the name 14 s off: run file at −3.462 s, the gaze check's 8 saccades put the pupil
+  at −6.449 s (±0.006 s; 7.541 − 14 = −6.459 from the wrong name), the clocks 2.99 s apart, the sequence found at 148.32 s
+  (colour error 8 %). So the Quest's name is 6.4 s from the phone's clock and 3.5 s from the computer's: to a second it
+  places nothing, and the run file and the saccades are needed. A capture renamed by hand is not recognised (no start time
+  in its metadata, only `OCULUS_ATTRIBUTION_ID`); a recording opened from a folder above its export is not found.
+- **Status:** open (route, alignment, gaze check, the clocks from the saccades and the capture's projection implemented and tried on one Quest recording over Link; needs more recordings, and a renamed capture is not found).
 
 ### 62. The AS7341's timestamps lag its board's clock drift: about 0.19 s early
 

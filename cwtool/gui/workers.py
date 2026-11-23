@@ -19,6 +19,9 @@ class Task(QThread):
         super().__init__(parent)
         self._fn = fn
         self._cancel = False
+        # Set just before the result or the error is reported: the thread only returns after that, so a task started from
+        # the report can wait for it instead of finding it still running.
+        self.finishing = False
 
     def cancel(self) -> None:
         """Ask the task to stop; it checks with the ``cancelled`` function it was given."""
@@ -33,6 +36,8 @@ class Task(QThread):
         try:
             result = self._fn(self.progressed.emit, self.is_cancelled)
         except Exception as e:  # reported to the user, not raised in the thread
+            self.finishing = True
             self.failed.emit(f"{e}\n\n{traceback.format_exc()}")
         else:
+            self.finishing = True
             self.succeeded.emit(result)

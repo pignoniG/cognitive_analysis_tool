@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from cwtool import gazecheck
+from cwtool.projection import Projection
 from cwtool.recording import DeviceProfile, Recording
 
 EPOCH = 1_700_000_000.0
@@ -16,13 +17,17 @@ PLACES = [(0, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (
 FIRST = 5.0          # s: the first place's onset
 
 
-def _dot_xy(u, v):
-    return 0.5 + 0.3 * u, 0.5 + 0.3 * v
+def _dot_xy(u, v, projection=None):
+    """Where the place's logged direction (15° and 12° per grid step, as in VR) falls in the video."""
+    proj = projection or Projection.from_fov(FOV)
+    return tuple(float(c) for c in proj.from_direction(15 * u, -12 * v)[0])
 
 
-def _write(folder, offset=(2.0, -1.5), lost=(), noise=0.004, moving=False):
+def _write(folder, offset=(2.0, -1.5), lost=(), noise=0.004, moving=False, vr=True, projection=None, logged=None):
     """A recording whose video shows the gaze check's dot and whose gaze is the dot turned back by ``offset`` (deg; right,
-    down), as a tracker turned on the head would see it. Places in ``lost`` show no dot."""
+    down), as a tracker turned on the head would see it. Places in ``lost`` show no dot. ``vr``: the run file logs the
+    places' directions (else their screen places); ``projection``: where the directions fall in the video (default: FOV
+    centred), the one the recording's profile gives is ``logged`` (default: the same)."""
     folder.mkdir(parents=True, exist_ok=True)
     w, h = SIZE
     total = FIRST + 2 * len(PLACES) + 2
@@ -34,7 +39,7 @@ def _write(folder, offset=(2.0, -1.5), lost=(), noise=0.004, moving=False):
         frame[:, : w // 6] = 90                       # something in the background that does not move
         k = int((t - FIRST) // 2)
         if 0 <= k < len(PLACES) and k not in lost:
-            x, y = _dot_xy(*PLACES[k])
+            x, y = _dot_xy(*PLACES[k], projection)
             if moving:
                 x += 0.05 * np.sin(t * 3)
             cv2.circle(frame, (int(x * w), int(y * h)), 6, (0, 0, 0), -1)
@@ -44,16 +49,20 @@ def _write(folder, offset=(2.0, -1.5), lost=(), noise=0.004, moving=False):
     rows = ["# tool: test", "time,duration,r,g,b,label,onset_unix_ms,phase,target_u,target_v,target_x,target_y,target_az_deg,"
             "target_el_deg", f"0,{FIRST},128,128,128,Gray,{EPOCH * 1000:.0f},light,,,,,,"]
     for k, (u, v) in enumerate(PLACES):
-        rows.append(f"{FIRST + 2 * k},2,128,128,128,Gaze target {k + 1},{(EPOCH + FIRST + 2 * k) * 1000:.0f},gaze,{u},{v},,,"
-                    f"{u * 15},{-v * 12}")
+        place = f",,{u * 15},{-v * 12}" if vr else "{:.4f},{:.4f},,".format(*_dot_xy(u, v, projection))
+        rows.append(f"{FIRST + 2 * k},2,128,128,128,Gaze target {k + 1},{(EPOCH + FIRST + 2 * k) * 1000:.0f},gaze,{u},{v},"
+                    + place)
     (folder / "calibration_run_test.csv").write_text("\n".join(rows) + "\n")
     time = np.arange(0, total, 1 / 100)
     gaze = np.full((len(time), 2), np.nan)
     for k, (u, v) in enumerate(PLACES):
         inside = (time >= FIRST + 2 * k + 0.3) & (time < FIRST + 2 * k + 2)
-        seen = gazecheck.shift_gaze(np.array([_dot_xy(u, v)]), (-offset[0], -offset[1]), FOV)[0]
+        seen = gazecheck.shift_gaze(np.array([_dot_xy(u, v, projection)]), (-offset[0], -offset[1]),
+                                    projection or Projection.from_fov(FOV))[0]
         gaze[inside] = seen + rng.normal(0, noise, (inside.sum(), 2))
-    profile = DeviceProfile(name="varjo", pupil_unit="mm", pupil_scale=1.0, luminance_source="display", field_of_view=FOV)
+    used = logged or projection
+    profile = DeviceProfile(name="varjo", pupil_unit="mm", pupil_scale=1.0, luminance_source="display",
+                            field_of_view=used.field_of_view if used else FOV, projection=used.as_tuple() if used else None)
     return Recording(name="t", profile=profile, folder=folder, time=time, epoch_start=EPOCH,
                      pupil_left=np.full(len(time), 4.0), pupil_right=np.full(len(time), 4.0), gaze=gaze,
                      scene_video=folder / "scene.avi")
@@ -77,11 +86,40 @@ def test_the_offset_is_recovered(tmp_path):
 
 
 def test_places_without_a_dot_are_left_out(tmp_path):
-    rec = _write(tmp_path / "rec", lost=(2, 5))
+    """On a screen the gaze is compared with the dots found: places without one are left out."""
+    rec = _write(tmp_path / "rec", lost=(2, 5), vr=False)
     result, _ = gazecheck.check(rec)
+    assert result.reference == "dots"
     assert result.found == 7 and [p.index for p in result.places if p.dot is None] == [3, 6]
     assert any("not clear" in n for n in result.notes)
     assert result.offset_deg == pytest.approx((2.0, -1.5), abs=0.3)
+
+
+def test_in_vr_the_gaze_is_compared_with_the_logged_directions(tmp_path):
+    """In VR the places' directions are known: places whose dot is not found still count, in the head's degrees."""
+    rec = _write(tmp_path / "rec", lost=(2, 5))
+    result, _ = gazecheck.check(rec)
+    assert result.reference == "directions" and result.found == 9
+    assert [p.index for p in result.places if p.dot is None] == [3, 6]
+    assert result.offset_deg == pytest.approx((2.0, -1.5), abs=0.2)
+    assert "dots' directions" in result.summary()
+
+
+def test_the_videos_projection_is_measured_from_the_dots(tmp_path):
+    """A capture not centred on the head's straight ahead and narrower than assumed (as the Quest's over Link): the dots
+    measure it, the offset in the head's degrees does not depend on it, and the summary says it differs."""
+    from cwtool.devices import quest
+    real = quest.LINK_PROJECTION
+    rec = _write(tmp_path / "rec", offset=(1.0, 2.0), projection=real, logged=Projection.from_fov(FOV))
+    result, _ = gazecheck.check(rec)
+    assert result.projection == pytest.approx(real.as_tuple(), abs=0.01)
+    assert result.projection_residual < 0.005 and result.projection_differs()
+    assert Projection.from_tuple(result.projection).field_of_view == pytest.approx((79.3, 50.0), abs=1.0)
+    assert "the video's projection measured" in result.summary()
+    same = _write(tmp_path / "same", offset=(1.0, 2.0), projection=real)
+    again, _ = gazecheck.check(same)
+    assert not again.projection_differs() and "projection" not in again.summary()
+    assert again.offset_deg == pytest.approx((1.0, 2.0), abs=0.2)
 
 
 def test_no_run_file_no_check(tmp_path):
