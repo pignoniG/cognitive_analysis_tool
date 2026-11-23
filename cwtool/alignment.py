@@ -577,3 +577,18 @@ def align(rec: Recording, alignment: LogAlignment) -> Recording:
     return replace(rec, time=time, epoch_start=rec.epoch_start - computer, lux_time=lux,
                    events=[Event(e.label, e.start + shift, e.end + shift) for e in rec.events],
                    notes=list(rec.notes) + alignment.notes(), log_alignment=alignment.as_dict())
+
+
+def for_analysis(rec: Recording, progress=None, cancelled=None) -> tuple[Recording, Optional[LogAlignment], str]:
+    """The recording to analyse the video with. A video on a clock of its own (a Neon inside a Quest) is aligned first from
+    a quick pass over its colours (:func:`cwtool.video.quick_colours`, about 10 s for 8 minutes), so that each frame is
+    analysed with the gaze measured when it was shown: placed by the capture's name only, the pupil can be seconds off
+    (6.4 s on 23 November 2026). Other recordings are returned as they are. Also the alignment and why there is none."""
+    if not rec.separate_video_clock or not applicable(rec) or rec.scene_video is None:
+        return rec, None, ""
+    from cwtool.video import quick_colours
+    quick = quick_colours(rec.scene_video, rec.scene_frame_times, progress, cancelled)
+    if quick is None:
+        return rec, None, "the video could not be read"
+    found, why = find(rec, quick)
+    return (align(rec, found), found, why) if found is not None else (rec, None, why)

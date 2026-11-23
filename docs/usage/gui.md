@@ -153,8 +153,29 @@ shrink the other values; see [Output files](../reference/outputs.md).
 
 ## Scene video
 
-The video is analysed automatically when a recording is opened, unless a cached analysis made with the same
-video, settings, frame timestamps and gaze exists. **Reanalyse video** (**Analyse video** before any analysis) runs
+Opening a recording shows its steps where the plots will be, until the first result: reading the recording, finding
+the scene video (which file, and how it was matched; when none is found, where it was looked for), correcting the gaze,
+analysing the video (a bar with the percentage, the frames done, the time elapsed and the time left, and **Cancel**;
+"using the saved analysis from …" when one is reused), aligning and checking the gaze, and computing the result. The
+alignment, the gaze check and the first result run in the background, so the window does not freeze.
+
+**The gaze correction.** When the run file next to the recording has a gaze check, the gaze is confirmed before the
+video is analysed (the analysis measures the colour around the gaze). A quick pass over the video's colours (about 10 s
+for an 8-minute capture) aligns it to the run file and the gaze check's saccades align the pupil; then a window shows the
+scene video with the gaze (orange) and the gaze check's places (rings; the current one green), with a time slider over
+the check (**Whole recording** for all of it). The offset, in degrees right and down, is redrawn live, and each place's
+error left and their median are updated as it changes; clicking a place shows it. **Use the gaze check's offset** fills
+in the one the check found; **No offset** clears it. **Confirm and analyse** saves the offset with the recording (and a
+Quest capture's projection measured from the dots) and analyses the video; the recording is then not asked about again.
+**Cancel** leaves it unanalysed, with a button to open the window again. Under the scene video the side panel says
+which offset is applied and whether it was confirmed; **Gaze correction…** there
+opens it any time (an analysed recording uses its own alignment and gaze check); confirming then analyses the video again.
+Recordings without a gaze check are analysed at once. A Neon inside a Quest is aligned from the quick pass before its
+video is analysed (its capture runs on the headset's clock, seconds from the pupil's), so each frame is analysed, and
+drawn in the preview, with the gaze measured when it was shown.
+
+The video is analysed when a recording is opened (after the gaze correction, when there is one), unless a cached
+analysis made with the same video, settings, frame timestamps and gaze exists. **Reanalyse video** (**Analyse video** before any analysis) runs
 it again, for example after changing the video analysis settings; **Cancel**, shown while it runs, stops it (it is shown for the video analysis and the calibration fit, the two that can stop; the others take seconds).
 
 **Video analysis settings** (drop-down under the buttons: gaze circle radius, scene circle, background, analysis

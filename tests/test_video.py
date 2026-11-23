@@ -205,3 +205,37 @@ def test_gaze_circle_is_limited_to_the_visible_scene():
     # Without a circular scene the whole circle counts, as before.
     fix, *_ = analyse_frame(frame, np.array([[85, 85]]), VideoSettings(vertical_fov=100, fixation_radius_deg=10))
     assert fix[0][0] < 180
+
+
+def test_the_quick_pass_gives_each_frames_colour_on_the_recordings_clock(tmp_path):
+    from conftest import write_varjo_recording
+    from cwtool import devices
+    from cwtool.video import quick_colours
+    rec = devices.load(write_varjo_recording(tmp_path / "rec", [40, 200, 120], seconds_per_level=1.0, fps=10))
+    quick = quick_colours(rec.scene_video, rec.scene_frame_times)
+    assert len(quick.time) == 30 and np.all(np.diff(quick.time) > 0)
+    grey = quick.background_rgb.mean(axis=1)
+    for level, second in ((40, 0.5), (200, 1.5), (120, 2.5)):
+        assert grey[np.argmin(np.abs(quick.time - second))] == pytest.approx(level, abs=6)
+    assert quick.frame_lin.shape == (30, len(__import__("cwtool.video", fromlist=["GAMMA_GRID"]).GAMMA_GRID), 3)
+
+
+def test_a_saved_analysis_at_other_sample_times_is_not_reused(tmp_path):
+    """A video on its own clock is analysed with the pupil aligned to it: an analysis made at the unaligned times paired
+    its frames with other gaze, and is done again."""
+    from conftest import write_varjo_recording
+    from cwtool import devices
+    rec = devices.load(write_varjo_recording(tmp_path / "rec", [40, 200], seconds_per_level=1.0, fps=10))
+    settings = VideoSettings().for_recording(rec)
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, settings)
+    video.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze)
+    load = lambda time: VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze, time)
+    assert load(rec.time) is not None and load(None) is not None
+    assert load(rec.time + 6.45) is None
+
+
+def test_only_a_video_on_its_own_clock_is_aligned_before_the_analysis(tmp_path):
+    from conftest import write_varjo_recording
+    from cwtool import alignment, devices
+    rec = devices.load(write_varjo_recording(tmp_path / "rec", [40, 200], seconds_per_level=1.0, fps=10))
+    assert alignment.for_analysis(rec) == (rec, None, "")

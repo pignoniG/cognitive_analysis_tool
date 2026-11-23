@@ -12,7 +12,7 @@ import numpy as np
 from PySide6.QtCore import QSettings, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QKeySequence, QPalette
 from PySide6.QtWidgets import QWidgetAction
-from PySide6.QtWidgets import (QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox,
+from PySide6.QtWidgets import (QCheckBox, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox,
                                QHBoxLayout, QHeaderView, QLabel, QListWidget, QListWidgetItem, QMainWindow, QMenu,
                                QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter, QStackedWidget,
                                QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
@@ -21,6 +21,7 @@ from cwtool import __version__, alignment, calfit, calibration, devices, gazeche
 from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.icons import icon, tinted
+from cwtool.gui.gaze_window import GazeCorrection
 from cwtool.gui.open_progress import OpenProgress
 from cwtool.gui.side_panel import breakable, PreviewHolder, Rail, Step
 from cwtool.gui.trim_panel import TrimPanel
@@ -29,7 +30,7 @@ from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
 from cwtool.params import DISPLAY_FIELDS, DeviceMismatch, DisplayPhotometry, Parameters
 from cwtool.trim import TRIM_FILE, Trim
-from cwtool.video import CACHE_JSON, VideoResult, analyse_video
+from cwtool.video import CACHE_JSON, VideoResult, analyse_video, quick_colours
 
 RECOMPUTE_DELAY_MS = 150
 # Signals shown when sensor data is imported (the ECG channel of a Shimmer, the EmotiBit's EDA and PPG), the first
@@ -84,6 +85,7 @@ class MainWindow(QMainWindow):
         self.video = None
         self.result = None
         self._task: Task | None = None
+        self._pre_alignment = None          # the quick pass's alignment, before the video is analysed
         self._no_session: str | None = None         # why the remembered logger folder gave nothing, if it did not
         self._params_note: str | None = None          # why the parameters were reset, shown in the Set-up box
         self._params_device: str | None = None       # the device the parameters in the panel were set for
@@ -225,10 +227,11 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.cancel_button)
         self.align_check = QCheckBox("Align the presenter's log to the video")
         self.align_check.setChecked(self._settings.value("align_log", True, type=bool))
-        self.align_check.setToolTip("The presenter logs when it changed the picture on its computer's clock; the video shows when it "
+        self._align_tip = ("The presenter logs when it changed the picture on its computer's clock; the video shows when it "
                                     "did. The offset between them (0.34 s on a first Varjo run) is found from the changes and the "
                                     "log's clock is moved onto the video's: the events, the logger's sensor files and the exported "
                                     "Unix times then fall where the pupil is")
+        self.align_check.setToolTip(self._align_tip)
         self.align_check.toggled.connect(self._align_toggled)
         self.align_check.hide()
         video_layout.addWidget(self.video_label)
@@ -681,6 +684,8 @@ class MainWindow(QMainWindow):
         has_rec = self.recording is not None
         self.analyse_button.setEnabled(has_rec and not busy and self.recording.scene_video is not None)
         self.analyse_button.setText("Reanalyse video" if self.video is not None else "Analyse video")
+        self.gaze_window_button.setEnabled(has_rec and not busy and self.recording.scene_video is not None
+                                           and self.gaze_window is None)
         self.analyse_button.setToolTip("Analyse the scene video again, ignoring the saved analysis"
                                        if self.video is not None else "Analyse the scene video")
         self.cancel_button.setVisible(busy and getattr(self, "_task_cancellable", False))   # the video analysis and the fit
@@ -887,13 +892,16 @@ class MainWindow(QMainWindow):
         self.recording, self.video, self.result = rec, None, None
         self._raw_recording, self.log_alignment, self._alignment_message = rec, None, ""
         self.gaze_check, self._gaze_check_message = None, ""
-        self._staged_projection = None
+        self._pre_alignment = None
         self.fit_parts_check.setChecked(calfit.dilation_parts_by_default(rec))
         self._show_gaze_offset(rec)
-        self.gaze_from_check.setEnabled(False)
         self.align_check.setVisible(alignment.applicable(rec))
-        self.align_check.setText("Align the capture to the pupil (run file, else the pupil's response)"
-                                 if rec.separate_video_clock else "Align the presenter's log to the video")
+        self.align_check.setText("Align the capture to the pupil" if rec.separate_video_clock
+                                 else "Align the presenter's log to the video")
+        self.align_check.setToolTip("The capture runs on the headset's clock, the pupil on the tracker's: the capture is "
+                                    "placed by the run file's colour changes, then the pupil by the gaze check's saccades, "
+                                    "else by its response to the picture" if rec.separate_video_clock
+                                    else self._align_tip)
         if previous_device and previous_device != rec.device:
             self._forget_params_of(previous_device, rec.device)
         self._remember_recording(rec.folder)
@@ -942,19 +950,19 @@ class MainWindow(QMainWindow):
             self.video_label.setText("No scene video found in this recording.")
             self.open_panel.failed("video", self._missing_video(rec))
         else:
-            self.analyse(use_cache=True)
+            self._gaze_step(rec)
 
     def analyse(self, use_cache: bool) -> None:
         """Analyse the scene video in the background (or take the cached analysis if ``use_cache`` and one matches) and
         then compute the result.
         """
-        rec = self.recording
+        rec = self._analysis_recording()
         settings = self.params_panel.video_settings().for_recording(rec)
         if self.open_panel.states.get("video") != "done" or self.open_panel.states.get("analyse") != "pending":
             self._show_opening(f"Analysing {rec.name}", self._opening_steps_done(rec))   # not part of an opening
         if use_cache:
             cached = VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times,
-                                             rec.gaze)
+                                             rec.gaze, rec.time)
             if cached is not None:
                 try:
                     saved = datetime.fromtimestamp((rec.folder / CACHE_JSON).stat().st_mtime).strftime("%d %B %Y, %H:%M")
@@ -977,6 +985,16 @@ class MainWindow(QMainWindow):
         self._start_task(work, lambda res: res and self._analysed(res),
                          f"Analysing {rec.scene_video.name}…", show_progress=True, cancellable=True,
                          on_progress=self.open_panel.set_fraction)
+
+    def _analysis_recording(self):
+        """The recording whose gaze the video is analysed with: on a video with a clock of its own, the one aligned to it
+        before the analysis (:meth:`open_gaze_correction`'s quick pass), so each frame goes with the gaze measured when it
+        was shown; once analysed, the open (aligned) recording."""
+        pre, raw = self._pre_alignment, self._raw_recording
+        if self.video is None and pre is not None and pre[0] is not None and raw is not None \
+                and pre[2].folder == raw.folder:
+            return pre[2]
+        return self.recording
 
     def _analysed(self, video: VideoResult) -> None:
         self.open_panel.done("analyse", f"{len(video.time):,} samples analysed".replace(",", " "))
@@ -1059,9 +1077,11 @@ class MainWindow(QMainWindow):
         self.log_alignment, self._alignment_message = al, message
         self._gaze_check_message = check_message
         self.gaze_check = checked
-        self.gaze_from_check.setEnabled(checked is not None and checked.total_offset_deg() is not None)
         if aligned is not self.recording:
             self.recording = aligned
+            at = self.preview._time
+            self.preview.set_recording(aligned, self.params_panel.video_settings().for_recording(aligned))
+            self.preview.show_time(at)               # the gaze drawn is the aligned one (a video on its own clock)
             self.plots.show_events(aligned.events)
             if self.sensors:
                 self._show_sensors()
@@ -1069,89 +1089,138 @@ class MainWindow(QMainWindow):
                 self._place_from_folder(aligned)
         self.video_label.setText(self._video_text())
 
-    def _gaze_offset_row(self) -> QWidget:
-        """The session's gaze offset: degrees right and down, filled from the gaze check or by hand, saved with the
-        recording (``cwtool_gaze_offset.json``) and applied when it is read, so applying it reads the recording again and
-        analyses the video with the moved gaze."""
-        row = QWidget()
-        layout = QVBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        label = QLabel("Gaze offset (this session)")
-        label.setToolTip("Moves the gaze in the scene video by this angle, right and down. Saved with the recording, not "
-                         "with the participant's parameters: how the tracker sits changes between sessions.")
-        self.gaze_dx, self.gaze_dy = QDoubleSpinBox(), QDoubleSpinBox()
-        for box, name in ((self.gaze_dx, "right"), (self.gaze_dy, "down")):
-            box.setRange(-30.0, 30.0)
-            box.setDecimals(2)
-            box.setSingleStep(0.1)
-            box.setSuffix(f"° {name}")
-            box.valueChanged.connect(self._gaze_offset_edited)
-        self.gaze_from_check = QPushButton("From gaze check")
-        self.gaze_from_check.setToolTip("Fill in the offset the gaze check found (added to the one applied now); in a "
-                                        "headset's capture also the capture's projection measured from the dots, saved "
-                                        "on Apply")
-        self.gaze_from_check.clicked.connect(self._gaze_offset_from_check)
-        self.gaze_apply = QPushButton("Apply")
-        self.gaze_apply.setToolTip("Save the offset with the recording and analyse the video again with the moved gaze")
-        self.gaze_apply.clicked.connect(self._apply_gaze_offset)
-        values, buttons = QHBoxLayout(), QHBoxLayout()      # three short lines: the side column is narrow
-        values.addWidget(self.gaze_dx)
-        values.addWidget(self.gaze_dy)
-        buttons.addWidget(self.gaze_from_check)
-        buttons.addWidget(self.gaze_apply)
-        layout.addWidget(label)
-        layout.addLayout(values)
-        layout.addLayout(buttons)
-        self.gaze_from_check.setEnabled(False)
-        self.gaze_apply.setEnabled(False)
-        return row
+    # The gaze correction: confirmed before the video is analysed around the gaze
 
-    def _show_gaze_offset(self, rec) -> None:
-        """Put the recording's applied offset in the boxes, without marking them edited."""
+    def _gaze_step(self, rec) -> None:
+        """Before the analysis: the gaze correction when the run file has a gaze check not confirmed yet, and the alignment
+        of a video on its own clock (both from a quick pass over the video's colours); otherwise the analysis at once."""
+        needs_window = gazecheck.has_gaze_check(rec) and not gazecheck.offset_confirmed(rec.folder)
+        if needs_window or self._aligns_first(rec):
+            self.open_gaze_correction(window=needs_window)
+            return
+        self.open_panel.done("gaze", self._gaze_step_text(rec))
+        self.analyse(use_cache=True)
+
+    def _aligns_first(self, rec) -> bool:
+        """Whether the video is aligned to the pupil before it is analysed: a video on a clock of its own."""
+        return rec.separate_video_clock and self.align_check.isChecked() and alignment.applicable(rec)
+
+    @staticmethod
+    def _gaze_step_text(rec, found=None) -> str:
         dx, dy = rec.gaze_offset or (0.0, 0.0)
-        for box, v in ((self.gaze_dx, dx), (self.gaze_dy, dy)):
-            box.blockSignals(True)
-            box.setValue(v)
-            box.blockSignals(False)
-        self.gaze_apply.setEnabled(False)
+        offset = f"{dx:+.2f}° right, {dy:+.2f}° down" if (dx, dy) != (0.0, 0.0) else "no offset"
+        if not gazecheck.has_gaze_check(rec):
+            text = f"no gaze check in a run file next to the recording: not asked ({offset})"
+        else:
+            text = f"confirmed before: {offset}"
+        if found is not None:
+            al, message = found[0], found[1]
+            text += "; before the analysis, " + (al.summary() if al is not None else f"not aligned: {message}")
+        return text
 
-    def _gaze_offset_edited(self) -> None:
-        rec = self._raw_recording
-        applied = (rec.gaze_offset or (0.0, 0.0)) if rec is not None else (0.0, 0.0)
-        self.gaze_apply.setEnabled(rec is not None and (round(self.gaze_dx.value(), 2), round(self.gaze_dy.value(), 2))
-                                   != (round(applied[0], 2), round(applied[1], 2)))
+    def open_gaze_correction(self, window: bool = True) -> None:
+        """Open the gaze correction. An analysed recording has its alignment and gaze check; otherwise a quick pass over
+        the video's colours aligns it to its run file first (about 10 s for 8 minutes). ``window`` False: the quick pass
+        only, to analyse a video on its own clock with the pupil aligned to it."""
+        raw = self._raw_recording
+        if raw is None or raw.scene_video is None or (self._task is not None and self._task.isRunning()
+                                                       and not self._task.finishing):
+            return
+        if self.video is not None and window:
+            self._show_gaze_window(self.recording, self.gaze_check)
+            return
+        if self.open_panel.states.get("gaze") not in ("pending", "cancelled"):
+            self._show_opening(f"Correcting the gaze of {raw.name}", self._opening_steps_done(raw))
+        align_on = self.align_check.isChecked()
+        self.open_panel.start("gaze", "reading the video's colours to align it…", cancellable=True)
 
-    def _gaze_offset_from_check(self) -> None:
-        check = getattr(self, "gaze_check", None)
-        total = check.total_offset_deg() if check is not None else None
-        if total is not None:
-            self.gaze_dx.setValue(total[0])
-            self.gaze_dy.setValue(total[1])
-        # A headset capture's projection measured from the dots goes with it, saved on Apply (open issue 61).
-        rec = self._raw_recording
-        self._staged_projection = check.projection if check is not None and check.projection_differs() and \
-            rec is not None and rec.separate_video_clock else None
-        if self._staged_projection is not None:
-            self.gaze_apply.setEnabled(True)
+        def work(progress, cancelled):
+            """Background task: the video's colours, the alignment and the gaze check, for the gaze correction."""
+            quick = quick_colours(raw.scene_video, raw.scene_frame_times, progress, cancelled)
+            return None if quick is None else self._alignment_work(raw, quick, align_on)
 
-    def _apply_gaze_offset(self) -> None:
+        def progress(fraction):
+            if self.open_panel.states.get("gaze") == "running":
+                self.open_panel.details["gaze"].setText(f"reading the video's colours to align it: {fraction:.0%}")
+                self.open_panel.details["gaze"].show()
+
+        self._start_task(work, lambda found: found and self._aligned_first(found, window),
+                         "Aligning the video…", cancellable=True, on_progress=progress)
+
+    def _aligned_first(self, found: tuple, window: bool) -> None:
+        """The quick pass's alignment: kept for the analysis, and shown in the gaze correction or the panel."""
+        raw = self._raw_recording
+        if raw is None or found[2].folder != raw.folder:
+            return
+        self._pre_alignment = found
+        if window:
+            self._show_gaze_window(found[2], found[3])
+        else:
+            self.open_panel.done("gaze", self._gaze_step_text(raw, found))
+            self.analyse(use_cache=True)
+
+    def _show_gaze_window(self, rec, check) -> None:
+        if self.open_panel.states.get("gaze") == "running":
+            self.open_panel.waiting("gaze", "waiting for the gaze to be confirmed in its window")
+        dialog = GazeCorrection(rec, check, self)
+        self.gaze_window = dialog
+        dialog.finished.connect(lambda result: self._gaze_window_closed(dialog, result))
+        dialog.open()
+
+    def _gaze_window_closed(self, dialog: GazeCorrection, result: int) -> None:
+        self.gaze_window = None
         rec = self._raw_recording
         if rec is None:
             return
-        source = "gaze check" if self.gaze_check is not None and self.gaze_check.total_offset_deg() is not None and \
-            all(abs(a - b) < 0.005 for a, b in zip(self.gaze_check.total_offset_deg(), (self.gaze_dx.value(), self.gaze_dy.value()))) \
+        if result != QDialog.Accepted:
+            if self.open_panel.states.get("gaze") == "running":
+                self.open_panel.cancelled("Not confirmed: the video is not analysed.")
+                self.open_panel.set_action("Gaze correction…", self.open_gaze_correction)
+            return
+        check = dialog.check
+        found = check.total_offset_deg() if check is not None else None
+        source = "gaze check" if found is not None and all(abs(a - b) < 0.005 for a, b in zip(found, dialog.offset())) \
             else "operator"
-        gazecheck.save_offset(rec.folder, (self.gaze_dx.value(), self.gaze_dy.value()), source)
-        staged = getattr(self, "_staged_projection", None)
-        if staged is not None:
+        gazecheck.save_offset(rec.folder, dialog.offset(), source, confirmed=True)
+        if dialog.projection() is not None and rec.separate_video_clock:
             from cwtool.devices import quest
-            from cwtool.projection import Projection
-            quest.save_projection(rec.folder, Projection.from_tuple(staged))
-            self._staged_projection = None
+            quest.save_projection(rec.folder, dialog.projection())
         if self._task is not None and self._task.isRunning():      # an analysis of the old gaze is of no use now
             self.cancel_task()
             self._task.wait(30000)
-        self.open_recording(rec.folder)          # read again: the offset applies on reading, and the video is analysed again
+        self.open_recording(rec.folder)          # read again: the offset applies on reading, then the video is analysed
+
+    def _gaze_offset_row(self) -> QWidget:
+        """The session's gaze offset, as saved with the recording (``cwtool_gaze_offset.json``) and applied when it is read,
+        and the button to the gaze correction, where it is set."""
+        row = QWidget()
+        layout = QVBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.gaze_offset_label = QLabel()
+        self.gaze_offset_label.setWordWrap(True)
+        self.gaze_offset_label.setToolTip("Moves the gaze in the scene video by this angle, right and down. Saved with the "
+                                          "recording, not with the participant's parameters: how the tracker sits changes "
+                                          "between sessions.")
+        self.gaze_window_button = QPushButton("Gaze correction…")
+        self.gaze_window_button.setToolTip("The scene video with the gaze and the gaze check's places, and the offset "
+                                           "redrawn live; confirming it analyses the video again")
+        self.gaze_window_button.clicked.connect(lambda: self.open_gaze_correction())
+        self.gaze_window_button.setEnabled(False)
+        self.gaze_window = None
+        layout.addWidget(self.gaze_offset_label)
+        layout.addWidget(self.gaze_window_button)
+        self._show_gaze_offset(None)
+        return row
+
+    def _show_gaze_offset(self, rec) -> None:
+        """Say which gaze offset the recording has, and whether it was confirmed."""
+        if rec is None:
+            self.gaze_offset_label.setText("Gaze offset: –")
+            return
+        dx, dy = rec.gaze_offset or (0.0, 0.0)
+        value = f"{dx:+.2f}° right, {dy:+.2f}° down" if (dx, dy) != (0.0, 0.0) else "none"
+        state = " (confirmed)" if gazecheck.offset_confirmed(rec.folder) else ""
+        self.gaze_offset_label.setText(f"Gaze offset: {value}{state}")
 
     def _align_toggled(self, on: bool) -> None:
         self._settings.setValue("align_log", on)
@@ -1204,7 +1273,10 @@ class MainWindow(QMainWindow):
 
     def _task_finished(self) -> None:
         if self._task is not None and self._task.is_cancelled():
-            if self.open_panel.running() is not None:
+            if self.open_panel.states.get("gaze") == "running":
+                self.open_panel.cancelled("Cancelled: the video is not analysed.")
+                self.open_panel.set_action("Gaze correction…", self.open_gaze_correction)
+            elif self.open_panel.running() is not None:
                 self.open_panel.cancelled("Cancelled: press Analyse video to start again.")
             self.statusBar().showMessage("Cancelled.", 4000)
             self._task_message = None

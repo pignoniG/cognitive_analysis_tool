@@ -46,15 +46,17 @@ The check does not move the gaze; the operator does, **per session**: how a trac
 frame, changes from one session to the next, so the offset is saved with the recording (`cwtool_gaze_offset.json` in its
 folder, as the trim is) and not with the participant's parameters.
 
-- **In the window:** *Gaze offset (this session)* under the scene video, in degrees right and down. *From gaze check* fills in
-  the offset the check found, added to the one already applied; the values can be changed by hand. *Apply* saves them and
-  reads the recording again: the gaze is moved when the recording is read, so the video is analysed again with it, and the
-  check then reports what is left ("with the session's offset ... applied").
+- **In the gaze correction window** (opened before the video is analysed when the run file has a gaze check, and from
+  *Gaze correction…*): the scene video with the gaze and the places, the offset redrawn live with each place's error
+  left; *Confirm and analyse* saves it, marked confirmed, so the recording is not asked about again (a confirmed zero
+  is kept too). See [the app](../usage/gui.md#scene-video).
+- **In the side panel:** under the scene video, the offset applied and whether it was confirmed, and *Gaze correction…*
+  to open the window again.
 - **On the command line:** the saved offset is applied; `--gaze-offset RIGHT DOWN` uses another one for that run (`0 0`:
   none), `--save-gaze-offset` saves it (or, without it, the check's proposed total, applied from the next run).
-- **The projection** of a headset's capture, when the check measured one that differs: *From gaze check* stages it with the
-  offset and *Apply* saves it too (`cwtool_capture_projection.json`); on the command line `--save-projection`. The gaze is
-  placed through it when the recording is read.
+- **The projection** of a headset's capture, when the check measured one that differs: the window draws the gaze through
+  it and *Confirm and analyse* saves it too (`cwtool_capture_projection.json`); on the command line `--save-projection`.
+  The gaze is placed through it when the recording is read.
 
 The gaze is moved by the angle, through the video's projection, so the same offset is the same angle anywhere in the
 picture. The export records it under `gaze offset (deg, right, down)`, and every result carries a note saying it was applied.

@@ -30,7 +30,9 @@ link to where it is done. **File → Open recent** lists the last recordings.
 
 ## 3. Analyse the scene video
 
-The first time, the scene video is analysed in the background (a progress bar shows the video pass). The result
+The first time, the scene video is analysed in the background: the plot area shows the steps of opening the recording,
+with the video pass's percentage and the time left. When the run file next to the recording has a gaze check, the gaze
+correction window comes first: confirm the gaze offset there (see [the app](../usage/gui.md#scene-video)). The result
 is cached next to the recording (`cwtool_video.csv`), so opening the recording again is instant. A 4-minute 4K
 Varjo capture takes under a minute on a 4-core laptop.
 

@@ -4,6 +4,7 @@ file), shows the tracking quality, and takes the participant's iris diameter."""
 import os
 import time
 
+import numpy as np
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -165,6 +166,10 @@ def test_the_gaze_check_is_shown_with_the_scene_video(app, tmp_path):
     w = MainWindow()
     try:
         w.open_recording(folder)
+        # the gaze is confirmed before the video is analysed
+        assert wait_for(app, lambda: w.gaze_window is not None)
+        assert w.video is None and w.open_panel.states["analyse"] == "pending"
+        w.gaze_window.accept()
         assert wait_for(app, lambda: w.video is not None and w.gaze_check is not None)
         assert "gaze check: 9 of 9 places" in w.video_label.text()
         assert w.recording.gaze_check["found"] == 9
@@ -172,20 +177,81 @@ def test_the_gaze_check_is_shown_with_the_scene_video(app, tmp_path):
         w.close()
 
 
+def _gaze_check_recording(tmp_path):
+    import shutil
+    from test_gazecheck import _write
+    folder = write_varjo_recording(tmp_path / "varjo", [128] * 25, seconds_per_level=1.0, fps=30, size=(320, 240))
+    source = _write(tmp_path / "src")
+    shutil.copy(source.scene_video, folder / "varjo_capture_test.avi")
+    shutil.copy(source.folder / "calibration_run_test.csv", folder)
+    return folder
+
+
+def test_the_gaze_correction_window_shows_the_offset_live_and_its_confirmation_is_kept(app, tmp_path):
+    from cwtool import gazecheck
+    folder = _gaze_check_recording(tmp_path)
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.gaze_window is not None)
+        g = w.gaze_window
+        assert w.open_panel.states["gaze"] == "running" and "waiting" in w.open_panel.details["gaze"].text()
+        assert g.table.rowCount() == 9 and g.from_check.isEnabled()
+        median = lambda: float(np.median([e for e in g.errors() if e is not None]))
+        assert median() == pytest.approx(g.check.error_before_deg, abs=0.01)     # as recorded
+        g.from_check.click()                       # the gaze check's offset, redrawn live: its error left
+        assert median() == pytest.approx(g.check.error_after_deg, abs=0.01)
+        assert f"{g.check.error_after_deg:.1f}°" in g.median.text()
+        g.go_to_place(4)                           # a place's middle, its gaze drawn
+        assert len(g.gaze_at(g.t)) > 0 and "place 5" in g.time_label.text()
+        offset = g.offset()
+        g.accept()
+        assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None, 60)
+        assert gazecheck.offset_confirmed(folder)
+        assert tuple(w.recording.gaze_offset or (0.0, 0.0)) == pytest.approx(offset, abs=0.01)
+        # opened again: confirmed before, so the video is analysed without asking
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.open_panel.states.get("gaze") == "done")
+        assert "confirmed before" in w.open_panel.details["gaze"].text() and w.gaze_window is None
+    finally:
+        w.close()
+
+
+def test_without_confirming_the_gaze_the_video_is_not_analysed(app, tmp_path):
+    folder = _gaze_check_recording(tmp_path)
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.gaze_window is not None)
+        w.gaze_window.reject()
+        app.processEvents()
+        assert w.video is None and w.open_panel.states["gaze"] == "cancelled"
+        assert w.open_panel.states["analyse"] == "skipped" and w.open_panel.action_button.isVisibleTo(w)
+        w.open_panel.action_button.click()         # asked again from the panel
+        assert wait_for(app, lambda: w.gaze_window is not None)
+        w.gaze_window.reject()
+    finally:
+        w.close()
+
+
 def test_the_session_gaze_offset_is_applied_from_the_window(app, tmp_path):
+    """No gaze check: the video is analysed at once; the gaze correction opens from the side panel and applies the offset."""
     from cwtool import gazecheck
     folder = write_varjo_recording(tmp_path / "varjo", [128, 200, 60, 128], pupil_mm=3.0)
     w = MainWindow()
     try:
         w.open_recording(folder)
-        assert wait_for(app, lambda: w.recording is not None)
-        assert w.gaze_dx.value() == 0 and not w.gaze_apply.isEnabled() and not w.gaze_from_check.isEnabled()
-        w.gaze_dx.setValue(1.5)
-        assert w.gaze_apply.isEnabled()
+        assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None)
+        assert w.gaze_window is None and "not asked" in w.open_panel.details["gaze"].text()
+        assert w.gaze_offset_label.text() == "Gaze offset: none" and w.gaze_window_button.isEnabled()
+        w.gaze_window_button.click()
+        assert wait_for(app, lambda: w.gaze_window is not None)
+        assert w.gaze_window.table.rowCount() == 0 and not w.gaze_window.from_check.isEnabled()
+        w.gaze_window.dx.setValue(1.5)
         before = w.recording
-        w.gaze_apply.click()
+        w.gaze_window.accept()
         assert wait_for(app, lambda: w.recording is not before and w.recording is not None and w.recording.gaze_offset)
         assert w.recording.gaze_offset == (1.5, 0.0) and gazecheck.load_offset(folder) == (1.5, 0.0)
-        assert w.gaze_dx.value() == 1.5 and not w.gaze_apply.isEnabled()
+        assert w.gaze_offset_label.text() == "Gaze offset: +1.50° right, +0.00° down (confirmed)"
     finally:
         w.close()

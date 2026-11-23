@@ -1615,6 +1615,14 @@ is revised; they remain in the git history of this file.
   (colour error 8 %). So the Quest's name is 6.4 s from the phone's clock and 3.5 s from the computer's: to a second it
   places nothing, and the run file and the saccades are needed. A capture renamed by hand is not recognised (no start time
   in its metadata, only `OCULUS_ATTRIBUTION_ID`); a recording opened from a folder above its export is not found.
+  The gaze is now confirmed before the video is analysed: a quick pass over the capture's colours (10 s; the same
+  alignment as the full analysis, the pupil at −6.459 s) feeds the gaze correction window, where the offset is redrawn live
+  with each place's error; on this recording *Use the gaze check's offset* (+1.86° right, +2.20° down) leaves 0.3° at the
+  centre and 0.7° median, but 3.5° and 2.7° at places 8 and 9 (lower left and left).
+  Fixed with it: the video preview drew the gaze unaligned (6.45 s from its frame here, so on another place of the check),
+  and the video was analysed with the unaligned gaze; the capture is now aligned from the quick pass before the analysis
+  (app and command line), a saved analysis made at other sample times is done again, and the preview follows the
+  alignment. On this recording the preview's gaze at place 4 is now 0.03 of the height from the dot (the offset applied).
 - **Status:** open (route, alignment, gaze check, the clocks from the saccades and the capture's projection implemented and tried on one Quest recording over Link; needs more recordings, and a renamed capture is not found).
 
 ### 62. The AS7341's timestamps lag its board's clock drift: about 0.19 s early

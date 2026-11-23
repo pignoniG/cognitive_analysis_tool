@@ -6,12 +6,13 @@ from __future__ import annotations
 import time
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QGridLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
 from cwtool import palette
 
 STEPS = (("read", "Reading the recording"),
          ("video", "Finding the scene video"),
+         ("gaze", "Correcting the gaze"),
          ("analyse", "Analysing the video"),
          ("align", "Aligning and checking the gaze"),
          ("result", "Computing the result"))
@@ -68,9 +69,16 @@ class OpenProgress(QWidget):
             self.marks[key], self.names[key], self.details[key] = mark, label, detail
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
+        buttons = QHBoxLayout()
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.cancel_requested)
-        layout.addWidget(self.cancel_button, 0, Qt.AlignLeft)
+        self.action_button = QPushButton()            # what to do next, when a step waits for the operator
+        self.action_button.clicked.connect(lambda: self._action and self._action())
+        self._action = None
+        buttons.addWidget(self.action_button)
+        buttons.addWidget(self.cancel_button)
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
         outer.addWidget(box, 0, Qt.AlignHCenter)
         outer.addStretch(2)
         self.states: dict = {}
@@ -90,7 +98,19 @@ class OpenProgress(QWidget):
             self._set(key, "done", detail)
         self.bar.hide()
         self.cancel_button.hide()
+        self.set_action(None)
         self._frames = None
+
+    def set_action(self, text: str | None, action=None) -> None:
+        """Offer a button (``text``) that calls ``action``; None hides it."""
+        self._action = action
+        self.action_button.setText(text or "")
+        self.action_button.setVisible(bool(text))
+
+    def waiting(self, key: str, detail: str) -> None:
+        """The step waits for the operator (no Cancel: the window it waits on has its own)."""
+        self._set(key, "running", detail)
+        self.cancel_button.hide()
 
     def start(self, key: str, detail: str = "", cancellable: bool = False) -> None:
         self._set(key, "running", detail)
@@ -99,6 +119,7 @@ class OpenProgress(QWidget):
 
     def done(self, key: str, detail: str = "") -> None:
         self._set(key, "done", detail)
+        self.set_action(None)
         if key == "analyse":
             self.bar.hide()
         self.cancel_button.hide()

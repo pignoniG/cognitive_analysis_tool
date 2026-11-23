@@ -167,3 +167,14 @@ def test_the_session_offset_is_saved_with_the_recording_and_applied_on_reading(t
     assert devices.load(folder, gaze_offset=(0.0, 0.0)).gaze_offset is None            # overridden for one reading
     gazecheck.save_offset(folder, None)
     assert not (folder / gazecheck.OFFSET_FILE).exists()
+
+
+def test_a_confirmed_offset_is_kept_even_at_zero(tmp_path):
+    from cwtool import gazecheck
+    assert not gazecheck.offset_confirmed(tmp_path)
+    gazecheck.save_offset(tmp_path, (0.0, 0.0))                   # not confirmed: nothing kept
+    assert not (tmp_path / gazecheck.OFFSET_FILE).exists()
+    gazecheck.save_offset(tmp_path, (0.0, 0.0), confirmed=True)   # confirmed: kept, and nothing applied
+    assert gazecheck.offset_confirmed(tmp_path) and gazecheck.load_offset(tmp_path) is None
+    gazecheck.save_offset(tmp_path, (1.5, -0.5), source="gaze check", confirmed=True)
+    assert gazecheck.offset_confirmed(tmp_path) and gazecheck.load_offset(tmp_path) == (1.5, -0.5)

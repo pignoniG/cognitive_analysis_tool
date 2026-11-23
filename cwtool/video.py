@@ -133,9 +133,10 @@ class VideoResult:
     @classmethod
     def load_cached(cls, folder: Path, settings: VideoSettings, video: Path,
                     frame_times: Optional[np.ndarray] = None,
-                    gaze: Optional[np.ndarray] = None) -> Optional["VideoResult"]:
+                    gaze: Optional[np.ndarray] = None, time: Optional[np.ndarray] = None) -> Optional["VideoResult"]:
         """Return the cached result if it was made from the same video, settings, frame clock,
-        gaze samples and format."""
+        gaze samples and format, and (``time`` given) at the recording's sample times: a video on a clock of its own
+        is analysed with the pupil aligned to it, and an analysis at other times paired its frames with other gaze."""
         meta_path, csv_path = folder / CACHE_JSON, folder / CACHE_CSV
         if not (meta_path.exists() and csv_path.exists()):
             return None
@@ -145,10 +146,21 @@ class VideoResult:
                 or meta.get("frame_clock") != _clock_key(frame_times) or meta.get("gaze") != _array_key(gaze)):
             return None
         data = np.loadtxt(csv_path, delimiter=",", skiprows=1, ndmin=2)
+        if time is not None and len(data) and not _times_within(data[:, 0], np.asarray(time, dtype=float)):
+            return None
         g = len(GAMMA_GRID)
         lin = data[:, 7:].reshape(len(data), 3, g, 3)
         return cls(time=data[:, 0], fixation_rgb=data[:, 1:4], background_rgb=data[:, 4:7],
                    fixation_lin=lin[:, 0], background_lin=lin[:, 1], frame_lin=lin[:, 2])
+
+
+def _times_within(times: np.ndarray, grid: np.ndarray, tolerance: float = 1e-4) -> bool:
+    """Whether every one of ``times`` is one of the recording's sample times ``grid`` (sorted)."""
+    if not len(grid):
+        return False
+    i = np.clip(np.searchsorted(grid, times), 1, len(grid) - 1)
+    nearest = np.minimum(np.abs(times - grid[i - 1]), np.abs(grid[i] - times))
+    return bool(np.all(nearest <= tolerance))
 
 
 def _circle_mask(shape: tuple[int, int], center: tuple[int, int], radius: int) -> np.ndarray:
@@ -437,3 +449,43 @@ def analyse_video(video: Path, time: np.ndarray, gaze: np.ndarray, settings: Vid
     return VideoResult(time[sample], np.vstack([r[1] for r in rows]), np.vstack([r[2] for r in rows]),
                        np.concatenate([r[3] for r in rows]), np.concatenate([r[4] for r in rows]),
                        np.concatenate([r[5] for r in rows]))
+
+
+QUICK_SIZE = (64, 36)      # px: the frames a quick pass averages
+
+
+def quick_colours(video: Path, frame_times: Optional[np.ndarray] = None, progress: Optional[Callable] = None,
+                  cancelled: Optional[Callable] = None) -> Optional[VideoResult]:
+    """The whole picture's mean colour at every frame, without the gaze: a pass to align the video's clock (the presenter's
+    run file is matched to its colours) before the gaze is confirmed and the video analysed around it. Frames are decoded
+    small, so a Quest capture of 8 minutes takes about 8 s. The areas of the result are all the whole picture. None if
+    cancelled or unreadable."""
+    import av
+
+    rows, lins = [], []
+    levels = (np.arange(256) / 255.0)[:, None] ** GAMMA_GRID[None, :]      # (256, G): each code value at each γ
+    with av.open(str(video)) as container:
+        stream = container.streams.video[0]
+        stream.thread_type = "AUTO"
+        fps = float(stream.average_rate or stream.guessed_rate or 30)
+        total = stream.frames or 0
+        clock = FrameClock(fps, frame_times)
+        for n, frame in enumerate(container.decode(stream)):
+            small = frame.to_ndarray(format="rgb24", width=QUICK_SIZE[0], height=QUICK_SIZE[1],
+                                     interpolation="FAST_BILINEAR").reshape(-1, 3)
+            counts = np.stack([np.bincount(small[:, c], minlength=256) for c in range(3)]) / len(small)   # (3, 256)
+            rows.append((clock.time(n), *(counts @ np.arange(256))))
+            lins.append((counts @ levels).T)                                                         # (G, 3)
+            if n % 100 == 0:
+                if progress and total:
+                    progress(min(n / total, 1.0))
+                if cancelled and cancelled():
+                    return None
+    if not rows:
+        return None
+    data, lin = np.array(rows), np.array(lins)
+    if frame_times is None:                    # evenly spaced: the middle of each frame, as the analysis samples them
+        data[:, 0] += 0.5 / fps
+    rgb = data[:, 1:4]
+    return VideoResult(time=data[:, 0], fixation_rgb=rgb, background_rgb=rgb.copy(), fixation_lin=lin,
+                       background_lin=lin.copy(), frame_lin=lin.copy())

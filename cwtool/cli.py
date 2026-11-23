@@ -74,15 +74,21 @@ def main(argv: list[str] | None = None) -> int:
     if rec.scene_video is None:
         print("No scene video found", file=sys.stderr)
         return 1
-    video = None if args.reanalyse else VideoResult.load_cached(rec.folder, settings, rec.scene_video,
-                                                                      rec.scene_frame_times, rec.gaze)
+    # A video on its own clock is analysed with the pupil aligned to it first (from a quick pass over its colours)
+    seen = rec
+    if not args.no_align_log and rec.separate_video_clock:
+        print(f"Aligning {rec.scene_video.name} from its colours ...")
+        seen, first, why = alignment.for_analysis(rec)
+        print(first.summary() if first is not None else f"not aligned before the analysis: {why}")
+    video = None if args.reanalyse else VideoResult.load_cached(rec.folder, settings, seen.scene_video,
+                                                                      seen.scene_frame_times, seen.gaze, seen.time)
     if video is None:
         print(f"Analysing {rec.scene_video.name} ...")
-        video = analyse_video(rec.scene_video, rec.time, rec.gaze, settings,
+        video = analyse_video(seen.scene_video, seen.time, seen.gaze, settings,
                               progress=lambda p: print(f"\r{p:5.0%}", end="", flush=True), workers=args.workers,
-                              frame_times=rec.scene_frame_times)
+                              frame_times=seen.scene_frame_times)
         print()
-        video.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze)
+        video.save(rec.folder, settings, seen.scene_video, seen.scene_frame_times, seen.gaze)
 
     if alignment.applicable(rec) and not args.no_align_log:
         found_alignment, why = alignment.find(rec, video)

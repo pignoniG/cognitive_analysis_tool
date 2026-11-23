@@ -314,17 +314,40 @@ def load_offset(folder: Optional[Path]) -> Optional[tuple]:
     return (dx, dy) if (dx, dy) != (0.0, 0.0) else None
 
 
-def save_offset(folder: Path, offset_deg: Optional[tuple], source: str = "operator") -> Path:
-    """Save the gaze offset (deg; right, down) with the recording; None or zero removes it."""
+def save_offset(folder: Path, offset_deg: Optional[tuple], source: str = "operator", confirmed: bool = False) -> Path:
+    """Save the gaze offset (deg; right, down) with the recording; None or zero removes it, unless ``confirmed``: the
+    operator confirmed it in the gaze correction (:func:`offset_confirmed`), a zero offset too."""
     import json
     from datetime import datetime
     path = Path(folder) / OFFSET_FILE
-    if offset_deg is None or tuple(offset_deg) == (0.0, 0.0):
+    offset_deg = tuple(offset_deg) if offset_deg is not None else (0.0, 0.0)
+    if offset_deg == (0.0, 0.0) and not confirmed:
         path.unlink(missing_ok=True)
         return path
-    path.write_text(json.dumps({"right_deg": round(float(offset_deg[0]), 3), "down_deg": round(float(offset_deg[1]), 3),
-                                "source": source, "saved": datetime.now().isoformat(timespec="seconds")}, indent=2))
+    data = {"right_deg": round(float(offset_deg[0]), 3), "down_deg": round(float(offset_deg[1]), 3), "source": source,
+            "saved": datetime.now().isoformat(timespec="seconds")}
+    if confirmed:
+        data["confirmed"] = True
+    path.write_text(json.dumps(data, indent=2))
     return path
+
+
+def offset_confirmed(folder: Optional[Path]) -> bool:
+    """Whether the operator confirmed the gaze correction of the recording in ``folder`` (the app then analyses its video
+    without asking)."""
+    import json
+    path = Path(folder) / OFFSET_FILE if folder is not None else None
+    if path is None or not path.exists():
+        return False
+    try:
+        return bool(json.loads(path.read_text()).get("confirmed"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def has_gaze_check(rec: Recording) -> bool:
+    """Whether the run file next to the recording has a gaze check (the app then asks for the gaze to be confirmed)."""
+    return _run_file(rec) is not None
 
 
 def shift_gaze(gaze: np.ndarray, offset_deg: tuple, projection) -> np.ndarray:

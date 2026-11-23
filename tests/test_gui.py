@@ -572,6 +572,25 @@ def test_the_left_pages_never_scroll_sideways(app):
     w.close()
 
 
+
+def test_with_a_recording_the_data_page_still_fits_its_column(app, varjo_folder):
+    """The scroll area clips sideways instead of scrolling: what cannot wrap (a check box's text) must fit."""
+    w = MainWindow()
+    w.resize(1400, 900)
+    w.show()
+    w.main_split.setSizes([1, 1000])
+    w.open_recording(varjo_folder)
+    assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None)
+    w.rail.set_current(0)
+    scroll = w.pages.widget(0)
+    for text in ("Align the capture to the pupil", "Align the presenter's log to the video"):   # XR and the others
+        w.align_check.setText(text)
+        w.align_check.show()
+        app.processEvents()
+        assert scroll.widget().minimumSizeHint().width() <= scroll.viewport().width(), text
+    w.close()
+
+
 def test_bars_are_dragged_by_the_handles_under_the_plots_and_not_on_the_plots(app, tmp_path):
     from conftest import write_varjo_recording
     from PySide6.QtCore import QEvent, QPointF
