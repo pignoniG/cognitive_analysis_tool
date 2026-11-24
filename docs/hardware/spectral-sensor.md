@@ -8,6 +8,11 @@ the [sensor logger](../usage/logger.md) next to the other sensors.
 The analysis does not use it yet: its counts are not lux or luminance until the sensor is calibrated
 ([open issue 58](../OPEN_ISSUES.md)). The app shows its file under ΔPD and exports it, like the Shimmer's.
 
+The datasheet's typical responsivity curves (DS000504 v3-00, Figure 19, relative to F8, 1 nm steps) are in
+[`data/as7341_responsivity.csv`](data/as7341_responsivity.csv), taken from the PDF's vector paths. They give the
+photopic light within about 10 % and the melanopic within about 25 % on a unit that has not been measured; see
+[open issue 58](../OPEN_ISSUES.md#58-the-as7341-spectral-sensor-is-logged-but-not-calibrated-or-used-by-the-analysis).
+
 ## Hardware
 
 - Arduino Nano (ATmega328P; the clones with a CH340 USB chip work)

@@ -1360,6 +1360,76 @@ is revised; they remain in the git history of this file.
 - **Proposal:** calibrate against a spectroradiometer (or a reference lux meter under several sources) to a matrix from
   the ten channels to photopic illuminance and the α-opic (melanopic) irradiances; check the gain ratios by measuring a
   steady light at every gain; then offer the photopic and melanopic estimates to the luminance model next to the lux.
+- **The screen as a reference (24 November 2026):** the two runs on the 27" screen (issue 60, firmware 1, 512× and 50 ms
+  throughout) checked against the run file's colours, medians of each step from 2 s after its onset. **Additive:** Red
+  255 + Green 255 + Blue 255 gives Gray 255 within 2–4 % in F2–F8 and clear (F1 0.85–0.94 at a few counts; NIR 1.08 and
+  1.53, the eye camera's infrared of issue 60). **Linear:** the peak-V estimate follows Y across the gray steps within
+  1–6 % from Gray 60 up in the first run and from Gray 96 up in the second; below that the first run reads low (0.22× at
+  Gray 12) and the second high (1.1–1.3× at Gray 33–76, 1.9× at Gray 12), the quantisation of 0–2 counts per band
+  (issue 65) and in the second run a floor that the infrared may explain. **Peak V(λ) weighting** (the bands weighted by V(λ) at their peaks, scaled to
+  white) reads Red 255 at 1.57×, Green 255 at 0.85× and Blue 255 at 0.73–0.78× of their sRGB Y, the same in both runs.
+  **Correction from the screen alone:** the smallest per-band change of those weights that reproduces the three
+  primaries' Y exists, but it is not determined: the two runs give different factors (F4 1.6× in one, 0.6× in the
+  other), since a screen offers only three independent spectra (its primaries) for eight bands, and its half levels and
+  grays are the same spectra scaled. So a screen can check a calibration, or fit at most three parameters of one (for
+  example the scales of an X, Y, Z matrix), not calibrate the bands. It also assumes the screen reproduces sRGB (this one
+  through Safari's colour management, not measured), and says nothing of melanopic content beyond what the primaries'
+  spectra would.
+- **Options, without photometry in the software:**
+  1. **Checks needing no reference**, on the board: the gain ratios (a steady light at every gain), the integration
+     linearity (50, 100, 200 ms), the dark counts (covered), the dome's angular response (turning the sensor before a
+     small lamp), and how much of the clear channel the NIR channel predicts (to remove an eye tracker's infrared).
+  2. **The datasheet's typical responsivities:** a matrix from the eight bands to X, Y, Z and melanopic irradiance by
+     least squares over a set of spectra (CIE illuminants, LEDs, display primaries), as AMS's application notes do. Needs
+     the curves (not in the repository); unit-to-unit spread and the dome's transmission not corrected.
+  3. **The screen to check or rescale 2**, as above, from runs already recorded.
+  4. **A reference instrument once per sensor build** (a one-off hardware calibration, not needed to run the software):
+     a photopic lux meter under several broadband sources for the scale and the photopic weights; a spectroradiometer for
+     the full matrix and the melanopic weights.
+  5. **The TSL2591 under the same dome:** a common scale only; it is not photopic (Red 1.48×, Green 0.74×, Blue 1.43× of
+     their luminance-matched grays in this run), so not a spectral reference.
+  6. **The pupil as the detector:** fit a melanopic share next to the photopic signal on the calibration. Not
+     identifiable with the present sequence (issue 60: pair changes of 0.1–0.2 mm against 0.15 mm of noise); it would
+     need pairs matched in photopic luminance and differing in melanopic content, which need 2 or 4 to be designed.
+- **The datasheet's curves, and how much a calibration absorbs the differences between units (24 November 2026):** the
+  curves of DS000504 v3-00, Figure 18 and Figure 19 ("measured spectral responsivity relative to F8", 256×, with a diffuser),
+  taken from the PDF's vector paths. Their peaks and widths match the datasheet's tables within 1–4 nm.
+  The datasheet gives each band's centre as typ ± 10 nm (min–max) and the responsivities as typical only. A simulation,
+  from 380 to 780 nm, against the CIE V(λ) and the CIE S 026 melanopic curve:
+  - **Spectra:** blackbodies of 1800–10 000 K, phosphor white LEDs, mixes of display primaries, single coloured LEDs,
+    three-band fluorescents, and tilted blackbodies; 3000 spectra to fit the matrix and 3000 others to test it.
+  - **Units:** units differing from the typical one by a centre shift of σ 3.3 nm (the ±10 nm as 3σ), a width change of
+    σ 5 % and a gain change of σ 10 % per band, 200 units.
+  - **Errors:** relative to the target, with the error floored at 5 % of a flat spectrum's, after removing a common
+    scale (the participant's sensitivity absorbs it).
+  - **Results** (RMS, 95th percentile):
+
+    | | photopic | melanopic |
+    |---|---|---|
+    | the typical unit with its own matrix (the eight bands' limit) | 5 %, 10 % | 13 %, 19 % |
+    | another unit, the same generic matrix | 9 %, 19 % | 23 %, 40 % |
+    | per-band gains set from one white light | 8 %, 17 % | 20 %, 35 % |
+    | the matrix rescaled from a screen's R, G, B and white (with their spectra known for melanopic) | 8 %, 17 % | 17 %, 30 % |
+    | a lux meter under 6 lights, the 8 weights refitted | 13 %, 15 % (overfits) | not measurable |
+    | the unit's own curves measured | 6 %, 14 % | 14 %, 22 % |
+
+  - **Peak shifts dominate.** A per-band gain correction (one white source) removes little, since the units differ mostly
+    in where their bands sit, which only measuring the curves corrects. Half of the photopic error and most of the
+    melanopic error remain without measuring them.
+  - **Worst case, ±10 nm as 1σ:** the generic matrix gives 19 % and 40 % RMS, against 11 % and 16 % with the unit's
+    own curves.
+  - **The clear channel added:** the bands' limit falls to 3 % and 5 %, but the generic matrix then gets worse on
+    another unit (10 % and 33 %), since it leans on differences between the clear and the bands. So the clear channel is
+    worth using only with a unit's own curves.
+  - **The largest errors** (up to 1.3× photopic and 3× melanopic) are single narrow LEDs that fall between bands.
+  - **For a screen,** whose light is always a mix of its three primaries, rescaling to its primaries is exact for that
+    screen. The data show it adds within 2–4 %, as noted above. A screen or headset can therefore be calibrated by
+    itself, but only for photopic luminance unless its primaries' spectra are known.
+  - **So:** the datasheet's curves give the photopic light within about 10 % RMS and the melanopic within about 25 %
+    on a unit that has not been measured. That is enough for photopic use and too rough for the melanopic question of
+    issue 60.
+  - **Files:** the curves are in `docs/hardware/data/as7341_responsivity.csv`; the simulation scripts are kept outside
+    the repository.
 - **Status:** open (needs a calibration).
 
 ### 59. VR presenters: the WebXR Layers path is not shown by a Quest 3 over Link
