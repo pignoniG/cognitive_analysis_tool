@@ -5,13 +5,13 @@ from __future__ import annotations
 import argparse
 import math
 import sys
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from cwtool import alignment, devices, gazecheck, pipeline, sensors
 from cwtool.params import DeviceMismatch, DisplayPhotometry, Parameters, VideoSettings
 from cwtool.trim import TRIM_FILE, Trim
-from cwtool.video import VideoResult, analyse_video
+from cwtool.video import VideoResult, analyse_video, keep_alignment
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -75,20 +75,28 @@ def main(argv: list[str] | None = None) -> int:
         print("No scene video found", file=sys.stderr)
         return 1
     # A video on its own clock is analysed with the pupil aligned to it first (from a quick pass over its colours)
-    seen = rec
+    seen, first, video = rec, None, None
     if not args.no_align_log and rec.separate_video_clock:
-        print(f"Aligning {rec.scene_video.name} from its colours ...")
-        seen, first, why = alignment.for_analysis(rec)
-        print(first.summary() if first is not None else f"not aligned before the analysis: {why}")
-    video = None if args.reanalyse else VideoResult.load_cached(rec.folder, settings, seen.scene_video,
-                                                                      seen.scene_frame_times, seen.gaze, seen.time)
+        saved = None if args.reanalyse else alignment.saved_for_analysis(rec, settings)
+        if saved is not None:                  # the alignment saved with an analysis that still applies
+            seen, first, video = saved
+            print(f"{first.summary()} (saved with the analysis)")
+        else:
+            print(f"Aligning {rec.scene_video.name} from its colours ...")
+            seen, first, why = alignment.for_analysis(rec)
+            print(first.summary() if first is not None else f"not aligned before the analysis: {why}")
+    if video is None and not args.reanalyse:
+        video = VideoResult.load_cached(rec.folder, settings, seen.scene_video, seen.scene_frame_times, seen.gaze, seen.time)
+        if video is not None and first is not None:     # saved without the alignment it matched (an earlier version)
+            keep_alignment(rec.folder, asdict(first))
     if video is None:
         print(f"Analysing {rec.scene_video.name} ...")
         video = analyse_video(seen.scene_video, seen.time, seen.gaze, settings,
                               progress=lambda p: print(f"\r{p:5.0%}", end="", flush=True), workers=args.workers,
                               frame_times=seen.scene_frame_times)
         print()
-        video.save(rec.folder, settings, seen.scene_video, seen.scene_frame_times, seen.gaze)
+        video.save(rec.folder, settings, seen.scene_video, seen.scene_frame_times, seen.gaze,
+                   alignment=asdict(first) if first is not None else None)
 
     if alignment.applicable(rec) and not args.no_align_log:
         found_alignment, why = alignment.find(rec, video)

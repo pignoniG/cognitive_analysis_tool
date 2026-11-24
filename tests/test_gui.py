@@ -55,8 +55,18 @@ def test_open_analyse_and_retune(app, varjo_folder, tmp_path):
     p = w.params_panel.params()
     p.sensitivity = 2.5
     w.params_panel.set_params(p)
-    w._params_path = tmp_path / "p.json"
-    w.save_params()
+    # Save offers the recording's folder; a file elsewhere is asked for again rather than overwritten
+    from PySide6.QtWidgets import QFileDialog
+    asked = []
+    original = QFileDialog.getSaveFileName
+    QFileDialog.getSaveFileName = staticmethod(lambda parent, title, start, *a: asked.append(start) or (str(tmp_path / "p"), ""))
+    try:
+        w._params_path = tmp_path / "other.json"
+        w.save_params()
+    finally:
+        QFileDialog.getSaveFileName = original
+    assert asked == [str(varjo_folder / "cwtool_parameters.json")] and w._params_path == tmp_path / "p.json"
+    assert not (tmp_path / "other.json").exists()
     import json
     saved = json.loads((tmp_path / "p.json").read_text())
     assert saved["sensitivity"] == 2.5 and "l_max" not in saved     # display photometry is separate
@@ -718,7 +728,7 @@ def test_changed_parameters_are_flagged_reverted_and_asked_about(app, tmp_path, 
     w.open_recording(other)
     assert asked == ["opening another recording"] and w.recording.folder == folder
     # Save writes the file and the changes are then the saved state; the other recording opens
-    saved = tmp_path / "p.json"
+    saved = folder / "p.json"                    # in the recording's folder: Save writes it without asking where
     w._params_path = saved
     monkeypatch.setattr(type(w), "_ask_unsaved", lambda self, what: QMessageBox.Save)
     w.open_recording(other)

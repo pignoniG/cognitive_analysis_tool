@@ -108,7 +108,10 @@ light barely follows the steps, and the fit says so.
 
 ## 3. Save
 
-**File → Save parameters as…** and name the file after the participant. Load it with their other recordings, or
+**File → Save parameters as…**: it offers `cwtool_parameters.json` in the recording's folder, which is loaded the next
+time the recording opens, with the black level and gamma if they were fitted; another name or folder (named after the
+participant) suits their other recordings, and holds no display photometry. Load it
+with their other recordings, or
 pass it to `cwtool --params` (with the display photometry file as `--display`). Participant files do not contain the display photometry, so loading one keeps the
 display photometry currently in use. (Files from before this change still carry Lmin, Lmax and gamma; loading them
 reproduces their original results.)

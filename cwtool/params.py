@@ -31,6 +31,10 @@ class VideoSettings:
         return replace(self, circular_mask=rec.circular_scene, vertical_fov=rec.profile.field_of_view[1])
 
 
+PARAMS_FILE = "cwtool_parameters.json"    # the participant's parameters saved in a recording's folder
+PARAMS_KIND = "cwtool_parameters"
+
+
 @dataclass
 class Parameters:
     """Every analysis setting: participant, display photometry, light response, lux sensor,
@@ -144,17 +148,40 @@ class Parameters:
             return self.camera_white * self.camera_reference_ms / self.camera_exposure_ms
         return self.camera_white
 
-    def save(self, path: str | Path, participant_only: bool = False, device: str = "") -> None:
+    def save(self, path: str | Path, participant_only: bool = False, device: str = "", keep_display: bool = False) -> None:
         """Write the parameters as JSON. ``participant_only`` leaves out the display photometry,
-        which is saved separately (:class:`DisplayPhotometry`); exports keep everything used. ``device`` is the
-        device the parameters were set for: a file that names one can only be loaded for that device."""
+        which is saved separately (:class:`DisplayPhotometry`); exports keep everything used. ``keep_display`` keeps it in
+        a participant's file all the same: one saved in a recording's folder holds the black level and gamma fitted on
+        it. ``device`` is the device the parameters were set for: a file that names one can only be loaded for that
+        device."""
         data = asdict(self)
-        if participant_only:
+        if participant_only and not keep_display:
             for key in DISPLAY_FIELDS:
                 data.pop(key)
         if device:
             data = {"device": device, **data}
+        if participant_only:                     # marked, so that a recording's folder can be searched for it
+            data = {"kind": PARAMS_KIND, **data}
         Path(path).write_text(json.dumps(data, indent=2))
+
+    @staticmethod
+    def find(folder: str | Path) -> Path | None:
+        """The participant parameter file saved in a recording's folder (``PARAMS_FILE``, or another small JSON file
+        marked as one), or None; ``PARAMS_FILE`` first, else the last by name."""
+        folder = Path(folder)
+        if not folder.is_dir():
+            return None
+        found = []
+        for path in sorted(folder.glob("*.json")):
+            if path.name.startswith(".") or path.stat().st_size > 50_000:
+                continue
+            try:
+                if json.loads(path.read_text(encoding="utf-8")).get("kind") == PARAMS_KIND:
+                    found.append(path)
+            except (OSError, ValueError, AttributeError):
+                continue
+        named = [p for p in found if p.name == PARAMS_FILE]
+        return (named or found or [None])[-1]
 
     @classmethod
     def load(cls, path: str | Path, profile=None, base: "Parameters | None" = None,

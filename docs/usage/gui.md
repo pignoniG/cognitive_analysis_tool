@@ -45,7 +45,12 @@ of the tab are the participant's parameter file.
 - **Forget the logger folder**: go back to the recording's own folder and its `lux` subfolder for the lux logs and
   the sensor files.
 - **Load parameters… / Save parameters / Save parameters as…**: the participant's parameter file (JSON), without
-  the display photometry. Files written by version 1.x are converted when loaded.
+  the display photometry. Saving offers `cwtool_parameters.json` in the open recording's folder (a file loaded from
+  another folder is not overwritten: it asks again), and a parameter file saved there is loaded when the recording is
+  opened (one set for another device is not, and the Set-up box says why). For a display device the file in the
+  recording's folder also holds the black, white and gamma (fitted with *Also fit gamma* / *Also fit the black level*),
+  used on opening instead of a display photometry file. Files written by version 1.x are
+  converted when loaded.
 - **Load display photometry… / Save display photometry…**: the headset's nominal Lmin, Lmax and gamma. The last
   file used with a device is loaded automatically with its recordings; the window title shows which one is in use.
 - **Export results…** (Ctrl+E): one package into a folder of your choice (default `cwtool_export` inside the recording): the
@@ -172,7 +177,8 @@ which offset is applied and whether it was confirmed; **Gaze correction…** the
 opens it any time (an analysed recording uses its own alignment and gaze check); confirming then analyses the video again.
 Recordings without a gaze check are analysed at once. A Neon inside a Quest is aligned from the quick pass before its
 video is analysed (its capture runs on the headset's clock, seconds from the pupil's), so each frame is analysed, and
-drawn in the preview, with the gaze measured when it was shown.
+drawn in the preview, with the gaze measured when it was shown. The alignment is saved with the analysis, so opening
+the recording again takes both and skips the quick pass (the gaze step says *as saved with the analysis*).
 
 The video is analysed when a recording is opened (after the gaze correction, when there is one), unless a cached
 analysis made with the same video, settings, frame timestamps and gaze exists. **Reanalyse video** (**Analyse video** before any analysis) runs
@@ -257,7 +263,8 @@ See [Participant calibration](calibration.md) for the procedure.
   20-step staircase used before October 2026), a CSV, or a run file saved by
   the [calibration presenter](calibration-tool.md). A run file's onset times are on the presenting computer's clock,
   so they place the sequence in the recording (the start and the overlay are set; a run played for another recording
-  is reported as outside it). A run file saved in the recording's folder is found when the recording is opened and
+  is reported as outside it). A run file saved in the recording's folder (or, for a Neon in a Quest, next to the capture) is found when the
+  recording is opened and
   loaded and placed the same way, and so is a display photometry file saved there (a `.json` written by *Save display
   photometry*).
 - **Find in recording**: locates the sequence in the analysed video and adapts its step length.

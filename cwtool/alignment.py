@@ -579,6 +579,27 @@ def align(rec: Recording, alignment: LogAlignment) -> Recording:
                    notes=list(rec.notes) + alignment.notes(), log_alignment=alignment.as_dict())
 
 
+def saved_for_analysis(rec: Recording, settings) -> Optional[tuple]:
+    """The alignment saved with the video's analysis, when the analysis still applies to the recording aligned by it:
+    (aligned recording, alignment, the analysis), so an opening skips :func:`for_analysis`'s quick pass. None for a
+    video on the tracker's clock, without a saved alignment, or when the analysis no longer applies (another video,
+    settings or gaze offset)."""
+    from cwtool.video import VideoResult, saved_alignment
+    if not rec.separate_video_clock or rec.scene_video is None or rec.folder is None:
+        return None
+    fields = saved_alignment(rec.folder)
+    if fields is None:
+        return None
+    try:
+        found = LogAlignment(**fields)
+    except TypeError:                          # written by another version
+        return None
+    aligned = align(rec, found)
+    cached = VideoResult.load_cached(rec.folder, settings, aligned.scene_video, aligned.scene_frame_times, aligned.gaze,
+                                     aligned.time)
+    return None if cached is None else (aligned, found, cached)
+
+
 def for_analysis(rec: Recording, progress=None, cancelled=None) -> tuple[Recording, Optional[LogAlignment], str]:
     """The recording to analyse the video with. A video on a clock of its own (a Neon inside a Quest) is aligned first from
     a quick pass over its colours (:func:`cwtool.video.quick_colours`, about 10 s for 8 minutes), so that each frame is

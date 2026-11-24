@@ -1,6 +1,8 @@
 """Opening a recording sets up what its folder already holds (the presenter's calibration run file, a display photometry
 file), shows the tracking quality, and takes the participant's iris diameter."""
 
+import dataclasses
+import json
 import os
 import time
 
@@ -253,5 +255,126 @@ def test_the_session_gaze_offset_is_applied_from_the_window(app, tmp_path):
         assert wait_for(app, lambda: w.recording is not before and w.recording is not None and w.recording.gaze_offset)
         assert w.recording.gaze_offset == (1.5, 0.0) and gazecheck.load_offset(folder) == (1.5, 0.0)
         assert w.gaze_offset_label.text() == "Gaze offset: +1.50° right, +0.00° down (confirmed)"
+    finally:
+        w.close()
+
+
+def test_a_run_file_next_to_a_quest_capture_places_the_sequence(app, tmp_path):
+    """A Neon in a Quest: the run file lies next to the capture in the export's parent folder, not in the export, and is
+    still found and placed when the recording opens (it was found only by Load sequence)."""
+    from test_neon_xr import START_NS, _xr_recording
+    folder, capture = _xr_recording(tmp_path)
+    write_run_file(capture.parent / "calibration_run_P01_vr_x.csv", START_NS / 1e9 + 0.5)
+    assert calibration.find_run_file(folder) is None
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.recording is not None)
+        assert len(w.sequence.steps) == 4 and w.sequence_check.isChecked()
+        assert w.plots._sequence_visible and len(w.plots._sequence_items) == 4
+    finally:
+        w.close()
+
+
+def test_a_quest_recording_reopens_with_the_alignment_saved_with_its_analysis(app, tmp_path, monkeypatch):
+    """A video on its own clock is aligned by a quick pass over its colours before it is analysed. The alignment is saved
+    with the analysis, so the next opening takes both and skips the quick pass; a changed offset is aligned again."""
+    from test_neon_xr import _xr_recording
+    from cwtool import alignment, video
+    from cwtool.gui import main_window
+    folder, _ = _xr_recording(tmp_path)
+    shift = alignment.LogAlignment(offset=-0.3172, uncertainty=0.01, sd=0.01, n=5, candidates=0, drift_per_min=0.0,
+                                   span=10.0, source="test", moves="pupil")
+    monkeypatch.setattr(MainWindow, "_alignment_work",
+                        staticmethod(lambda raw, v, on: (shift, "", alignment.align(raw, shift), None, "")))
+    quick_passes = []
+    real_quick = main_window.quick_colours
+    monkeypatch.setattr(main_window, "quick_colours", lambda *a, **k: quick_passes.append(1) or real_quick(*a, **k))
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None, 60)
+        assert quick_passes == [1]
+        assert video.saved_alignment(folder) == pytest.approx(dataclasses.asdict(shift))
+
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None, 60)
+        assert quick_passes == [1]                                   # no second quick pass
+        assert "as saved with the analysis" in w.open_panel.details["gaze"].text()
+        assert "using the saved analysis" in w.open_panel.details["analyse"].text()
+
+        # An analysis saved without its alignment (by an earlier version) is reused and given it
+        meta = json.loads((folder / video.CACHE_JSON).read_text())
+        del meta["alignment"]
+        (folder / video.CACHE_JSON).write_text(json.dumps(meta))
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None, 60)
+        assert quick_passes == [1, 1] and "using the saved analysis" in w.open_panel.details["analyse"].text()
+        assert video.saved_alignment(folder) == pytest.approx(dataclasses.asdict(shift))
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None, 60)
+        assert quick_passes == [1, 1]
+    finally:
+        w.close()
+
+
+def test_parameters_saved_in_the_recordings_folder_are_loaded_when_it_opens(app, tmp_path):
+    from cwtool.params import PARAMS_FILE
+    folder = write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128], pupil_mm=3.0)
+    other = write_varjo_recording(tmp_path / "other", [128, 255, 0, 128], pupil_mm=3.0)
+    Parameters(sensitivity=2.75).save(folder / PARAMS_FILE, participant_only=True, device="varjo")
+    Parameters(sensitivity=1.5).save(tmp_path / "elsewhere.json", device="varjo")          # an export's: not marked
+    assert Parameters.find(folder) == folder / PARAMS_FILE and Parameters.find(tmp_path) is None
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.recording is not None)
+        assert w.params_panel.params().sensitivity == 2.75 and w._params_path == folder / PARAMS_FILE
+        assert not w.params_dirty()
+        assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None, 60)
+        w.open_recording(other)
+        assert wait_for(app, lambda: w.recording is not None and w.recording.folder == other)
+        assert w._params_path == folder / PARAMS_FILE           # kept, but Save asks for the open recording's folder
+    finally:
+        w.close()
+    Parameters().save(folder / PARAMS_FILE, participant_only=True, device="pupil_core")
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.recording is not None)
+        assert w._params_path is None and "pupil_core" in (w._params_note or "")       # another device's: not used
+    finally:
+        w.close()
+
+
+def test_a_display_devices_parameters_in_its_folder_keep_the_fitted_black_and_gamma(app, tmp_path):
+    """Gamma and the black level can be fitted on the recording: saved in its folder they go with the parameters and are
+    used when it opens, rather than a photometry file (the folder's, or the last one used with the device)."""
+    import json
+    from cwtool.params import PARAMS_FILE
+    folder = write_varjo_recording(tmp_path / "rec", [128, 255, 0, 128], pupil_mm=3.0)
+    DisplayPhotometry("varjo", 0.05, 140.0, 2.2, "measured").save(folder / "display_photometry.json")
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.recording is not None)
+        assert w.params_panel.params().gamma == 2.2
+        assert wait_for(app, lambda: w.result is not None and w.open_panel.running() is None, 60)
+        p = w.params_panel.params()
+        p.gamma, p.l_min, p.sensitivity = 2.63, 0.31, 1.7                  # as a fit with gamma and black would leave them
+        w.params_panel.set_params(p)
+        w._params_path = folder / PARAMS_FILE
+        w.save_params()
+        saved = json.loads((folder / PARAMS_FILE).read_text())
+        assert (saved["gamma"], saved["l_min"], saved["l_max"]) == (2.63, 0.31, 140.0)
+    finally:
+        w.close()
+    w = MainWindow()
+    try:
+        w.open_recording(folder)
+        assert wait_for(app, lambda: w.recording is not None)
+        p = w.params_panel.params()
+        assert (p.gamma, p.l_min, p.l_max, p.sensitivity) == (2.63, 0.31, 140.0, 1.7)
+        assert not w.params_dirty()
     finally:
         w.close()

@@ -1623,6 +1623,12 @@ is revised; they remain in the git history of this file.
   and the video was analysed with the unaligned gaze; the capture is now aligned from the quick pass before the analysis
   (app and command line), a saved analysis made at other sample times is done again, and the preview follows the
   alignment. On this recording the preview's gaze at place 4 is now 0.03 of the height from the dot (the offset applied).
+  The run file lies next to the capture, above the export: the gaze check and the alignment looked there, but the
+  sequence was placed only from a run file in the export's own folder, so it opened unplaced until loaded by hand. It is
+  now looked for next to the scene video too (`calibration.find_recording_run_file`).
+  The saved video analysis was never reused on this recording: its times were written with 6 significant digits (1 ms
+  past 100 s), and the aligned samples (−5.35949524 s + k × 5 ms) came back 0.495 ms from the recording's, beyond the
+  0.1 ms the reuse allows, so the video was analysed again at every opening. Times are now written to the microsecond.
 - **Status:** open (route, alignment, gaze check, the clocks from the saccades and the capture's projection implemented and tried on one Quest recording over Link; needs more recordings, and a renamed capture is not found).
 
 ### 62. The AS7341's timestamps lag its board's clock drift: about 0.19 s early

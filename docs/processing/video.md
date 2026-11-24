@@ -58,11 +58,17 @@ measured.
 - The frame range is split into chunks (at least 150 frames each, one per CPU core by default) decoded in parallel
   threads. The result does not depend on the number of chunks.
 - Frames are numbered by their presentation timestamps, so chunk seeks land on exactly the right frame.
+- The circles' histograms are counted by OpenCV, which releases Python's interpreter lock, so the chunks' measurements
+  run concurrently too (counted with numpy they ran one at a time). The gaze circle's histogram is counted once and
+  also subtracted from the background; samples of a frame that fall on the same pixel are measured once.
 
-For reference: 251 s of 4K H.264 Varjo capture in 49 s on 4 cores; 100 s of Pupil Core world video in about 15 s.
+For reference: 251 s of 4K H.264 Varjo capture in 49 s on 4 cores; 100 s of Pupil Core world video in about 15 s;
+480 s of 1080p Quest Link capture with 200 Hz Neon gaze in 18 s on 10 cores (68 s before the histogram changes, with
+identical results).
 
 ## Cache
 
 The result is saved as `cwtool_video.csv` with `cwtool_video.json` next to the recording. It is reused only if the
 format version, gamma grid, video settings, video file name, frame timestamps and gaze samples all match, so it is
-never silently stale. See [Output files](../reference/outputs.md#video-cache).
+never silently stale. A video on a clock of its own (a Neon inside a Quest) also saves the alignment it was analysed
+with, so the next opening reuses both and skips the quick pass over the video. See [Output files](../reference/outputs.md#video-cache).

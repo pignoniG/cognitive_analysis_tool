@@ -280,3 +280,25 @@ def test_the_gaze_checks_saccades_place_the_pupil(tmp_path):
     assert found.clock_difference == pytest.approx(-tracker_ahead, abs=0.03) and found.n == 8
     assert "gaze check's 8 saccades" in found.summary()
     assert any("behind the tracker's" in n for n in found.notes())
+
+
+def test_the_alignment_saved_with_the_analysis_is_reused_while_the_analysis_applies(tmp_path):
+    from dataclasses import asdict
+    from cwtool.params import VideoSettings
+    from cwtool.video import analyse_video
+    folder, _ = _xr_recording(tmp_path)
+    rec = devices.load(folder)
+    settings = VideoSettings().for_recording(rec)
+    shift = alignment.LogAlignment(offset=-0.3172, uncertainty=0.01, sd=0.01, n=5, candidates=0, drift_per_min=0.0,
+                                   span=10.0, source="test", moves="pupil", log_offset=-0.1)
+    aligned = alignment.align(rec, shift)
+    result = analyse_video(aligned.scene_video, aligned.time, aligned.gaze, settings, frame_times=aligned.scene_frame_times)
+    result.save(folder, settings, aligned.scene_video, aligned.scene_frame_times, aligned.gaze)
+    assert alignment.saved_for_analysis(rec, settings) is None                   # saved without its alignment
+    result.save(folder, settings, aligned.scene_video, aligned.scene_frame_times, aligned.gaze, alignment=asdict(shift))
+    again, found, cached = alignment.saved_for_analysis(rec, settings)
+    assert found == shift and np.array_equal(again.time, aligned.time) and len(cached.time) == len(result.time)
+    assert again.epoch_start == aligned.epoch_start
+    assert alignment.saved_for_analysis(rec, VideoSettings(analysis_width=200).for_recording(rec)) is None
+    glasses = devices.load(_xr_recording(tmp_path / "other", frame_name=None)[0])
+    assert alignment.saved_for_analysis(glasses, settings) is None              # a video on the tracker's clock

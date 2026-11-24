@@ -53,9 +53,11 @@ def _clock_key(frame_times: Optional[np.ndarray]) -> str:
     return "fps" if frame_times is None else "times:" + _array_key(frame_times)
 
 
-def _histograms(pixels: np.ndarray) -> np.ndarray:
-    """Per-channel 256-bin histograms of (n, 3) uint8 pixels -> (3, 256)."""
-    return np.stack([np.bincount(pixels[:, c], minlength=256) for c in range(3)]).astype(float)
+def _histograms(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Per-channel 256-bin histograms of the pixels of a contiguous (h, w, 3) uint8 image where
+    ``mask`` (h, w, uint8) is non-zero -> (3, 256). OpenCV counts them in C and releases the
+    interpreter lock, so the analysis threads run concurrently."""
+    return np.stack([cv2.calcHist([image], [c], mask, [256], [0, 256]).ravel() for c in range(3)]).astype(float)
 
 
 def _means(hist: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -113,9 +115,12 @@ class VideoResult:
                    np.empty((0, g, 3)))
 
     def save(self, folder: Path, settings: VideoSettings, video: Path,
-             frame_times: Optional[np.ndarray] = None, gaze: Optional[np.ndarray] = None) -> None:
+             frame_times: Optional[np.ndarray] = None, gaze: Optional[np.ndarray] = None,
+             alignment: Optional[dict] = None) -> None:
         """Write the analysis to ``folder`` (CACHE_CSV) with what it was made from (CACHE_JSON: format,
-        γ grid, settings, video name, frame clock and gaze hash), so :meth:`load_cached` can reuse it."""
+        γ grid, settings, video name, frame clock and gaze hash), so :meth:`load_cached` can reuse it. ``alignment``: the
+        alignment a video on its own clock was analysed with (the fields of a :class:`cwtool.alignment.LogAlignment`), so
+        that an opening can reuse it instead of a quick pass over the video (:func:`saved_alignment`)."""
         lin_cols = [f"{area}_lin{g:.1f}_{c}" for area in ("fix", "bg", "frame") for g in GAMMA_GRID for c in "rgb"]
         n = len(self.time)
         with open(folder / CACHE_CSV, "w", newline="") as f:
@@ -124,10 +129,12 @@ class VideoResult:
             table = np.column_stack([self.time, self.fixation_rgb, self.background_rgb,
                                      self.fixation_lin.reshape(n, -1), self.background_lin.reshape(n, -1),
                                      self.frame_lin.reshape(n, -1)])
-            for row in table:
-                w.writerow([f"{v:.6g}" for v in row])
+            for row in table:          # the time to the microsecond: a reused analysis must sit on the recording's samples
+                w.writerow([f"{row[0]:.6f}"] + [f"{v:.6g}" for v in row[1:]])
         meta = {"format": CACHE_FORMAT, "gammas": GAMMA_GRID.tolist(), "settings": asdict(settings),
                 "video": video.name, "frame_clock": _clock_key(frame_times), "gaze": _array_key(gaze)}
+        if alignment is not None:
+            meta["alignment"] = alignment
         (folder / CACHE_JSON).write_text(json.dumps(meta, indent=2))
 
     @classmethod
@@ -152,6 +159,29 @@ class VideoResult:
         lin = data[:, 7:].reshape(len(data), 3, g, 3)
         return cls(time=data[:, 0], fixation_rgb=data[:, 1:4], background_rgb=data[:, 4:7],
                    fixation_lin=lin[:, 0], background_lin=lin[:, 1], frame_lin=lin[:, 2])
+
+
+def keep_alignment(folder: Path, alignment: dict) -> None:
+    """Add the alignment a reused analysis was matched with to its record (CACHE_JSON), when it was saved without it (by
+    an earlier version): the next opening then needs no quick pass either."""
+    path = Path(folder) / CACHE_JSON
+    try:
+        meta = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return
+    if meta.get("alignment") != alignment:
+        meta["alignment"] = alignment
+        path.write_text(json.dumps(meta, indent=2))
+
+
+def saved_alignment(folder: Path) -> Optional[dict]:
+    """The alignment saved with the analysis in ``folder`` (see :meth:`VideoResult.save`), or None."""
+    try:
+        meta = json.loads((Path(folder) / CACHE_JSON).read_text())
+    except (OSError, ValueError):
+        return None
+    found = meta.get("alignment") if meta.get("format") == CACHE_FORMAT else None
+    return found if isinstance(found, dict) else None
 
 
 def _times_within(times: np.ndarray, grid: np.ndarray, tolerance: float = 1e-4) -> bool:
@@ -251,26 +281,37 @@ def analyse_frame(frame_rgb: np.ndarray, gaze_px: np.ndarray, settings: VideoSet
         mask = field_mask((h, w), settings)
     frame_rgb = np.ascontiguousarray(frame_rgb, dtype=np.uint8)
 
-    field_hist = np.stack([cv2.calcHist([frame_rgb], [c], mask, [256], [0, 256]).ravel() for c in range(3)])
+    field_hist = _histograms(frame_rgb, mask)
     bg_rgb_all, bg_lin_all = _means(field_hist)
 
     m = len(gaze_px)
     fix_rgb, bg_rgb = np.empty((m, 3)), np.empty((m, 3))
     fix_lin, bg_lin = np.empty((m, len(GAMMA_GRID), 3)), np.empty((m, len(GAMMA_GRID), 3))
     yy, xx = np.ogrid[:h, :w]
+    measured: dict = {}                      # pixel -> the first sample measured there
     for i, (gx, gy) in enumerate(gaze_px):
         gx, gy = int(np.clip(gx, 0, w - 1)), int(np.clip(gy, 0, h - 1))
+        if (gx, gy) in measured:             # samples of the frame on the same pixel measure the same circle
+            j = measured[(gx, gy)]
+            fix_rgb[i], fix_lin[i], bg_rgb[i], bg_lin[i] = fix_rgb[j], fix_lin[j], bg_rgb[j], bg_lin[j]
+            continue
+        measured[(gx, gy)] = i
         x0, x1 = max(gx - fix_r, 0), min(gx + fix_r + 1, w)
         y0, y1 = max(gy - fix_r, 0), min(gy + fix_r + 1, h)
         disc = (xx[:, x0:x1] - gx) ** 2 + (yy[y0:y1, :] - gy) ** 2 <= fix_r ** 2
-        crop = frame_rgb[y0:y1, x0:x1]
+        crop = np.ascontiguousarray(frame_rgb[y0:y1, x0:x1])
         # The gaze circle is limited to the visible scene: near the edge of a circular scene it would
         # otherwise average in the black corners. A circle entirely outside it keeps all its pixels.
         overlap = disc & (mask[y0:y1, x0:x1] > 0)
-        fix_rgb[i], fix_lin[i] = _means(_histograms(crop[overlap if overlap.any() else disc]))
+        if overlap.any():                    # the circle's histogram is also what the background leaves out
+            inside = _histograms(crop, overlap.view(np.uint8))
+            fix_rgb[i], fix_lin[i] = _means(inside)
+        else:
+            inside = np.zeros_like(field_hist)
+            fix_rgb[i], fix_lin[i] = _means(_histograms(crop, disc.view(np.uint8)))
 
         if settings.background_excludes_fixation:
-            bg_rgb[i], bg_lin[i] = _means(field_hist - _histograms(crop[overlap]))
+            bg_rgb[i], bg_lin[i] = _means(field_hist - inside)
         else:
             bg_rgb[i], bg_lin[i] = bg_rgb_all, bg_lin_all
     return fix_rgb, bg_rgb, fix_lin, bg_lin, np.broadcast_to(bg_lin_all, bg_lin.shape)

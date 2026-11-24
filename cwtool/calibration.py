@@ -385,6 +385,19 @@ def find_run_file(folder: str | Path) -> Path | None:
     return found[-1] if found else None
 
 
+def find_recording_run_file(rec) -> Path | None:
+    """The run file of a recording: in its folder, or else in its scene video's folder when that is another (a Quest
+    capture next to the Neon's export, with the run file beside it)."""
+    folders = [rec.folder]
+    if getattr(rec, "scene_video", None) is not None and Path(rec.scene_video).parent != Path(rec.folder):
+        folders.append(Path(rec.scene_video).parent)
+    for folder in folders:
+        found = find_run_file(folder) if folder is not None else None
+        if found is not None:
+            return found
+    return None
+
+
 def scaled(sequence: Sequence, factor: float) -> Sequence:
     """The sequence with every step's timing multiplied by ``factor``."""
     if abs(factor - 1.0) < 1e-6:

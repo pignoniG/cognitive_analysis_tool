@@ -98,6 +98,8 @@ Written next to the recording after the video pass.
   and background (`bg_r/g/b`), then linear means `<area>_lin<γ>_<channel>` for the gaze circle (`fix`), background
   (`bg`) and whole visible scene (`frame`) at each γ of the grid.
 - `cwtool_video.json`: what the cache was made from: format version, gamma grid, video settings, video file name,
-  a hash of the frame timestamps and a hash of the gaze samples. The cache is used only if all match.
+  a hash of the frame timestamps and a hash of the gaze samples. The cache is used only if all match. For a video on
+  a clock of its own, `alignment` holds the alignment the gaze was moved by before the analysis, reused on the next
+  opening (the analysis's times must then fall on the recording's).
 
 Delete both files to force a new analysis, or use `--reanalyse` / **Analyse video**.

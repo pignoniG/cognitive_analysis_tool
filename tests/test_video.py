@@ -239,3 +239,62 @@ def test_only_a_video_on_its_own_clock_is_aligned_before_the_analysis(tmp_path):
     from cwtool import alignment, devices
     rec = devices.load(write_varjo_recording(tmp_path / "rec", [40, 200], seconds_per_level=1.0, fps=10))
     assert alignment.for_analysis(rec) == (rec, None, "")
+
+
+def _analyse_frame_by_pixels(frame_rgb, gaze_px, settings):
+    """The per-frame measurement written plainly: a histogram of each circle's pixels, one sample at a time."""
+    from cwtool.video import GAMMA_GRID, _means, field_mask, radii
+
+    def hist(pixels):
+        return np.stack([np.bincount(pixels[:, c], minlength=256) for c in range(3)]).astype(float)
+
+    h, w = frame_rgb.shape[:2]
+    fix_r = radii(h, settings)[1]
+    mask = field_mask((h, w), settings)
+    field_hist = hist(frame_rgb[mask > 0])
+    m = len(gaze_px)
+    fix_rgb, bg_rgb = np.empty((m, 3)), np.empty((m, 3))
+    fix_lin, bg_lin = np.empty((m, len(GAMMA_GRID), 3)), np.empty((m, len(GAMMA_GRID), 3))
+    yy, xx = np.ogrid[:h, :w]
+    for i, (gx, gy) in enumerate(gaze_px):
+        gx, gy = int(np.clip(gx, 0, w - 1)), int(np.clip(gy, 0, h - 1))
+        x0, x1, y0, y1 = max(gx - fix_r, 0), min(gx + fix_r + 1, w), max(gy - fix_r, 0), min(gy + fix_r + 1, h)
+        disc = (xx[:, x0:x1] - gx) ** 2 + (yy[y0:y1, :] - gy) ** 2 <= fix_r ** 2
+        crop = frame_rgb[y0:y1, x0:x1]
+        overlap = disc & (mask[y0:y1, x0:x1] > 0)
+        fix_rgb[i], fix_lin[i] = _means(hist(crop[overlap if overlap.any() else disc]))
+        bg_rgb[i], bg_lin[i] = (_means(field_hist - hist(crop[overlap])) if settings.background_excludes_fixation
+                                else _means(field_hist))
+    return fix_rgb, bg_rgb, fix_lin, bg_lin
+
+
+@pytest.mark.parametrize("circular", [False, True])
+@pytest.mark.parametrize("excludes", [False, True])
+def test_frame_measurement_equals_the_plain_per_pixel_one(circular, excludes):
+    """The fast measurement (OpenCV histograms, the circle's histogram reused for the background, samples on the same
+    pixel measured once) gives exactly what histograms of each circle's pixels give: at the centre, at the edges,
+    outside a circular scene, and for several samples on one pixel."""
+    rng = np.random.default_rng(3)
+    frame = rng.integers(0, 256, (90, 160, 3), dtype=np.uint8)
+    s = VideoSettings(circular_mask=circular, field_radius=0.8, vertical_fov=90, fixation_radius_deg=12,
+                      background_excludes_fixation=excludes)
+    gaze = np.array([[80, 45], [80.4, 45.2], [80, 45], [0, 0], [159, 89], [-20, 50], [3, 3], [120, 30], [120, 30]])
+    fast = analyse_frame(frame, gaze, s)
+    plain = _analyse_frame_by_pixels(frame, gaze, s)
+    for a, b in zip(fast[:4], plain):
+        np.testing.assert_allclose(a, b, rtol=0, atol=1e-12)
+
+
+def test_a_saved_analysis_of_a_long_recording_is_reused(tmp_path):
+    """Sample times past 100 s that are not on whole milliseconds (a capture aligned by a fraction of a ms) are saved
+    precisely enough to be found again among the recording's: with 6 significant digits they were 0.5 ms off and the
+    analysis was redone at every opening."""
+    from cwtool.video import GAMMA_GRID
+    time = np.arange(0, 480, 0.005) - 5.35949524
+    n, g = len(time), len(GAMMA_GRID)
+    res = VideoResult(time, np.full((n, 3), 100.0), np.full((n, 3), 90.0), np.full((n, g, 3), 0.2), np.full((n, g, 3), 0.1),
+                      np.full((n, g, 3), 0.1))
+    video = tmp_path / "capture.mp4"
+    res.save(tmp_path, VideoSettings(), video)
+    cached = VideoResult.load_cached(tmp_path, VideoSettings(), video, time=time)
+    assert cached is not None and len(cached.time) == n

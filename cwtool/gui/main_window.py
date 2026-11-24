@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import traceback
 from datetime import datetime
 from dataclasses import asdict, replace
@@ -28,9 +29,9 @@ from cwtool.gui.trim_panel import TrimPanel
 from cwtool.gui.plots import ResultPlots, rms_in
 from cwtool.gui.video_preview import VideoPreview
 from cwtool.gui.workers import Task
-from cwtool.params import DISPLAY_FIELDS, DeviceMismatch, DisplayPhotometry, Parameters
+from cwtool.params import DISPLAY_FIELDS, PARAMS_FILE, DeviceMismatch, DisplayPhotometry, Parameters
 from cwtool.trim import TRIM_FILE, Trim
-from cwtool.video import CACHE_JSON, VideoResult, analyse_video, quick_colours
+from cwtool.video import CACHE_JSON, keep_alignment, VideoResult, analyse_video, quick_colours
 
 RECOMPUTE_DELAY_MS = 150
 # Signals shown when sensor data is imported (the ECG channel of a Shimmer, the EmotiBit's EDA and PPG), the first
@@ -904,6 +905,7 @@ class MainWindow(QMainWindow):
                                     else self._align_tip)
         if previous_device and previous_device != rec.device:
             self._forget_params_of(previous_device, rec.device)
+        display_in_params = self._params_from_folder(rec)
         self._remember_recording(rec.folder)
         duration = rec.time[-1] - rec.time[0] if len(rec.time) else 0
         video = rec.scene_video.name if rec.scene_video else "none"
@@ -924,9 +926,12 @@ class MainWindow(QMainWindow):
         self.params_panel.set_recording(rec)
         on_display = rec.luminance_source == "display"
         remembered = self._settings.value(f"display_photometry/{rec.device}", "")
-        if on_display and remembered and Path(remembered).exists() and Path(remembered) != self._display_path:
+        # The parameter file saved in the recording's folder holds the black level and gamma fitted on it: they are used
+        # instead of a photometry file
+        on_display_file = on_display and not display_in_params
+        if on_display_file and remembered and Path(remembered).exists() and Path(remembered) != self._display_path:
             self.load_display(Path(remembered), quiet=True)   # the last photometry used with this device
-        in_folder = DisplayPhotometry.find(rec.folder) if on_display else None
+        in_folder = DisplayPhotometry.find(rec.folder) if on_display_file else None
         if in_folder is not None and in_folder != self._display_path:
             self.load_display(in_folder, quiet=True)           # one saved with the recording is the one for it
         if not on_display:
@@ -952,39 +957,58 @@ class MainWindow(QMainWindow):
         else:
             self._gaze_step(rec)
 
-    def analyse(self, use_cache: bool) -> None:
-        """Analyse the scene video in the background (or take the cached analysis if ``use_cache`` and one matches) and
-        then compute the result.
+    def analyse(self, use_cache: bool, cached: VideoResult | None = None) -> None:
+        """Analyse the scene video in the background (or take the cached analysis if ``use_cache`` and one matches, or
+        ``cached`` when it was already read) and then compute the result.
         """
         rec = self._analysis_recording()
         settings = self.params_panel.video_settings().for_recording(rec)
         if self.open_panel.states.get("video") != "done" or self.open_panel.states.get("analyse") != "pending":
             self._show_opening(f"Analysing {rec.name}", self._opening_steps_done(rec))   # not part of an opening
         if use_cache:
-            cached = VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times,
-                                             rec.gaze, rec.time)
+            if cached is None:
+                cached = VideoResult.load_cached(rec.folder, settings, rec.scene_video, rec.scene_frame_times,
+                                                 rec.gaze, rec.time)
             if cached is not None:
                 try:
                     saved = datetime.fromtimestamp((rec.folder / CACHE_JSON).stat().st_mtime).strftime("%d %B %Y, %H:%M")
                 except OSError:
                     saved = "earlier"
+                found = self._alignment_of(rec)
+                if found is not None:              # an analysis saved without the alignment it matched gets it
+                    keep_alignment(rec.folder, asdict(found))
                 self.open_panel.done("analyse", f"using the saved analysis from {saved}")
                 self._video_ready(cached, "cached analysis")
                 return
 
+        found = self._alignment_of(rec)
+        saved_alignment = asdict(found) if found is not None else None
+
         def work(progress, cancelled):
-            """Background task: analyse the video and save the analysis next to the recording."""
+            """Background task: analyse the video and save the analysis (and the alignment it was made with) next to the
+            recording."""
             res = analyse_video(rec.scene_video, rec.time, rec.gaze, settings, progress, cancelled,
                                 frame_times=rec.scene_frame_times)
             if cancelled():
                 return None
-            res.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze)
+            res.save(rec.folder, settings, rec.scene_video, rec.scene_frame_times, rec.gaze, alignment=saved_alignment)
             return res
 
         self.open_panel.start_analysis(_frame_count(rec))
         self._start_task(work, lambda res: res and self._analysed(res),
                          f"Analysing {rec.scene_video.name}…", show_progress=True, cancellable=True,
                          on_progress=self.open_panel.set_fraction)
+
+    def _alignment_of(self, rec):
+        """The alignment that moved ``rec``'s pupil onto its video's clock (a video on a clock of its own), or None."""
+        if not rec.separate_video_clock:
+            return None
+        pre = self._pre_alignment
+        if pre is not None and rec is pre[2]:
+            return pre[0]
+        if rec is self.recording and self.log_alignment is not None and self.log_alignment.moves == "pupil":
+            return self.log_alignment
+        return None
 
     def _analysis_recording(self):
         """The recording whose gaze the video is analysed with: on a video with a clock of its own, the one aligned to it
@@ -1095,6 +1119,14 @@ class MainWindow(QMainWindow):
         """Before the analysis: the gaze correction when the run file has a gaze check not confirmed yet, and the alignment
         of a video on its own clock (both from a quick pass over the video's colours); otherwise the analysis at once."""
         needs_window = gazecheck.has_gaze_check(rec) and not gazecheck.offset_confirmed(rec.folder)
+        if not needs_window and self._aligns_first(rec):
+            saved = alignment.saved_for_analysis(rec, self.params_panel.video_settings().for_recording(rec))
+            if saved is not None:              # aligned as when the saved analysis was made: no quick pass
+                aligned, found, cached = saved
+                self._pre_alignment = (found, "", aligned, None, "")
+                self.open_panel.done("gaze", self._gaze_step_text(rec, self._pre_alignment) + ", as saved with the analysis")
+                self.analyse(use_cache=True, cached=cached)
+                return
         if needs_window or self._aligns_first(rec):
             self.open_gaze_correction(window=needs_window)
             return
@@ -1425,9 +1457,9 @@ class MainWindow(QMainWindow):
         self._place_from_run(path, sequence)
 
     def _place_from_folder(self, rec) -> None:
-        """A calibration run file the presenter saved with the recording gives the sequence and where it starts: use them
-        without asking, as the manual "Load sequence" does for a run file."""
-        path = calibration.find_run_file(rec.folder)
+        """A calibration run file the presenter saved with the recording (in its folder, or next to its scene video) gives
+        the sequence and where it starts: use them without asking, as the manual "Load sequence" does for a run file."""
+        path = calibration.find_recording_run_file(rec)
         if path is None:
             return
         try:
@@ -1607,6 +1639,33 @@ class MainWindow(QMainWindow):
             return True
         return False
 
+    def _params_from_folder(self, rec) -> bool:
+        """The participant's parameters saved in the recording's folder (*Save parameters* offers it) are loaded when it is
+        opened; changed parameters were already saved or discarded (:meth:`_confirm_params`). True when the file also
+        held the display's black, white and gamma (a display device's, as fitted on the recording)."""
+        path = Parameters.find(rec.folder)
+        if path is None:
+            return False
+        try:
+            params = Parameters.load(path, rec.profile, base=self.params_panel.params(), device=rec.device)
+            with_display = all(key in json.loads(path.read_text()) for key in DISPLAY_FIELDS)
+        except DeviceMismatch as e:
+            self._params_note = str(e)
+            return False
+        except Exception as e:
+            self._params_note = f"{path.name} in the recording's folder could not be read: {e}"
+            return False
+        self.params_panel.set_params(params)
+        self._params_path = path
+        self._params_note = None
+        self._params_device = rec.device
+        if with_display:
+            self._display_path = None
+        self._mark_params_saved()
+        self.statusBar().showMessage(f"Parameters loaded from {path.name} in the recording's folder"
+                                     + (", with the display's black, white and gamma" if with_display else ""), 6000)
+        return with_display
+
     def choose_params(self) -> None:
         """Ask for a participant parameter file and load it (the display photometry is kept)."""
         path, _ = QFileDialog.getOpenFileName(self, "Load parameters", self._params_dir(), "Parameters (*.json)")
@@ -1629,25 +1688,39 @@ class MainWindow(QMainWindow):
             self._update_state()
 
     def save_params(self) -> None:
-        """Save the participant parameters to the current file, or ask for one."""
-        if self._params_path is None:
+        """Save the participant parameters to the current file, or ask for one: also when the current file is not in the
+        open recording's folder (it belongs to another recording, or was loaded from elsewhere)."""
+        elsewhere = self.recording is not None and self._params_path is not None \
+            and self._params_path.parent != Path(self.recording.folder)
+        if self._params_path is None or elsewhere:
             self.save_params_as()
         else:
-            self.params_panel.params().save(self._params_path, participant_only=True, device=self._device())
-            self._mark_params_saved()
-            self._update_state()
-            self.statusBar().showMessage(f"Saved {self._params_path} (display photometry is saved separately)", 4000)
+            self._write_params()
+
+    def _write_params(self) -> None:
+        """Write the participant's parameters; in the recording's folder a display device's black, white and gamma go
+        with them (they may have been fitted on the recording, and are loaded with it)."""
+        rec = self.recording
+        keep_display = rec is not None and rec.luminance_source == "display" \
+            and self._params_path.parent == Path(rec.folder)
+        self.params_panel.params().save(self._params_path, participant_only=True, device=self._device(),
+                                        keep_display=keep_display)
+        self._mark_params_saved()
+        self._update_state()
+        self.statusBar().showMessage(f"Saved {self._params_path}" + (" with the display's black, white and gamma"
+                                     if keep_display else " (display photometry is saved separately)"), 4000)
 
     def save_params_as(self) -> None:
         """Ask for a file and save the participant parameters there."""
-        path, _ = QFileDialog.getSaveFileName(self, "Save parameters", self._params_dir(), "Parameters (*.json)")
+        # In the recording's folder, where opening it finds them again
+        start = str(self.recording.folder / PARAMS_FILE) if self.recording is not None else self._params_dir()
+        path, _ = QFileDialog.getSaveFileName(self, "Save parameters", start, "Parameters (*.json)")
         if path:
             if not path.endswith(".json"):
                 path += ".json"
             self._params_path = Path(path)
             self._settings.setValue("last_params_dir", str(self._params_path.parent))
-            self.save_params()
-            self._update_state()
+            self._write_params()
 
     def _device(self) -> str:
         return self.recording.device if self.recording is not None else ""
