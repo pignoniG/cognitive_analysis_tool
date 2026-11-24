@@ -91,12 +91,17 @@ that results depends on the display.
 
 ## Gaze check
 
-With **Gaze check at the end** (on by default), the light steps are followed by the gaze check on the lead-in grey:
+With **Gaze check at the start** (on by default), the gaze check comes right after the lead-in, on the lead-in grey, and
+the light steps follow it:
 
 1. a short tone (880 Hz, 0.2 s) to call the participant's attention, then 1 s of grey with no dot, so the pupil's
-   response to the sound is over before the dots and the light steps, which the fits use, are not touched by it;
+   response to the sound is over before the dots (and long before the light steps, which the fits use);
 2. a black dot with a white centre moving through 9 places, **Seconds per point** each (3 s by default, 27 s in all),
    the centre first, then the corners and the edges' middles clockwise from the top left.
+
+It comes first so that it is done while the participant is fresh and is there even in a run cut short, and its 28 s on
+the lead-in grey adapt the pupil before the first light step. Until November 2026 it came after the light steps; cwtool
+reads run files in either order.
 
 Ask the participant to look at the dot's centre wherever it goes. The tone needs the computer's sound on (in VR over
 Link it plays in the headset); the run file says if it could not be played (`gaze_cue`).

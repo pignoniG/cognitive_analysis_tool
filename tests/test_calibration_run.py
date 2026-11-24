@@ -44,3 +44,27 @@ def test_the_alignment_ignores_the_gaze_check(tmp_path):
     _run_file(tmp_path / "calibration_run_x.csv")
     onsets, source = alignment.log_onsets(tmp_path)
     assert onsets == pytest.approx([1700000000.0, 1700000005.0]) and "calibration_run_x" in source
+
+
+def _gaze_first_run_file(path):
+    """A run file as the presenter writes it from November 2026: the gaze check first, then the light steps."""
+    rows = ["# tool: test", "# gaze_check: true", HEADER,
+            "0,1,128,128,128,Gaze check cue (tone),1,,0,1,1700000000000,0.2,true,gaze,,,,,,"]
+    for k, (u, v) in enumerate([(0, 0), (-1, -1), (1, 1)]):
+        rows.append(f"{1 + 2 * k},2,128,128,128,Gaze target {k + 1},{2 + k},,{1 + 2 * k},2,{1700000001000 + 2000 * k},"
+                    f"0.2,true,gaze,{u},{v},{0.5 + u * 0.35},{0.5 + v * 0.35},,")
+    rows += ["7,5,200,200,200,Light,5,1,7,5,1700000007000,0.6,true,light,,,,,,",
+             "12,6,20,20,20,Dark,6,2,12,6,1700000012000,0.01,true,light,,,,,,"]
+    path.write_text("\n".join(rows) + "\n")
+    return path
+
+
+def test_a_gaze_check_before_the_light_steps_is_left_out_of_the_sequence_and_its_start(tmp_path):
+    path = _gaze_first_run_file(tmp_path / "calibration_run_x.csv")
+    seq = calibration.load_sequence(path)
+    assert [(s.label, s.start, s.end) for s in seq.steps] == [("Light", 0.0, 5.0), ("Dark", 5.0, 11.0)]
+    assert calibration.run_start_unix(path) == pytest.approx(1700000007.0)     # the first light step, not the tone
+    assert [t.onset_unix for t in calibration.gaze_targets(path)] == pytest.approx([1700000001.0, 1700000003.0, 1700000005.0])
+    onsets, _ = alignment.log_onsets(tmp_path)
+    assert onsets == pytest.approx([1700000007.0, 1700000012.0])
+    assert calibration.run_start_unix(_run_file(tmp_path / "end.csv")) == pytest.approx(1700000000.0)   # the earlier order

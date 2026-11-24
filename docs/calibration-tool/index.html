@@ -213,7 +213,7 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
     <label class="check"><input type="checkbox" id="wait" checked> Wait for a start signal (<kbd>Space</kbd>, click, or VR trigger)</label>
     <label class="check"><input type="checkbox" id="autodl" checked> Download the CSV when the run ends</label>
     <label class="check" id="exit-wrap"><input type="checkbox" id="exitvr" checked> Leave VR at the end</label>
-    <label class="check" title="After the light steps, a short tone, a second of grey, then a dot moves through 9 places on the lead-in grey. Ask the participant to look at its centre. The run file logs where it was, so the analysis can check that the gaze lands on it in the video and propose an offset."><input type="checkbox" id="gazecheck" checked> Gaze check at the end (9 points)</label>
+    <label class="check" title="Right after the lead-in, before the light steps: a short tone, a second of grey, then a dot moves through 9 places on the lead-in grey. Ask the participant to look at its centre. The run file logs where it was, so the analysis can check that the gaze lands on it in the video and propose an offset."><input type="checkbox" id="gazecheck" checked> Gaze check at the start (9 points)</label>
     <label title="How long the dot stays at each of the 9 places">Seconds per point <input type="number" id="gazestep" min="1" max="10" step="0.5" value="3"></label>
     <label class="check" id="compat-wrap" title="Draw into the classic WebXR layer (XRWebGLLayer), which every runtime shows. Off: the WebXR Layers projection layer, which a Quest over Link in Chrome does not show."><input type="checkbox" id="xrcompat" checked> Compatible VR rendering</label>
   </div>
@@ -734,7 +734,7 @@ $("#btn-dl-participant").addEventListener("click", () => {
 });
 for (const id of ["#participant", "#seed", "#scramble", "#avoid"]) $(id).addEventListener("input", renderOrderPreview);
 
-/* ---------- gaze check: a dot through 9 places after the light steps ---------- */
+/* ---------- gaze check: a dot through 9 places before the light steps ---------- */
 /* Places on a unit grid (u right, v down), the centre first. On screen the grid spans GAZE_SCREEN of the screen from its
    centre; in VR it is a direction from the head, GAZE_AZ_DEG and GAZE_EL_DEG at the grid's edges, fixed to the head so it
    stays at the same place in the headset's picture (and its capture) whatever the participant does with the head. */
@@ -742,7 +742,7 @@ const GAZE_POINTS = [[0, 0], [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1],
 const GAZE_STEP_S = 3, GAZE_SCREEN = 0.35, GAZE_AZ_DEG = 15, GAZE_EL_DEG = 12;
 const GAZE_DOT_DEG = 0.8, GAZE_CENTRE_DEG = 0.25;     // VR: angular radius of the black dot and of its white centre
 // Before the first dot: a short tone to call the participant's attention, then grey with no dot for GAZE_CUE_S, so the pupil's
-// response to the sound is over before the dots (and the light steps, which the fits use, are not touched by it).
+// response to the sound is over before the dots (and long before the light steps, which the fits use).
 const GAZE_CUE_S = 1, CUE_HZ = 880, CUE_S = 0.2;
 function gazeSteps(lead, stepS = GAZE_STEP_S) {
   const grey = { r: lead[0], g: lead[1], b: lead[2], source: -1, phase: "gaze" };
@@ -863,7 +863,7 @@ async function startRun() {
   const cfg = settings();
   if (!cfg.participant) { $("#participant").focus(); return setStatus("Enter a participant ID first.", true); }
   const p = plan(true);
-  if (cfg.gazecheck) { p.steps = p.steps.concat(gazeSteps(cfg.lead, cfg.gazestep)); prepareAudio(); }
+  if (cfg.gazecheck) { p.steps = gazeSteps(cfg.lead, cfg.gazestep).concat(p.steps); prepareAudio(); }   // first, right after the lead-in
   cfg.hint = "Press Space or click when ready. Esc cancels.";
   const runId = `${safeName(cfg.participant)}_${cfg.mode}_${new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-")}`;
   const done = (result, r) => finishRun(runId, cfg, p, r, result);

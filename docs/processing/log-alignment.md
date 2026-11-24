@@ -52,7 +52,7 @@ came before the light (the fitted latency went to zero and the fit got worse, 0.
 
 - **what the computer wrote** (the run file, the logger's lux and sensors, the exported Unix times) by the run file's own offset,
   when a run file is next to the capture or the export;
-- **the pupil** (and the tracker's own events), when the run file ends with the [gaze check](gaze-check.md), by **the gaze's
+- **the pupil** (and the tracker's own events), when the run file has the [gaze check](gaze-check.md), by **the gaze's
   saccades** to its dots: the gaze (on the tracker's clock) is matched to the logged places (on the computer's), first by its
   correlation with them over ±20 s, then saccade by saccade, at the moment it is half-way from one place to the next. The
   median of those moments after the logged onsets, less a saccade latency of 0.2 s, is how far the tracker's clock is ahead

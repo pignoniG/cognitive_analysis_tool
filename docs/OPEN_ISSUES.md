@@ -1710,6 +1710,11 @@ is revised; they remain in the git history of this file.
   The saved video analysis was never reused on this recording: its times were written with 6 significant digits (1 ms
   past 100 s), and the aligned samples (−5.35949524 s + k × 5 ms) came back 0.495 ms from the recording's, beyond the
   0.1 ms the reuse allows, so the video was analysed again at every opening. Times are now written to the microsecond.
+  From 24 November 2026 the gaze check opens the calibration (right after the lead-in) instead of closing it, in the
+  presenter and in the validation task: it is done while the participant is fresh, a run cut short still has it, and its
+  28 s on the lead-in grey adapt the pupil before the first light step. The run file's light sequence and its start
+  (`calibration.run_start_unix`, which took the first row and would have placed the sequence at the tone) leave the gaze
+  rows out, so run files in either order are read the same.
 - **Status:** open (route, alignment, gaze check, the clocks from the saccades and the capture's projection implemented and tried on one Quest recording over Link; needs more recordings, and a renamed capture is not found).
 
 ### 62. The AS7341's timestamps lag its board's clock drift: about 0.19 s early

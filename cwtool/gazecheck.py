@@ -1,6 +1,6 @@
 """The calibration's gaze check: where the dot was in the scene video against where the eye tracker says the gaze was.
 
-The calibration presenter (and the validation task's calibration) ends with a dot moving through 9 places, 2 s each, on the
+The calibration presenter (and the validation task's calibration) opens with a dot moving through 9 places, 3 s each, on the
 lead-in grey; its run file logs each place's onset (``phase`` = ``gaze``, :func:`cwtool.calibration.gaze_targets`). For each
 place this module
 

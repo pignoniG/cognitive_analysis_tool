@@ -3,14 +3,16 @@
 The pupil model takes the luminance where the participant looked, so the gaze has to land on the right place of the scene
 video. A headset's capture and glasses' scene camera are mapped to the gaze differently by each device, and the mapping can be
 off: a Neon inside a Meta Quest is fixed to the headset but not aligned with its view
-([open issue 61](../OPEN_ISSUES.md)). The calibration therefore ends with a gaze check, and cwtool compares it with the gaze.
+([open issue 61](../OPEN_ISSUES.md)). The calibration therefore opens with a gaze check, and cwtool compares it with the gaze.
 
 ## In the presenters
 
-The [calibration presenter](../usage/calibration-tool.md#gaze-check) and the validation task's calibration end with a short tone, 1 s
-of lead-in grey, then a dot with a white centre moving through 9 places on that grey, 3 s each by default, the centre first. In VR the places are
+The [calibration presenter](../usage/calibration-tool.md#gaze-check) and the validation task's calibration open, right after the lead-in,
+with a short tone, 1 s of lead-in grey, then a dot with a white centre moving through 9 places on that grey, 3 s each by default, the centre first. In VR the places are
 directions fixed to the head (±15° × ±12°), so they sit at fixed places of the headset's picture and of its capture. The run
-file logs the tone's row (`phase` = `gaze`, no target) and each place (`phase` = `gaze`, `target_*`).
+file logs the tone's row (`phase` = `gaze`, no target) and each place (`phase` = `gaze`, `target_*`); the light steps follow.
+Until November 2026 the gaze check closed the calibration; cwtool reads either order (the light sequence and its start
+leave the gaze rows out).
 
 ## In cwtool
 

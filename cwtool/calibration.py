@@ -219,7 +219,8 @@ def load_sequence(path: str | Path) -> Sequence:
     ms = False
     keep_col = None
     if not numeric(rows[0]):
-        # the presenter's gaze check (rows with phase "gaze", after the light steps) is not part of the light sequence
+        # the presenter's gaze check (rows with phase "gaze", before the light steps from November 2026, after them before)
+        # is not part of the light sequence
         phase_col = _column(rows[0], ("phase",))
         if phase_col is not None:
             rows = [rows[0]] + [r for r in rows[1:] if not (phase_col < len(r) and r[phase_col].strip().lower() == "gaze")]
@@ -264,8 +265,9 @@ def load_sequence(path: str | Path) -> Sequence:
 
 
 def run_start_unix(path: str | Path) -> float | None:
-    """Unix time (s) of the first step of a calibration presenter run file (its ``onset_unix_ms`` column,
-    on the presenting computer's clock), or None for a file without one."""
+    """Unix time (s) of the first light step of a calibration presenter run file (its ``onset_unix_ms`` column,
+    on the presenting computer's clock), or None for a file without one. The gaze check's rows (phase "gaze"), which
+    open the run from November 2026, are skipped, as :func:`load_sequence` skips them."""
     with open(path, newline="") as f:
         rows = [r for r in csv.reader(f) if r and r[0].strip() and not r[0].lstrip().startswith("#")]
     if len(rows) < 2:
@@ -273,10 +275,15 @@ def run_start_unix(path: str | Path) -> float | None:
     header = [h.strip().lower() for h in rows[0]]
     if "onset_unix_ms" not in header:
         return None
-    try:
-        return float(rows[1][header.index("onset_unix_ms")]) / 1000.0
-    except (ValueError, IndexError):
-        return None
+    onset, phase = header.index("onset_unix_ms"), header.index("phase") if "phase" in header else None
+    for r in rows[1:]:
+        if phase is not None and phase < len(r) and r[phase].strip().lower() == "gaze":
+            continue
+        try:
+            return float(r[onset]) / 1000.0
+        except (ValueError, IndexError):
+            return None
+    return None
 
 
 @dataclass(frozen=True)
