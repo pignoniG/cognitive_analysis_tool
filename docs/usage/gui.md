@@ -274,9 +274,9 @@ See [Participant calibration](calibration.md) for the procedure.
   by hand.
 - **Fit the calibration** (step 2): the participant's light sensitivity, colour weights (on a display) or pupil offset
   (with a lux sensor), latency and time constants, fitted together on the pupil's time course over the sequence. Options:
-  *Include the time constants* (on), *Also fit the transient constriction after brightening* (off), *Also fit the two parts
-  of the dilation* (off; for the time-course calibration), *Also fit gamma* and
-  *Also fit the black level* (display), *Also fit the fixation weight* (lux sensor; it needs a scene where the gaze area
+  *Include the time constants* (on), *Also fit the transient constriction after brightening*, *Also fit the two parts
+  of the dilation*, *Also fit gamma* and *Also fit the black level* (display; all on by default in XR, the Varjo and the
+  Neon in a Quest, off elsewhere), *Also fit the fixation weight* (lux sensor; it needs a scene where the gaze area
   and the background differ). The result window gives the **fit error** (measured − expected over the sequence, with the
   best constant offset) before and after, the ΔPD RMS in the sequence from the whole analysis, the values with the
   sensitivity's 95 % interval, and warnings; Apply sets them (with a lux sensor also the alignment `fixed`, so the offset

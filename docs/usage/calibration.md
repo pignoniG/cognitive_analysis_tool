@@ -81,6 +81,11 @@ the slow dilation after the black steps instead, and made the session's ΔPD wor
 *Also fit the black level*, which the sequence rarely determines. A step that is still dilating at its end, or a step at the
 tracker's ceiling, is simply part of the curve (or a lower bound): it does not need to settle.
 
+In XR (Varjo, Neon in a Quest) the app ticks all of these options when a recording opens: the time constants, the
+transient (the fit turns it off when it finds none), the two parts of the dilation, gamma and the black level. On the
+Neon in a Quest fitting gamma and the black level improved the fit markedly. Untick any of them before fitting to hold
+it at its current value. On glasses with a lux sensor only the time constants are ticked.
+
 The result window gives the fit error before and after, the ΔPD RMS in the sequence, the fitted values with the
 sensitivity's 95 % interval, and warnings (a weakly determined sensitivity, a value at the end of its range, a poor
 correlation, constrictions that started before the change). **Apply** sets the values, and switches the dynamics on.

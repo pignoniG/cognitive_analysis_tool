@@ -394,7 +394,9 @@ class MainWindow(QMainWindow):
         self.fit_transient_check.setToolTip("The constriction beyond the steady state after a brightening step and its "
                                             "re-dilation (pupillary escape). Off by default: on the first Varjo run it "
                                             "explained the slow dilation after the black steps instead and made the "
-                                            "session's ΔPD worse (open issue 55)")
+                                            "session's ΔPD worse (open issue 55). On by default in XR (Varjo, Neon in a "
+                                            "Quest), where every step of the fit is on; the fit turns it off when it "
+                                            "finds no transient")
         self.fit_parts_check = QCheckBox("Also fit the two parts of the dilation")
         self.fit_parts_check.setToolTip("Fit the share and the time constant of the dilation's fast part too (otherwise held at "
                                         "60 % and 1 s). Only a sequence that dims after moderate as well as after bright "
@@ -403,10 +405,12 @@ class MainWindow(QMainWindow):
                                         "went to its limit (open issue 61)")
         self.fit_gamma_check = QCheckBox("Also fit gamma")
         self.fit_gamma_check.setToolTip("Fit the display gamma from the spacing of the grey steps (usually weakly "
-                                        "determined; keep the nominal value unless it clearly fails)")
+                                        "determined). On by default in XR (Varjo, Neon in a Quest): on the Neon in a "
+                                        "Quest it improved the fit markedly")
         self.fit_black_check = QCheckBox("Also fit the black level (Lmin)")
         self.fit_black_check.setToolTip("Fit the display's effective black, with the white held at its nominal value. "
-                                        "Black steps rarely let the pupil dark-adapt, so it is often poorly determined")
+                                        "Black steps rarely let the pupil dark-adapt, so it is often poorly determined. "
+                                        "On by default in XR (Varjo, Neon in a Quest)")
         self.fit_weight_check = QCheckBox("Also fit the fixation weight")
         self.fit_weight_check.setToolTip("Also fit the gaze circle's weight of the weighted colour (open issue 47). It "
                                          "needs a scene where the gaze area and the background differ, such as a "
@@ -894,7 +898,11 @@ class MainWindow(QMainWindow):
         self._raw_recording, self.log_alignment, self._alignment_message = rec, None, ""
         self.gaze_check, self._gaze_check_message = None, ""
         self._pre_alignment = None
-        self.fit_parts_check.setChecked(calfit.dilation_parts_by_default(rec))
+        defaults = calfit.fit_options_by_default(rec)
+        for check, key in ((self.fit_dynamics_check, "fit_dynamics"), (self.fit_transient_check, "fit_transient"),
+                           (self.fit_parts_check, "fit_dilation_parts"), (self.fit_gamma_check, "fit_gamma"),
+                           (self.fit_black_check, "fit_black")):
+            check.setChecked(defaults[key])
         self._show_gaze_offset(rec)
         self.align_check.setVisible(alignment.applicable(rec))
         self.align_check.setText("Align the capture to the pupil" if rec.separate_video_clock

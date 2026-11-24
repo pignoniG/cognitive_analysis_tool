@@ -266,3 +266,15 @@ def test_the_two_parts_of_the_dilation_are_fitted_by_default_in_xr_only():
     assert dilation_parts_by_default(SimpleNamespace(profile=varjo.PROFILE))
     glasses = SimpleNamespace(profile=SimpleNamespace(luminance_source="lux_sensor"))
     assert not dilation_parts_by_default(glasses)
+
+
+def test_every_calibration_step_is_ticked_by_default_in_xr_only():
+    from types import SimpleNamespace
+    from cwtool.calfit import fit_options_by_default
+    xr = fit_options_by_default(SimpleNamespace(profile=varjo.PROFILE))
+    assert all(xr.values())
+    quest = SimpleNamespace(profile=SimpleNamespace(luminance_source="display"))
+    assert all(fit_options_by_default(quest).values())
+    glasses = fit_options_by_default(SimpleNamespace(profile=SimpleNamespace(luminance_source="lux_sensor")))
+    assert glasses == dict(fit_dynamics=True, fit_transient=False, fit_dilation_parts=False, fit_gamma=False,
+                           fit_black=False)

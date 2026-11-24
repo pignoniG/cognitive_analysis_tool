@@ -186,6 +186,17 @@ def dilation_parts_by_default(rec: Recording) -> bool:
     return rec.profile.luminance_source == "display"
 
 
+def fit_options_by_default(rec: Recording) -> dict:
+    """The calibration fit's options ticked when a recording opens in the app. In XR (the Varjo, the Neon in a Quest:
+    the luminance is the headset's display) every step is on: the time constants, the transient constriction after
+    brightening, the two parts of the dilation, gamma and the black level. On the Neon in a Quest fitting gamma and the
+    black level improved the fit markedly. Elsewhere only the time constants (the display's gamma and black level do not
+    apply, and the transient stays off, open issue 55)."""
+    xr = rec.profile.luminance_source == "display"
+    return dict(fit_dynamics=True, fit_transient=xr, fit_dilation_parts=dilation_parts_by_default(rec),
+                fit_gamma=xr, fit_black=xr)
+
+
 def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, start: float,
                     sequence: calibration.Sequence, fit_dynamics: bool = True, fit_transient: bool = False,
                     fit_gains: Optional[bool] = None, fit_gamma: bool = False, fit_black: bool = False,
