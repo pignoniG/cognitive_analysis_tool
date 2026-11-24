@@ -12,7 +12,7 @@ from cwtool.devices import varjo
 from cwtool.params import Parameters, VideoSettings
 from cwtool.photometry import fit_light_response
 from cwtool.video import analyse_video
-from conftest import write_core_recording, write_varjo_recording
+from conftest import write_core_recording, write_varjo_recording, staircase_20
 import test_lux_fit as LUX
 import test_photometry as PHOTO
 import test_quality as QUALITY
@@ -53,7 +53,7 @@ def test_steps_that_have_not_settled_are_followed_not_read_as_levels(tmp_path):
     """A slow dilation (τ 10 s) on 10 s steps: the darker steps end short of their level. The step-level fit reads them as
     levels; the time course does not."""
     p = ONE_TAU
-    seq = calibration.scaled(calibration.STAIRCASE_20, PHOTO.STEP / calibration.STEP_SECONDS)
+    seq = calibration.scaled(staircase_20(), PHOTO.STEP / calibration.STEP_SECONDS)
     colours = [(0, 0, 0)] * int(PHOTO.LEAD / PHOTO.STEP) + [s.rgb for s in seq.steps]
     rate = PHOTO.RATE
     t = np.arange(len(colours) * PHOTO.STEP * rate) / rate
@@ -141,7 +141,7 @@ def test_a_two_part_dilation_is_followed(tmp_path):
     """A participant who re-dilates with a fast part (60 %, 1 s) and a slow one (20 s): with the two-part dilation the fit
     finds the slow part and follows the pupil; with one time constant it does worse."""
     p = Parameters()
-    seq = calibration.scaled(calibration.STAIRCASE_20, PHOTO.STEP / calibration.STEP_SECONDS)
+    seq = calibration.scaled(staircase_20(), PHOTO.STEP / calibration.STEP_SECONDS)
     colours = [(0, 0, 0)] * int(PHOTO.LEAD / PHOTO.STEP) + [s.rgb for s in seq.steps]
     rate = PHOTO.RATE
     t = np.arange(len(colours) * PHOTO.STEP * rate) / rate

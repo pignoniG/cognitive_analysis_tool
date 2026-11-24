@@ -12,13 +12,8 @@ The sequence is a **timeline**: one block per step, coloured with the step's col
 - Drag a block to move it; drag its right edge to change its length (0.5 s steps, **Alt** for 0.1 s).
 - Select a block to edit its label, RGB colour and length, or duplicate or delete it. Arrow keys select,
   **Alt**+arrows move, **+**/**−** change the length, **Ctrl/Cmd+Z** undoes.
-- **Preset** loads a sequence. The default is the **time-course calibration** (below); the **full calibration**, the
-  default until November 2026, follows it; the others are from Eckert et al.
-  (2022): 8 gray levels, 6 s each, pseudo-random (their most robust sequence); dark-to-light and light-to-dark ramps at
-  3, 6 and 10 s; blue and red ramps (shades, then tints) at 3 s; and the 20-step staircase cwtool used before October 2026. The paper describes
-  its orders rather than listing them, so the pseudo-random order here is generated (fixed seed), not copied from its
-  Fig. 1. The realistic *room* scene of Eckert et al. is not supported.
-- **Generate…** builds gray, blue, red, green or gray + RGB primaries ramps of any length, order and duration.
+- **Preset** loads the **time-course calibration** (below), the only calibration sequence. The timeline can still be
+  edited or a sequence imported, for tests.
 - **Export CSV** / **Import CSV…** use the format of *Load sequence…* in cwtool (`time,r,g,b,label,duration`), so the
   same file drives the presenter and the analysis.
 
@@ -42,28 +37,26 @@ About 5 minutes, 30 steps, 281 s:
 - **Irregular lengths** (6 to 20 s): the steps cannot be anticipated (three constrictions on the first run started before
   the change), and the long ones are where the pupil dilates.
 
-## Full calibration (default until November 2026)
+## Why only this sequence
 
-This is `calibration.DEFAULT` in cwtool (in the preset order); `calibration.scrambled` gives the order the presenter plays
-for a seed, with the same seeded shuffle.
+The earlier sequences are gone from the presenter, cwtool and the validation task (24 November 2026):
 
-One sequence for both of cwtool's fits, about 5 minutes (34 steps, 291 s), built from Eckert et al. (2022) and from what the
-recordings showed (open issues 36, 40, 43):
+- **The full calibration** was the default until November 2026: 34 steps with 12 black steps, each colour after black.
+  - Its black steps never settled in 8 s, and in the Varjo they pushed the pupil beyond what the tracker reports
+    (open issues 52 and 55).
+  - Every dimming followed bright light, so only the slow part of the dilation was measured (issue 56).
+  - Its regular 8 s steps were anticipated (issue 57).
+- **The 20-step staircase** cwtool used before October 2026 played in a fixed ascending order, which confounds luminance
+  with time (issues 36, 41 and 43).
+- **The ramps of Eckert et al. (2022)** (grays, blue and red at 3 to 10 s) each measure one thing. They do not give the
+  fit on the time course what it needs: the time constants, both parts of the dilation, the colour weights and the
+  transient, all from one recording.
 
-| Part | Steps | Why |
-|---|---|---|
-| Gray, 8 levels (0, 36, 73, 109, 146, 182, 219, 255) | 20, 15, 10, 8, 6, 6, 6 and 12 s | Eckert et al.'s levels; the light sensitivity comes from where the pupil stops shrinking. Darker grays last longer because dilation is slow (time constants 1.6 to 9.6 s), so the end of the step is near its steady state; 255 is long to show the sustained level after the initial constriction |
-| Red, green, blue at 64, 128, 191, 255 | 8 s each, every one after a linked black step of 8 s | the channel weights; the black step gives a known dark start, so the colour step is a brightening from the same state, and its end is near steady state |
-| Gray 73 and 182 again | 8 s | repeats, so a reproducible model error can be told from the participant's state at that moment |
+The time-course calibration does all of this in about 5 minutes. One sequence everywhere also means that a recording, a
+participant's seed and the fit's defaults always refer to the same steps.
 
-- **Order:** pseudo-random, no two consecutive levels next to each other in brightness (Eckert et al.), so luminance
-  is not confounded with time (in the old ascending staircase, sensitivity could not be told from adaptation).
-  Colours are mixed in with the grays. A colour and its black step are **linked** (*Keep with the previous step*):
-  scrambling moves them together.
-- **Irregular lengths and many changes:** 12 brightening steps from black and about as many darkening steps, of
-  different sizes and lengths, give the latency (from onsets), the two time constants and the transient a range to be
-  fitted on, as issue 43 asks for.
-- **Adjustable:** the lengths are in the timeline. A black step after the gray 0 step just lengthens the dark.
+Recordings made with the earlier sequences are analysed from the run files the presenter saved with them, since a
+run file records every step played (**Load sequence…** in the app).
 
 ## Running
 

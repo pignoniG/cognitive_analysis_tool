@@ -348,23 +348,17 @@ class MainWindow(QMainWindow):
         self.sequence_start.setToolTip("Drag its handle under the plots or type a value")
         self.sequence_start.valueChanged.connect(self._sequence_changed)
         self.sequence_rms = QLabel("–")
-        self.sequence = calibration.DEFAULT
+        self.sequence = calibration.TIME_COURSE
         self.sequence_label = QLabel()
         self.sequence_label.setWordWrap(True)
         sequence_buttons = QHBoxLayout()
         load_sequence = QPushButton("Load sequence…")
         load_sequence.clicked.connect(self.choose_sequence)
-        default_sequence = QPushButton("Built-in")
-        builtin = QMenu(default_sequence)
-        builtin.addAction("Time-course calibration (the presenter's default, preset order)",
-                          lambda: self.set_sequence(calibration.TIME_COURSE))
-        builtin.addAction("Full calibration (the presenter's default until November 2026)",
-                          lambda: self.set_sequence(calibration.DEFAULT))
-        builtin.addAction("20-step staircase (before October 2026)",
-                          lambda: self.set_sequence(calibration.STAIRCASE_20))
-        default_sequence.setMenu(builtin)
-        default_sequence.setToolTip("Built-in sequences. A participant's run is usually scrambled with their ID: "
-                                    "load the run file the presenter saved, which records the order played")
+        default_sequence = QPushButton("Preset order")
+        default_sequence.clicked.connect(lambda: self.set_sequence(calibration.TIME_COURSE))
+        default_sequence.setToolTip("The time-course calibration in the presenter's preset order. A participant's run is "
+                                    "usually scrambled with their ID: load the run file the presenter saved, which "
+                                    "records the order played")
         sequence_buttons.addWidget(load_sequence)
         sequence_buttons.addWidget(default_sequence)
         load_sequence.setToolTip("The sequence CSV, or a run file saved by the calibration presenter: its "
@@ -659,7 +653,7 @@ class MainWindow(QMainWindow):
 
     def _restore_sequence(self) -> None:
         path = self._settings.value("last_sequence", "")
-        sequence = calibration.DEFAULT
+        sequence = calibration.TIME_COURSE
         if path and Path(path).exists():
             try:
                 sequence = calibration.load_sequence(path)

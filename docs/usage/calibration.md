@@ -18,12 +18,10 @@ The default sequence is the [calibration presenter](calibration-tool.md)'s **tim
 of the same luminance; two greys repeated; 30 steps, 281 s, in a pseudo-random order (`calibration.TIME_COURSE`). The
 presenter usually scrambles it again for each participant, seeded by their ID: load the run file it saves (**Load
 sequence…**), which records the order played, or regenerate it with
-`calibration.scrambled(calibration.TIME_COURSE, "<participant ID>")`. Recordings made before November 2026 used the **full
-calibration** (34 steps, 291 s, with black steps: `calibration.DEFAULT`, also in the **Built-in** menu).
-
-The 20-step staircase used before October 2026 (greys 0 to 255, then red, green and blue at 64 to 255, 6 s each,
-ascending) is still available (**Built-in** menu, `calibration.STAIRCASE_20`) for recordings made with it; its fixed
-ascending order confounds luminance with time (open issues 36, 41, 43). Other sequences are loaded from a CSV:
+`calibration.scrambled(calibration.TIME_COURSE, "<participant ID>")`. It is the only calibration sequence; why the full
+calibration (until November 2026) and the 20-step staircase (until October 2026) were removed is in
+[Calibration presenter](calibration-tool.md#why-only-this-sequence). Recordings made with them are analysed from their
+run files, which record every step played. A sequence can also be loaded from a CSV:
 
 ```text
 time,r,g,b,label

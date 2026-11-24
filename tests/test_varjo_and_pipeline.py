@@ -11,7 +11,7 @@ from cwtool import calibration, cli, devices, pipeline
 from cwtool.devices import varjo
 from cwtool.params import Parameters, VideoSettings
 from cwtool.video import analyse_video
-from conftest import write_varjo_recording
+from conftest import write_varjo_recording, staircase_20
 
 
 def test_varjo_reader(varjo_folder):
@@ -76,7 +76,7 @@ def test_params_roundtrip(tmp_path):
 
 
 def test_calibration_sequence():
-    seq = calibration.STAIRCASE_20
+    seq = staircase_20()
     assert len(seq.steps) == 20
     assert seq.duration == 120
     assert seq.steps[8].rgb == (64, 0, 0)

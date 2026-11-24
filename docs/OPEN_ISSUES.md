@@ -1339,6 +1339,9 @@ is revised; they remain in the git history of this file.
 - **Not known:** whether the new sequence separates the two parts on real recordings; whether Gray 12 keeps the pupil below the
   Varjo's ceiling for every participant; the colour weights from equal-luminance changes against those from black resets.
 - **Proposal:** record the next participants with it, fit with and without the parts free, and compare the session's dark gap.
+- **The only sequence (24 November 2026):** the full calibration, the 20-step staircase and the presenter's other presets
+  and generator were removed from cwtool, the presenter and the validation task. Recordings made with them are analysed
+  from their run files. The tests keep a 20-step staircase of their own as a synthetic sequence.
 - **Status:** open (needs data).
 
 ### 58. The AS7341 spectral sensor is logged but not calibrated or used by the analysis

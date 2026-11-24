@@ -1,6 +1,8 @@
-"""Full-field calibration sequences: the calibration presenter's default (``TIME_COURSE``, from November 2026), its
-earlier default (``DEFAULT``, the full calibration), the 20-step staircase used before October 2026 (``STAIRCASE_20``), or
-one read from a sequence CSV or a presenter run file."""
+"""The full-field calibration sequence: the time-course calibration (``TIME_COURSE``), the only one, as the calibration
+presenter and the validation task play it, or the order a presenter run file records (or a sequence CSV).
+
+Recordings made with the earlier sequences (the full calibration until November 2026, the 20-step staircase until October
+2026) are analysed from their run files, which record every step played."""
 
 from __future__ import annotations
 
@@ -11,7 +13,7 @@ from typing import Optional
 
 import numpy as np
 
-STEP_SECONDS = 6.0
+STEP_SECONDS = 6.0     # the last step's length when a sequence CSV gives only start times and no other length
 
 
 @dataclass(frozen=True)
@@ -34,23 +36,6 @@ class Sequence:
     def duration(self) -> float:
         """Length of the sequence (s): the end of its last step."""
         return self.steps[-1].end if self.steps else 0.0
-
-
-def _build_staircase() -> Sequence:
-    colours = [(f"Gray {v}", (v, v, v)) for v in (0, 36, 73, 109, 146, 182, 219, 255)]
-    for name, axis in (("Red", 0), ("Green", 1), ("Blue", 2)):
-        for v in (64, 128, 191, 255):
-            rgb = [0, 0, 0]
-            rgb[axis] = v
-            colours.append((f"{name} {v}", tuple(rgb)))
-    steps = tuple(Step(i * STEP_SECONDS, (i + 1) * STEP_SECONDS, rgb, label)
-                  for i, (label, rgb) in enumerate(colours))
-    return Sequence(steps, "20-step staircase (before October 2026)")
-
-
-# The ascending staircase that cwtool used until October 2026 (the seven Varjo calibration recordings of April 2026,
-# played with 10 s steps). Its fixed ascending order confounds luminance with time (open issues 36, 41, 43).
-STAIRCASE_20 = _build_staircase()
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -148,23 +133,6 @@ def _sequence(items, name: str) -> Sequence:
 PRESET_SEED = "calibration"    # the presenter's seed for its presets
 
 
-def full_calibration(seed=PRESET_SEED) -> Sequence:
-    """The presenter's default sequence ("Full calibration"): the 8 grays of Eckert et al. (2022), longer the
-    darker (20, 15, 10, 8, 6, 6, 6 and 12 s); R, G, B at 64, 128, 191 and 255 for 8 s, each after a linked 8 s
-    black step; grays 73 and 182 repeated for 8 s. 34 steps, 291 s, in the presenter's pseudo-random order for
-    ``seed`` (no two consecutive levels next to each other in brightness)."""
-    lengths = {0: 20, 36: 15, 73: 10, 109: 8, 146: 6, 182: 6, 219: 6, 255: 12}
-    items = [(f"Gray {v}", (v, v, v), lengths[v], False) for v in lengths]
-    for name, axis in (("Red", 0), ("Green", 1), ("Blue", 2)):
-        for v in (64, 128, 191, 255):
-            rgb = [0, 0, 0]
-            rgb[axis] = v
-            items += [("Black", (0, 0, 0), 8, False), (f"{name} {v}", tuple(rgb), 8, True)]
-    items += [(f"Gray {v} (repeat)", (v, v, v), 8, False) for v in (73, 182)]
-    order = _scramble([it[1] for it in items], [it[3] for it in items], seed)
-    return _sequence([items[i] for i in order], "full calibration (presenter default)")
-
-
 def scrambled(sequence: Sequence, seed, avoid: bool = True) -> Sequence:
     """``sequence`` in the order the presenter plays it with the given seed ("Scrambled, seeded by participant":
     the seed is the participant ID unless one is typed). A run file saved by the presenter records the order
@@ -173,11 +141,6 @@ def scrambled(sequence: Sequence, seed, avoid: bool = True) -> Sequence:
     order = _scramble([st.rgb for st in steps], [st.linked for st in steps], seed, avoid)
     return _sequence([(steps[i].label, steps[i].rgb, steps[i].end - steps[i].start, steps[i].linked)
                       for i in order], f"{sequence.name}, order {seed}")
-
-
-# The presenter's default until November 2026, in its preset order. A participant's run is usually scrambled again with
-# their ID (load the run file, or use ``scrambled(DEFAULT, participant_id)``).
-DEFAULT = full_calibration()
 
 
 # The time-course calibration (November 2026): (label, rgb, seconds, linked), in the design's order. Each probe that needs

@@ -312,7 +312,7 @@ class ResultPlots(pg.GraphicsLayoutWidget):
         self.sequence_line.sigPositionChanged.connect(self._line_moved)
         self._sequence_start = 0.0
         self._sequence_visible = False
-        self._sequence = calibration.DEFAULT
+        self._sequence = calibration.TIME_COURSE
 
         # Current frame: a red bar on both plots. Click on either plot to place it, or drag it to scrub
         # the video; the time is shown at the top of the pupil plot.

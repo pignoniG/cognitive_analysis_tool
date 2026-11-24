@@ -115,7 +115,7 @@ def fit_calibration(rec: Recording, video: VideoResult, params: Parameters, star
     fits the transient constriction after brightening and its escape time constant. The pupil offset
     is left as it is unless ``fit_offset``: the model's absolute level is set by the sensitivity and the
     display's black and white, and an offset would hide an error of those."""
-    end = start + (sequence or calibration.DEFAULT).duration if end is None else end
+    end = start + (sequence or calibration.TIME_COURSE).duration if end is None else end
     prep = prepare(rec, video, params)
     if prep.scale is None:
         raise ValueError("The calibration fit needs a device with a known pupil scale (not pixel data)")

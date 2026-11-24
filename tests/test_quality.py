@@ -15,7 +15,7 @@ from cwtool.params import Parameters, VideoSettings
 from cwtool.photometry import fit_light_response
 from cwtool.recording import Recording
 from cwtool.video import analyse_video
-from conftest import VARJO_HEADER, write_varjo_recording
+from conftest import VARJO_HEADER, write_varjo_recording, staircase_20
 
 RATE = 100
 
@@ -161,7 +161,7 @@ def _clipped_participant(folder, flag_ceiling: bool):
     """The 20-step staircase for a participant of sensitivity 3, whose tracker stops at 5 mm (the dark steps are larger)."""
     p = Parameters()
     gains = np.array([1.5, 0.7, 0.8])
-    seq = calibration.scaled(calibration.STAIRCASE_20, STEP / calibration.STEP_SECONDS)
+    seq = calibration.scaled(staircase_20(), STEP / calibration.STEP_SECONDS)
     colours = [(0, 0, 0)] * int(LEAD / STEP) + [s.rgb for s in seq.steps]
     t = np.arange(len(colours) * STEP * RATE) / RATE
     rgb = np.array([colours[min(int(x // STEP), len(colours) - 1)] for x in t], dtype=float)

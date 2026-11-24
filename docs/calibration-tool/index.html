@@ -137,7 +137,6 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
     <label>Preset
       <select id="preset"></select>
     </label>
-    <button id="btn-generate" title="Generate steps from a ramp">Generate…</button>
     <label class="grow">Name
       <input type="text" id="seq-name" autocomplete="off">
     </label>
@@ -259,49 +258,6 @@ kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4p
 </section>
 </main>
 
-<dialog id="dlg-gen">
-  <form method="dialog" id="gen-form">
-    <h2>Generate steps</h2>
-    <div class="row">
-      <label>Ramp
-        <select id="g-kind">
-          <option value="gray">Gray</option>
-          <option value="blue">Blue (shades, then tints)</option>
-          <option value="red">Red (shades, then tints)</option>
-          <option value="green">Green (shades, then tints)</option>
-          <option value="timecourse">Time-course calibration: grays without black, dimming probes, colours against gray</option>
-          <option value="full">Full calibration: gray + RGB, steady-state lengths</option>
-          <option value="cwtool20">Gray + RGB primaries (20)</option>
-        </select>
-      </label>
-      <label>Levels <input type="number" id="g-n" min="2" max="32" value="8"></label>
-      <label>Length (s) <input type="number" id="g-dur" min="0.1" step="0.5" value="6"></label>
-    </div>
-    <div class="row" id="g-range">
-      <label>Darkest <input type="number" id="g-min" min="0" max="255" value="0"></label>
-      <label>Lightest <input type="number" id="g-max" min="0" max="255" value="255"></label>
-    </div>
-    <div class="row">
-      <label>Order
-        <select id="g-order">
-          <option value="dtl">Dark to light</option>
-          <option value="ltd">Light to dark</option>
-          <option value="random">Pseudo-random (no neighbours next to each other)</option>
-        </select>
-      </label>
-      <label>Seed <input type="text" id="g-seed" value="calibration"></label>
-    </div>
-    <div class="row">
-      <label class="check"><input type="radio" name="g-how" value="replace" checked> Replace the sequence</label>
-      <label class="check"><input type="radio" name="g-how" value="append"> Append</label>
-    </div>
-    <div class="row" style="justify-content:flex-end">
-      <button value="cancel" formnovalidate>Cancel</button>
-      <button class="primary" value="ok" id="g-ok">Generate</button>
-    </div>
-  </form>
-</dialog>
-
 <div id="stage" aria-hidden="true"><div id="target" hidden></div><div id="hint" hidden></div></div>
 
 <script type="module">
@@ -367,7 +323,7 @@ const randomSeed = () => Array.from(crypto.getRandomValues(new Uint8Array(5)), (
 
 /* ---------- sequence model ---------- */
 const mk = (label, r, g, b, dur, keep = false) => ({ id: uid(), label, r, g, b, dur, keep });
-let seq = { name: "gray-8-pseudo-random-6s", steps: [] };
+let seq = { name: "time-course-calibration", steps: [] };
 let selected = null;
 const undoStack = [], redoStack = [];
 const snap = () => JSON.stringify(seq);
@@ -383,46 +339,6 @@ function updateHistoryButtons() { $("#btn-undo").disabled = !undoStack.length; $
 const find = (id) => seq.steps.find((s) => s.id === id);
 const totalDur = () => seq.steps.reduce((a, s) => a + s.dur, 0);
 
-function grays(n, lo, hi, dur) {
-  return Array.from({ length: n }, (_, i) => {
-    const v = byte(lo + ((hi - lo) * i) / Math.max(1, n - 1));
-    return mk(`Gray ${v}`, v, v, v, dur);
-  });
-}
-function hueRamp(axis, n, dur) {
-  const name = ["Red", "Green", "Blue"][axis];
-  const half = Math.floor(n / 2), rest = n - half, out = [];
-  for (let i = 0; i < half; i++) {
-    const v = byte((255 * i) / Math.max(1, half - 1)), c = [0, 0, 0]; c[axis] = v;
-    out.push(mk(v === 0 ? "Black" : `${name} ${v}`, ...c, dur));
-  }
-  for (let k = 1; k <= rest; k++) {
-    const t = k / (rest + 1), o = byte(255 * t), c = [o, o, o]; c[axis] = 255;
-    out.push(mk(`${name} tint ${Math.round(t * 100)}%`, ...c, dur));
-  }
-  return out;
-}
-function cwtool20(dur) {   // cwtool.calibration.STAIRCASE_20, the default before October 2026
-  const out = grays(8, 0, 255, dur);
-  ["Red", "Green", "Blue"].forEach((name, axis) => [64, 128, 191, 255].forEach((v) => {
-    const c = [0, 0, 0]; c[axis] = v; out.push(mk(`${name} ${v}`, ...c, dur));
-  }));
-  return out;
-}
-/** Gray and RGB calibration for cwtool's light-sensitivity and latency/dynamics fits (issues 36, 40, 43):
- *  the 8 grays of Eckert et al. 2022 and R, G, B at 4 levels, each colour preceded by a linked black step;
- *  lengths vary, with the long ones where the pupil is slowest (dilation, tau up to about 10 s): the darker
- *  the gray, the longer; two grays repeated. Play it in pseudo-random order so luminance is not confounded with time. */
-function fullCalibration() {
-  const out = [], long = { 0: 20, 36: 15, 73: 10, 109: 8, 146: 6, 182: 6, 219: 6, 255: 12 };
-  for (const v of [0, 36, 73, 109, 146, 182, 219, 255]) out.push(mk(`Gray ${v}`, v, v, v, long[v]));
-  ["Red", "Green", "Blue"].forEach((name, axis) => [64, 128, 191, 255].forEach((v) => {
-    const c = [0, 0, 0]; c[axis] = v;
-    out.push(mk("Black", 0, 0, 0, 8), mk(`${name} ${v}`, ...c, 8, true));
-  }));
-  for (const v of [73, 182]) out.push(mk(`Gray ${v} (repeat)`, v, v, v, 8));
-  return out;
-}
 /** The time-course calibration (default from November 2026; cwtool.calibration.TIME_COURSE_ITEMS, same steps in the same
  *  order): eight grays from 12 to 255 with no black, so the pupil stays below a tracker's ceiling; four dimming probes after
  *  moderate light (Gray 128, Gray 96) and after bright light (Gray 255, Blue 255), each linked to its context, which separate
@@ -443,35 +359,20 @@ function timeCourseCalibration() {
   out.push(mk("Gray 64 (repeat)", 64, 64, 64, 9), mk("Gray 196 (repeat)", 196, 196, 196, 7));
   return out;
 }
-function generate({ kind, n, dur, lo, hi, order, seed }) {
-  let list = kind === "gray" ? grays(n, lo, hi, dur)
-    : kind === "full" ? fullCalibration()
-    : kind === "timecourse" ? timeCourseCalibration()
-    : kind === "cwtool20" ? cwtool20(dur)
-    : hueRamp({ red: 0, green: 1, blue: 2 }[kind], n, dur);
-  const groups = groupsOf(list), Y = (g) => groupY(list, g);
-  if (order === "dtl") groups.sort((a, b) => Y(a) - Y(b));
-  else if (order === "ltd") groups.sort((a, b) => Y(b) - Y(a));
-  else if (order === "random") return scrambleIndices(list, seed, true).map((i) => list[i]);
-  return groups.flat().map((i) => list[i]);
+/** The time-course calibration in the presenter's pseudo-random order for ``seed`` (cwtool.calibration.time_course_calibration),
+ *  each probe moving with its context. The only calibration sequence (cwtool, the presenter and the validation task). */
+function generate(seed) {
+  const list = timeCourseCalibration();
+  return scrambleIndices(list, seed, true).map((i) => list[i]);
 }
 const PRESETS = [
-  ["Time-course calibration: grays without black, dimming probes, colours against gray, pseudo-random (default, about 5 min)", "time-course-calibration", { kind: "timecourse", n: 0, dur: 0, order: "random" }],
-  ["Full calibration: gray + RGB, steady-state lengths, pseudo-random (default until November 2026, about 5 min)", "full-calibration-gray-rgb", { kind: "full", n: 0, dur: 0, order: "random" }],
-  ["Gray, 8 levels, 6 s, pseudo-random (Eckert et al. 2022)", "gray-8-pseudo-random-6s", { kind: "gray", n: 8, dur: 6, order: "random" }],
-  ["Gray, dark to light, 3 s", "gray-8-dark-to-light-3s", { kind: "gray", n: 8, dur: 3, order: "dtl" }],
-  ["Gray, dark to light, 6 s", "gray-8-dark-to-light-6s", { kind: "gray", n: 8, dur: 6, order: "dtl" }],
-  ["Gray, dark to light, 10 s", "gray-8-dark-to-light-10s", { kind: "gray", n: 8, dur: 10, order: "dtl" }],
-  ["Gray, light to dark, 6 s", "gray-8-light-to-dark-6s", { kind: "gray", n: 8, dur: 6, order: "ltd" }],
-  ["Blue, dark to light, 3 s", "blue-8-dark-to-light-3s", { kind: "blue", n: 8, dur: 3, order: "dtl" }],
-  ["Red, dark to light, 3 s", "red-8-dark-to-light-3s", { kind: "red", n: 8, dur: 3, order: "dtl" }],
-  ["Gray + RGB primaries, 20 steps, 6 s (cwtool staircase before October 2026)", "cwtool-builtin-20", { kind: "cwtool20", n: 20, dur: 6, order: "as-is" }],
+  ["Time-course calibration: grays without black, dimming probes, colours against gray, pseudo-random (about 5 min)", "time-course-calibration"],
 ];
 const PRESET_SEED = "calibration";
 function loadPreset(i) {
-  const [, name, p] = PRESETS[i];
+  const [, name] = PRESETS[i];
   pushHistory();
-  seq = { name, steps: generate({ ...p, lo: 0, hi: 255, seed: PRESET_SEED }) };
+  seq = { name, steps: generate(PRESET_SEED) };
   selected = null;
   renderAll();
 }
@@ -778,31 +679,10 @@ window.addEventListener("keydown", (e) => {
   e.preventDefault(); e.shiftKey ? redo() : undo();
 });
 
-// presets, generator, import/export
+// the preset, import/export
 const presetSel = $("#preset");
 presetSel.innerHTML = '<option value="">Load a preset…</option>' + PRESETS.map((p, i) => `<option value="${i}">${p[0]}</option>`).join("");
 presetSel.addEventListener("change", () => { if (presetSel.value !== "") loadPreset(Number(presetSel.value)); presetSel.value = ""; });
-const dlg = $("#dlg-gen");
-$("#btn-generate").addEventListener("click", () => dlg.showModal());
-$("#g-kind").addEventListener("change", () => {
-  const k = $("#g-kind").value;
-  $("#g-range").hidden = k !== "gray"; $("#g-n").disabled = k === "cwtool20" || k === "full";
-  $("#g-dur").disabled = k === "full";
-});
-$("#g-order").addEventListener("change", () => { $("#g-seed").disabled = $("#g-order").value !== "random"; });
-$("#g-seed").disabled = true; $("#g-range").hidden = false;
-dlg.addEventListener("close", () => {
-  if (dlg.returnValue !== "ok") return;
-  const kind = $("#g-kind").value;
-  const p = { kind, n: clamp(Number($("#g-n").value) || 8, 2, 32), dur: Math.max(MIN_DUR, Number($("#g-dur").value) || 6),
-    lo: byte($("#g-min").value), hi: byte($("#g-max").value), order: $("#g-order").value, seed: $("#g-seed").value || PRESET_SEED };
-  const list = generate(p);
-  pushHistory();
-  if (document.querySelector("input[name=g-how]:checked").value === "replace") {
-    seq = { name: `${kind}-${list.length}-${p.order}-${round(p.dur, 2)}s`, steps: list };
-  } else seq.steps.push(...list);
-  selected = null; renderAll();
-});
 $("#btn-import").addEventListener("click", () => $("#file-import").click());
 $("#file-import").addEventListener("change", async (e) => {
   const f = e.target.files[0]; e.target.value = "";
@@ -1245,7 +1125,7 @@ function init() {
   }
   $("#zoom").value = store.get("cal.zoom", 40);
   const saved = store.get("cal.sequence", null);
-  if (saved?.steps?.length) seq = saved; else seq = { name: PRESETS[0][1], steps: generate({ ...PRESETS[0][2], lo: 0, hi: 255, seed: PRESET_SEED }) };
+  if (saved?.steps?.length) seq = saved; else seq = { name: PRESETS[0][1], steps: generate(PRESET_SEED) };
   for (const k of [...SAVED, ...SAVED_CHECK]) $(k).addEventListener("input", saveSettings);
   document.querySelectorAll("input[name=mode]").forEach((r) => r.addEventListener("change", () => { applyMode(); saveSettings(); }));
   renderAll(); renderRuns(); applyMode(); checkXr();

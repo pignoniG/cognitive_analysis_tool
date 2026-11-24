@@ -296,3 +296,17 @@ def no_unsaved_prompt(monkeypatch):
     except ImportError:
         return
     monkeypatch.setattr(MainWindow, "_ask_unsaved", lambda self, what: QMessageBox.Discard)
+
+
+def staircase_20(step_seconds: float = 6.0):
+    """A synthetic test sequence (the ascending staircase cwtool used before October 2026, no longer built in): greys
+    0 to 255 in 8 steps, then red, green and blue at 64, 128, 191 and 255, ``step_seconds`` each."""
+    from cwtool.calibration import Sequence, Step
+    colours = [(f"Gray {v}", (v, v, v)) for v in (0, 36, 73, 109, 146, 182, 219, 255)]
+    for name, axis in (("Red", 0), ("Green", 1), ("Blue", 2)):
+        for v in (64, 128, 191, 255):
+            rgb = [0, 0, 0]
+            rgb[axis] = v
+            colours.append((f"{name} {v}", tuple(rgb)))
+    return Sequence(tuple(Step(i * step_seconds, (i + 1) * step_seconds, rgb, label)
+                          for i, (label, rgb) in enumerate(colours)), "20-step staircase (test sequence)")

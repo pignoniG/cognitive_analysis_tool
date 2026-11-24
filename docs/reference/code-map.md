@@ -24,7 +24,7 @@ cwtool/
 ├── pipeline.py         prepare(), run(), export(): from recording + video pass + parameters to ΔPD
 ├── quality.py          tracking quality of a recording: valid samples, dropouts, the tracker's ceiling, the assumed iris
 ├── alignment.py        the presenter's log aligned to the scene video (the offset between the two clocks; Varjo)
-├── calibration.py      calibration sequences: built-in (time-course, full, staircase), CSV and run files, locate in a recording
+├── calibration.py      the calibration sequence (the time-course calibration), CSV and run files, locate in a recording
 ├── calfit.py           the participant's calibration fit on the pupil's time course: light response and timing together,
 │                       for every device and luminance route; its search ranges and priors
 ├── onsets.py           the response latency from the constriction onsets at the sequence's brightening steps

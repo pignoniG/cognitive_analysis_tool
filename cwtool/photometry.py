@@ -149,7 +149,7 @@ def _expected(levels, params: Parameters, field_area: float, sensitivity, gains,
 
 
 def fit_light_response(rec: Recording, video: VideoResult, params: Parameters, start: float,
-                       sequence: calibration.Sequence = calibration.DEFAULT, fit_gains: bool = True,
+                       sequence: calibration.Sequence = calibration.TIME_COURSE, fit_gains: bool = True,
                        fit_gamma: bool = False, fit_black: bool = False,
                        fit_offset: bool = False) -> PhotometryFit:
     """Fit the participant's light sensitivity (and channel weights, optionally gamma, the display's black
@@ -336,7 +336,7 @@ def _search_sensitivity(expected, m: np.ndarray, points: int = 49):
 
 
 def fit_lux_response(rec: Recording, video: VideoResult, params: Parameters, start: float,
-                     sequence: calibration.Sequence = calibration.DEFAULT, fit_fixation: bool = False) -> LuxFit:
+                     sequence: calibration.Sequence = calibration.TIME_COURSE, fit_fixation: bool = False) -> LuxFit:
     """Fit the participant's light sensitivity and the pupil offset on a calibration sequence played to
     a glasses tracker with a lux sensor, by least squares on ΔPD over the sequence.
 
