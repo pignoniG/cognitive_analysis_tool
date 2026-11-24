@@ -11,7 +11,8 @@ shows its file under ΔPD and exports it, like the Shimmer's.
 ## As a lux sensor
 
 A glasses recording (Pupil Core, Neon, Tobii Pro Glasses 3) without the TSL2591's `lux.csv` takes its lux from the
-AS7341's `as7341.csv`, found the same way (`cwtool/spectral.py`). The TSL2591 comes first when both are there. The lux
+AS7341's `as7341.csv`, found the same way (`cwtool/spectral.py`). When both are there, the parameter *Light sensor* (`light_sensor`,
+TSL2591 by default, `--light-sensor` on the command line) chooses, without reopening the recording. The lux
 is a weighted sum of the eight bands in basic counts, with weights fitted to the datasheet's typical curves and the CIE
 photopic curve V(λ):
 
@@ -24,6 +25,8 @@ photopic curve V(λ):
   out.
 - **Smoothing:** a running median of 3 spectra, not 5.
 - **Labels:** the export names the column `lux (AS7341 estimate)`, and the app says where the lux came from.
+- **Warnings:** the result notes when the lux is the AS7341's estimate, when the sensor chosen has no readings (the
+  other's are used), and when neither sensor has any (the scene camera alone is then used).
 
 **Accuracy.** For a unit that has not been measured the estimate is within about 10 % RMS over many kinds of light
 (its bands sit up to 10 nm from the typical ones). The scale under the dome is not known, and the calibration's fitted

@@ -67,13 +67,52 @@ def test_saturated_spectra_are_left_out_and_tsl2591_comes_first(tmp_path):
     folder = write_core_recording(tmp_path / "core", [128] * 30, np.arange(30) / 30, lux=lambda t: 50.0)
     as7341_from_lux_log(folder, keep_tsl=True, saturated_after=2.0)
     rec = devices.load(folder)
-    assert rec.lux_sensor == "TSL2591" and "lux sensor" in rec.route
+    assert rec.lux_sensor == "TSL2591" and "lux sensor" in rec.route and set(rec.light_logs) == {"TSL2591", "AS7341"}
     (folder / "1_1_1.csv").unlink()
     rec = devices.load(folder)
-    assert rec.lux_sensor == "AS7341" and "AS7341" in rec.route and any("AS7341" in n for n in rec.notes)
+    assert rec.lux_sensor == "AS7341" and "AS7341" in rec.route and set(rec.light_logs) == {"AS7341"}
     assert np.allclose(rec.lux_values, 50.0) and rec.lux_time.max() < 1.05     # the saturated ones are gone
     t, v = spectral.read(folder, rec.epoch_start, 3.0)
     assert len(t) == len(rec.lux_time)
+
+
+def test_the_parameter_switches_the_sensor_when_both_are_there(tmp_path):
+    folder = _pupil_core(tmp_path / "core", lambda t: 100.0)
+    as7341_from_lux_log(folder, keep_tsl=True)
+    with open(folder / spectral.FILE_NAME) as f:                          # the AS7341 reads half as much
+        rows = list(csv.reader(f))
+    with open(folder / spectral.FILE_NAME, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(rows[0])
+        for r in rows[1:]:
+            w.writerow(r[:2] + [f"{float(b) / 2:.9g}" for b in r[2:10]] + r[10:])
+    rec = devices.load(folder)
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec),
+                          frame_times=rec.scene_frame_times)
+    tsl = pipeline.run(rec, video, Parameters(lux_use_video=False))
+    as7341 = pipeline.run(rec, video, Parameters(lux_use_video=False, light_sensor="AS7341"))
+    assert np.nanmedian(as7341.luminance) == pytest.approx(np.nanmedian(tsl.luminance) / 2, rel=1e-6)
+    assert any("estimated from the AS7341" in w for w in as7341.warnings)
+    assert not any("AS7341" in w for w in tsl.warnings)
+    switched = lux.select(rec, "AS7341")
+    assert switched.lux_sensor == "AS7341" and lux.select(switched, "TSL2591").lux_sensor == "TSL2591"
+    assert lux.select(rec, "TSL2591") is rec
+
+
+def test_a_missing_choice_falls_back_with_a_note_and_no_sensor_is_warned(tmp_path):
+    folder = _pupil_core(tmp_path / "core", lambda t: 100.0)
+    rec = devices.load(folder)
+    video = analyse_video(rec.scene_video, rec.time, rec.gaze, VideoSettings().for_recording(rec),
+                          frame_times=rec.scene_frame_times)
+    res = pipeline.run(rec, video, Parameters(light_sensor="AS7341"))
+    assert res.luminance_mode == "lux sensor"
+    assert any("No AS7341 readings" in w and "TSL2591's are used" in w for w in res.warnings)
+    bare = devices.load(write_core_recording(tmp_path / "bare", [40] * 45 + [220] * 45, np.arange(90) / 30))
+    assert bare.light_logs == {} and bare.lux_values is None
+    res = pipeline.run(bare, analyse_video(bare.scene_video, bare.time, bare.gaze,
+                                           VideoSettings().for_recording(bare),
+                                           frame_times=bare.scene_frame_times), Parameters())
+    assert any("No light sensor data found" in w and "TSL2591" in w and "AS7341" in w for w in res.warnings)
 
 
 def _pupil_core(folder, value):

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QDoubleSpinBox, QFileDialog, 
                                QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
 from cwtool import __version__, alignment, calfit, calibration, devices, gazecheck, hrv, palette, pipeline, quality, sensors
+from cwtool import lux as lux_module
 from cwtool.gui import errors
 from cwtool.gui.param_panel import ParameterPanel
 from cwtool.gui.icons import icon, tinted
@@ -1343,8 +1344,10 @@ class MainWindow(QMainWindow):
         """Run the pipeline with the current parameters and show the result; the status shows the error if it fails."""
         if self.recording is None or self.video is None:
             return
+        params = self.params_panel.params()
+        self.recording = lux_module.select(self.recording, params.light_sensor)    # the light sensor chosen
         try:
-            result, error = pipeline.run(self.recording, self.video, self.params_panel.params()), None
+            result, error = pipeline.run(self.recording, self.video, params), None
         except Exception as e:
             result, error = None, (e, traceback.format_exc())
         self._show_result(result, error)

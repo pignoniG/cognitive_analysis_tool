@@ -1433,7 +1433,8 @@ is revised; they remain in the git history of this file.
     the repository.
 - **The datasheet matrix in use (24 November 2026):** the photopic weights are fitted by `tools/as7341_weights.py`,
   with the bands scaled to the datasheet's typical counts under its test light, so the estimate is in lux. They are
-  used when a glasses recording has no TSL2591 log; the TSL2591 comes first when both are there. On the 22 November
+  used when a glasses recording has no TSL2591 log; with both, the parameter `light_sensor` chooses (TSL2591 by
+  default). On the 22 November
   screen runs (both sensors under their domes) the estimate read 0.92× the TSL2591's lux, and 0.31× it in the run
   with the TSL2591 bare (its dome passes 1/3.0). Against the luminance-matched grays the estimate read red 1.21×,
   green 0.92× and blue 0.70×, where the TSL2591 read 1.48×, 0.74× and 1.43×.

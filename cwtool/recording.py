@@ -80,6 +80,9 @@ class Recording:
     lux_time: Optional[np.ndarray] = None    # s, relative clock
     lux_values: Optional[np.ndarray] = None  # lux
     lux_sensor: str = ""                      # "TSL2591", or "AS7341" (its bands' estimate); empty without a log
+    # every light sensor with readings: sensor -> (time, lux), on the relative clock; ``lux_time`` and ``lux_values``
+    # are one of them, chosen by the parameter ``light_sensor`` (:func:`cwtool.lux.select`)
+    light_logs: dict = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)   # reader's warnings, shown with every result
     # Samples whose pupil the tracker reports at its ceiling (True): the true size is at least that large, so the value is a

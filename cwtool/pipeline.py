@@ -406,6 +406,11 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
                              "on a uniform view. Compare the luminance and ratio plots with and without "
                              "'Distribute with the scene video'.")
         mode = "lux sensor"
+        if rec.lux_sensor != params.light_sensor:
+            notes.append(f"No {params.light_sensor} readings for this recording: the {rec.lux_sensor}'s are used.")
+        if rec.lux_sensor == "AS7341":
+            notes.append("The lux is estimated from the AS7341's bands with the datasheet's typical curves (about 10 % "
+                         "for a sensor not calibrated; open issue 58).")
     elif rec.luminance_source == "lux_sensor" and params.camera_exposure == "fixed":
         # Fixed exposure: pixel values are proportional to scene luminance up to saturation.
         y_w, _ = relative_luminances(video, params)
@@ -418,7 +423,8 @@ def prepare(rec: Recording, video: VideoResult, params: Parameters) -> Prepared:
     else:
         mode = "display"
         if rec.luminance_source == "lux_sensor":
-            notes.append("No lux sensor data found: luminance is estimated from the scene camera alone, "
+            notes.append("No light sensor data found (neither the TSL2591's lux log nor the AS7341's file): "
+                         "luminance is estimated from the scene camera alone, "
                          "mapped onto Lmin–Lmax. With automatic exposure this is only relative; if the "
                          "exposure was fixed, set camera exposure to 'fixed'.")
             mode = "camera, relative"
@@ -575,6 +581,7 @@ def run(rec: Recording, video: VideoResult, params: Parameters) -> Result:
     """The whole analysis: :func:`prepare`, the expected pupil, the pupil scale (fitted to the expected
     mean for pixel data), the alignment offset, then ΔPD averaged over ``cw_window`` s and smoothed
     (Savitzky-Golay order 1, ``cw_smoothing`` windows each side). Warnings are collected in the result."""
+    rec = lux_module.select(rec, params.light_sensor)
     prep = prepare(rec, video, params)
     profile, fs, time, valid = rec.profile, prep.fs, prep.time, prep.valid
     notes = list(prep.notes)

@@ -147,30 +147,52 @@ def smoothing(sensor: str) -> int:
 
 
 def load_log(recording_folder: Path, lux_folder: Optional[Path], epoch_start: float, duration: float):
-    """The lux readings for a recording: from ``lux_folder`` (searched with its subfolders) when one is given,
-    else from a log in the recording folder or its ``lux`` subfolder. The TSL2591's log is used when it covers the
-    recording; otherwise the AS7341's estimate (:mod:`cwtool.spectral`). Returns (time, lux, notes, sensor), the
-    arrays None and the sensor empty if there are no readings; the notes say why when a given folder yields none."""
+    """The light sensors' readings for a recording: from ``lux_folder`` (searched with its subfolders) when one is
+    given, else from the recording folder or its ``lux`` subfolder. Returns (logs, notes): ``logs`` maps each sensor
+    with readings ("TSL2591", the AS7341's estimate "AS7341", :mod:`cwtool.spectral`) to (time, lux); the notes say why
+    when a given folder yields none."""
     notes: list[str] = []
     if lux_folder:
         folder = Path(lux_folder)
         if not folder.is_dir():
-            return None, None, [f"The lux folder {folder} does not exist."], ""
+            return {}, [f"The lux folder {folder} does not exist."]
         recursive = True
     else:
         folder, recursive = find_lux_folder(recording_folder), False
         if folder is None:
-            return None, None, notes, ""
-    t, v = read_lux(folder, epoch_start, duration, recursive=recursive)
-    if len(t):
-        return t, v, notes, SENSOR
-    t, v = spectral.read(folder, epoch_start, duration, recursive=recursive)
-    if len(t):
-        notes.append("No TSL2591 lux log: the lux is estimated from the AS7341's spectral bands with the datasheet's "
-                     "typical curves (about 10 % for a sensor not calibrated; open issue 58).")
-        return t, v, notes, spectral.SENSOR
-    if lux_folder:
+            return {}, notes
+    logs = {}
+    for sensor, read in ((SENSOR, read_lux), (spectral.SENSOR, spectral.read)):
+        t, v = read(folder, epoch_start, duration, recursive=recursive)
+        if len(t):
+            logs[sensor] = (t, v)
+    if not logs and lux_folder:
         n = len(lux_files(folder, recursive=True)) + len(spectral.files(folder, recursive=True))
-        notes.append(f"No lux readings in {folder} overlap this recording ({n} log files found): check the folder "
-                     "and that the logger's clock matches the tracker's.")
-    return None, None, notes, ""
+        notes.append(f"No light sensor readings (TSL2591 or AS7341) in {folder} overlap this recording ({n} log files "
+                     "found): check the folder and that the logger's clock matches the tracker's.")
+    return logs, notes
+
+
+def chosen(logs: dict, sensor: str = SENSOR) -> str:
+    """The sensor whose readings are used: ``sensor`` when it has readings, else the other one (the TSL2591 first);
+    empty without any."""
+    if sensor in logs:
+        return sensor
+    return next((s for s in (SENSOR, spectral.SENSOR) if s in logs), "")
+
+
+def active(logs: dict, sensor: str = SENSOR) -> tuple:
+    """(time, lux, sensor) of the readings used (:func:`chosen`); (None, None, "") without any."""
+    name = chosen(logs, sensor)
+    return (*logs[name], name) if name else (None, None, "")
+
+
+def select(rec, sensor: str):
+    """The recording with the readings of ``sensor`` in use (``lux_time``, ``lux_values``, ``lux_sensor``), or of the
+    other one if ``sensor`` has none; the recording itself when nothing changes."""
+    name = chosen(rec.light_logs, sensor)
+    if not name or name == rec.lux_sensor:
+        return rec
+    from dataclasses import replace
+    t, v = rec.light_logs[name]
+    return replace(rec, lux_time=t, lux_values=v, lux_sensor=name)

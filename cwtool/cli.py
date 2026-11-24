@@ -8,7 +8,7 @@ import sys
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from cwtool import alignment, devices, gazecheck, pipeline, sensors
+from cwtool import alignment, devices, gazecheck, lux, pipeline, sensors
 from cwtool.params import DeviceMismatch, DisplayPhotometry, Parameters, VideoSettings
 from cwtool.trim import TRIM_FILE, Trim
 from cwtool.video import VideoResult, analyse_video, keep_alignment
@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-align-log", action="store_true",
                     help="do not move the presenter's log (events, sensors, Unix times) onto the video's clock (Varjo)")
     ap.add_argument("--workers", type=int, default=0, help="parallel video chunks (default: one per CPU core)")
+    ap.add_argument("--light-sensor", choices=["TSL2591", "AS7341"],
+                    help="the light sensor whose lux is used when the recording has both (default: the parameters', "
+                         "TSL2591)")
     ap.add_argument("--plot", action="store_true", help="save a PDF plot (needs matplotlib)")
     args = ap.parse_args(argv)
 
@@ -66,6 +69,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.display:
         params = DisplayPhotometry.load(args.display).apply(params)
+    if args.light_sensor:
+        params = replace(params, light_sensor=args.light_sensor)
+    rec = lux.select(rec, params.light_sensor)
     settings = VideoSettings().for_recording(rec)
     print(f"{rec.device} recording {rec.name}: {len(rec.time)} samples, {rec.time[-1] - rec.time[0]:.1f} s")
     if rec.route:

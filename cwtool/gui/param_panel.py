@@ -94,6 +94,11 @@ CHOICES = {
     "constriction_stages": ("Constriction stages", [1, 2]),
     "alignment": ("Alignment", ["recording", "baseline", "fixed", "none"]),
     "camera_exposure": ("Camera exposure", ["auto", "fixed"]),
+    "light_sensor": ("Light sensor", ["TSL2591", "AS7341"]),
+}
+CHOICE_TIPS = {
+    "light_sensor": "The sensor that gives the lux when the recording has both: the TSL2591's lux log, or the AS7341's "
+                    "estimate from its bands. A recording with only one of them uses it",
 }
 TEXTS = {
     "baseline_events": ("Baseline events", "Comma-separated event labels used by alignment 'baseline'"),
@@ -103,7 +108,7 @@ PARTICIPANT_GROUPS = [("Participant", ["age", "iris_diameter", "eyes", "eye"])]
 LIGHT_GROUPS = [
     ("Display photometry (datasheet)", ["l_min", "l_max", "gamma"]),
     ("Participant light response", ["sensitivity", "gain_r", "gain_g", "gain_b", "fixation_weight"]),
-    ("Luminance from lux sensor (glasses)", ["lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video",
+    ("Luminance from lux sensor (glasses)", ["light_sensor", "lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video",
                                              "lux_ratio_limit"]),
     ("Scene camera without lux log (glasses)",
      ["camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms"]),
@@ -234,6 +239,7 @@ class _Form(QWidget):
             return w, None
         label, options = CHOICES[name]
         w = QComboBox()
+        w.setToolTip(CHOICE_TIPS.get(name, ""))
         for o in options:
             w.addItem(str(o), o)
         w.currentIndexChanged.connect(self.changed)

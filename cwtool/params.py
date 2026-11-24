@@ -71,6 +71,9 @@ class Parameters:
     # near-cosine response over the 55° half-angle field), not a solid angle, despite the 1.x name kept for
     # compatibility. Gain and offset default to the chip's own lux; 1.x used 1.706061 and 0.66935, a
     # correction for the field-of-view mismatch in one projector test, not a sensor calibration (open issue 23).
+    # Which light sensor gives the lux when the recording has both: "TSL2591" (its lux log) or "AS7341" (the estimate
+    # from its bands, cwtool.spectral). A recording with one of them uses it whatever this says.
+    light_sensor: str = "TSL2591"
     lux_gain: float = 1.0
     lux_offset: float = 0.0
     lux_solid_angle: float = 2.2
@@ -293,7 +296,7 @@ class DisplayPhotometry:
         return cls(**{k: v for k, v in data.items() if k in known})
 
 
-_LUX = ("lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video", "lux_ratio_limit")
+_LUX = ("light_sensor", "lux_gain", "lux_offset", "lux_solid_angle", "lux_use_video", "lux_ratio_limit")
 _CAMERA = ("camera_exposure", "camera_white", "camera_reference_ms", "camera_exposure_ms")
 _PANEL = ("l_min", "l_max")
 

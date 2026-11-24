@@ -3,7 +3,7 @@
 ```text
 cwtool RECORDING [--device {pupil_core,pupil_neon,tobii_g3,varjo}] [--params FILE] [--display FILE]
                  [--logs FOLDER] [--lux FOLDER] [--sensors FOLDER] [--start S] [--end S] [--exclude FROM TO]
-                 [--out FOLDER] [--reanalyse] [--workers N] [--plot]
+                 [--out FOLDER] [--reanalyse] [--workers N] [--light-sensor {TSL2591,AS7341}] [--plot]
 ```
 
 | Option | Meaning |
@@ -21,6 +21,7 @@ cwtool RECORDING [--device {pupil_core,pupil_neon,tobii_g3,varjo}] [--params FIL
 | `--out` | export folder; default `RECORDING/cwtool_export` |
 | `--reanalyse` | ignore the cached video analysis |
 | `--workers` | parallel video chunks; default one per CPU core |
+| `--light-sensor` | the light sensor whose lux is used when the recording has both (default: the parameters', TSL2591) |
 | `--plot` | also save a PDF plot (needs the `plot` extra) |
 
 The command prints the device, the ΔPD RMS and SD, and any warnings, then writes the

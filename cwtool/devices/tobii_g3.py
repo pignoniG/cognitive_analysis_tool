@@ -191,13 +191,14 @@ def load(folder: Path, lux_folder: Optional[Path] = None, flip_gaze_y: bool = Fa
     epoch_start = _created(info)
     notes = []
     lux_time = lux_values = None
-    lux_sensor = ""
+    lux_sensor, light_logs = "", {}
     if epoch_start is None:
         notes.append("recording.g3 has no start time ('created'): the lux log and event logs cannot be matched "
                      "to the recording and were not read; exported Unix times are empty.")
     else:
-        lux_time, lux_values, lux_notes, lux_sensor = lux.load_log(folder, lux_folder, epoch_start,
+        light_logs, lux_notes = lux.load_log(folder, lux_folder, epoch_start,
                                                        float(time[-1] - min(time[0], 0.0)))
+        lux_time, lux_values, lux_sensor = lux.active(light_logs)
         notes += lux_notes
 
     marks = [(_number(o.get("timestamp")), _event_name(o.get("data")))
@@ -223,6 +224,7 @@ def load(folder: Path, lux_folder: Optional[Path] = None, flip_gaze_y: bool = Fa
         lux_time=lux_time,
         lux_values=lux_values,
         lux_sensor=lux_sensor,
+        light_logs=light_logs,
         events=sorted(events, key=lambda e: e.start),
         notes=notes,
         route="glasses: scene camera and " + lux.route(lux_sensor),

@@ -574,7 +574,8 @@ def align(rec: Recording, alignment: LogAlignment) -> Recording:
     computer = alignment.log_offset if alignment.log_offset is not None else shift
     lux = None if rec.lux_time is None else np.asarray(rec.lux_time, dtype=float) + computer
     time = np.asarray(rec.time, dtype=float) + shift if rec.separate_video_clock else rec.time
-    return replace(rec, time=time, epoch_start=rec.epoch_start - computer, lux_time=lux,
+    logs = {k: (np.asarray(t, dtype=float) + computer, v) for k, (t, v) in rec.light_logs.items()}
+    return replace(rec, time=time, epoch_start=rec.epoch_start - computer, lux_time=lux, light_logs=logs,
                    events=[Event(e.label, e.start + shift, e.end + shift) for e in rec.events],
                    notes=list(rec.notes) + alignment.notes(), log_alignment=alignment.as_dict())
 

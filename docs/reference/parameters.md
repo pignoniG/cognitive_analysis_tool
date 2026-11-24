@@ -37,6 +37,7 @@ not in participant files.
 
 | Name | Default | Meaning |
 |---|---|---|
+| `light_sensor` | TSL2591 | the sensor whose lux is used when the recording has both: `TSL2591` or `AS7341` (its bands' estimate); a recording with one uses it, with a note if it is not the one chosen |
 | `lux_gain` | 1 | recalibration of the sensor's lux (1.x: 1.706061, a field-of-view correction from one test) |
 | `lux_offset` | 0 | recalibration offset, lux (1.x: 0.66935) |
 | `lux_solid_angle` | 2.2 | illuminance / average luminance ("Lux ÷ luminance (Ω)" in the app) for the sensor in its housing (not a solid angle; see [Lux sensor](../hardware/lux-sensor.md)) |

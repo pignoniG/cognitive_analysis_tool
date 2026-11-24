@@ -149,7 +149,7 @@ def test_lux_folder_outside_the_recording(tmp_path):
     (tmp_path / "other").mkdir()
     (tmp_path / "other" / "9_9_9.csv").write_text("1500000000000,1,1,1,999\n1500003600000,1,1,1,999\n")
     none = devices.load(folder, lux_folder=tmp_path / "other")
-    assert none.lux_values is None and "No lux readings" in none.notes[0] and "1 log files" in none.notes[0]
+    assert none.lux_values is None and "No light sensor readings" in none.notes[0] and "1 log files" in none.notes[0]
 
 
 def test_lux_files_are_skipped_by_their_time_span(tmp_path):
