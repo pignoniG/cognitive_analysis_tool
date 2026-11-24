@@ -148,7 +148,7 @@ def load(folder: Path, lux_folder: Optional[Path] = None, min_confidence: float 
         adapting_field=ADAPTING_FIELD,
     )
 
-    lux_time, lux_values, lux_notes = lux.load_log(folder, lux_folder, epoch_start,
+    lux_time, lux_values, lux_notes, lux_sensor = lux.load_log(folder, lux_folder, epoch_start,
                                                    float(time[-1] - min(time[0], 0.0)))
 
     return Recording(
@@ -164,7 +164,8 @@ def load(folder: Path, lux_folder: Optional[Path] = None, min_confidence: float 
         scene_frame_times=world_ts - t_zero,
         lux_time=lux_time,
         lux_values=lux_values,
+        lux_sensor=lux_sensor,
         events=read_event_log(folder, epoch_start),
         notes=lux_notes,
-        route="glasses: scene camera and " + ("lux sensor" if lux_values is not None else "no lux log"),
+        route="glasses: scene camera and " + lux.route(lux_sensor),
     )

@@ -540,8 +540,8 @@ def calibrate_camera(rec: Recording, video: VideoResult, params: Parameters) -> 
 
 def luminance_from_lux(rec: Recording, params: Parameters, time: np.ndarray) -> np.ndarray:
     """Average luminance (cd/m²) from the lux sensor on the analysis grid."""
-    avg = lux_module.average_luminance(lux_module.smooth(rec.lux_values), params.lux_gain,
-                                       params.lux_offset, params.lux_solid_angle)
+    smoothed = lux_module.smooth(rec.lux_values, lux_module.smoothing(rec.lux_sensor))
+    avg = lux_module.average_luminance(smoothed, params.lux_gain, params.lux_offset, params.lux_solid_angle)
     return np.interp(time, rec.lux_time - params.timelag, avg)
 
 
@@ -760,7 +760,9 @@ def export(result: Result, rec: Recording, params: Parameters, out_dir: Path, tr
         sel = trim.keep_mask(rec.lux_time, first, last)
         with open(p, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["timestamp_unix", "timestamp_relative", "lux"])
+            # the AS7341's column is its bands' estimate, named so that it is not taken for a lux meter's reading
+            w.writerow(["timestamp_unix", "timestamp_relative",
+                        "lux (AS7341 estimate)" if rec.lux_sensor == "AS7341" else "lux"])
             for t, v in zip(rec.lux_time[sel], rec.lux_values[sel]):
                 w.writerow([f"{t + rec.epoch_start:.6f}", f"{t:.6f}", f"{v:.6f}"])
         paths.append(p)

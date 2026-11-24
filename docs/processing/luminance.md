@@ -54,9 +54,12 @@ weights, fitted with their light sensitivity on the [calibration sequence](../us
 ## Lux sensor devices
 
 For the Pupil Core, Neon and Tobii Pro Glasses 3, the scene camera's automatic exposure hides the absolute level, so it comes from the
-[lux sensor](../hardware/lux-sensor.md). Following Pignoni et al. (2021, eq. 5–8):
+[lux sensor](../hardware/lux-sensor.md). Without a TSL2591 log, the lux is estimated from the
+[AS7341 spectral sensor](../hardware/spectral-sensor.md#as-a-lux-sensor)'s bands; the TSL2591 comes first when a
+recording has both. Following Pignoni et al. (2021, eq. 5–8):
 
-1. The lux readings are smoothed (Savitzky–Golay, 11 samples, order 6) and converted to the **average luminance**
+1. The lux readings are smoothed (a running median of 5 readings, 3 for the AS7341's slower spectra; open issue 63)
+   and converted to the **average luminance**
    of the sensor's view: \(\bar L = (g \cdot E + o) / \Omega\) (parameters `lux_gain`, `lux_offset`,
    `lux_solid_angle`). \(\Omega\) = 2.2 is the ratio of illuminance to average luminance for the sensor in its
    housing, and \(g\) = 1, \(o\) = 0 by default (1.x used 1.706061 and 0.66935; see

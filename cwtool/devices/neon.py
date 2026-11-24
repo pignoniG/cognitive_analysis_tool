@@ -429,6 +429,7 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
             experimental=True,          # open issue 61
         )
         lux_time = lux_values = None
+        lux_sensor = ""
     else:
         scene_video = Path(video) if video is not None else None
         scene_times = rel(frame_ts) if frame_ts is not None else None
@@ -449,10 +450,10 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
             adapting_field=ADAPTING_FIELD,
             experimental=True,          # open issue 32
         )
-        lux_time, lux_values, lux_notes = lux.load_log(folder, lux_folder, t_zero / 1e9,
+        lux_time, lux_values, lux_notes, lux_sensor = lux.load_log(folder, lux_folder, t_zero / 1e9,
                                                        float(time[-1] - min(time[0], 0.0)))
         notes += lux_notes
-        route = "glasses: Neon scene camera and " + ("lux sensor" if lux_values is not None else "no lux log")
+        route = "glasses: Neon scene camera and " + lux.route(lux_sensor)
 
     epoch_start = t_zero / 1e9
     events: list[Event] = events_from_markers(rel(markers[0]), markers[1], end=float(time[-1]),
@@ -472,6 +473,7 @@ def load(folder: Path, lux_folder: Optional[Path] = None) -> Recording:
         scene_frame_times=scene_times,
         lux_time=lux_time,
         lux_values=lux_values,
+        lux_sensor=lux_sensor,
         events=sorted(events, key=lambda e: e.start),
         notes=notes,
         route=route,

@@ -1551,7 +1551,8 @@ class MainWindow(QMainWindow):
             return [photometry, sequence, fit("Calibration", "calibration")]
         if rec.luminance_source == "lux_sensor":
             if rec.lux_values is not None:
-                lux = (True, f"Lux readings found ({len(rec.lux_values):,})", "action:logs")
+                lux = (True, f"Lux readings found ({len(rec.lux_values):,}"
+                       + (", estimated from the AS7341)" if rec.lux_sensor == "AS7341" else ")"), "action:logs")
             else:
                 lux = (False, "Lux readings not found: choose the logger folder", "action:logs")
             return [lux, sequence, fit("Calibration", "calibration")]
@@ -1944,6 +1945,9 @@ class MainWindow(QMainWindow):
         if rec.lux_values is None:
             return (f"<span style='color:{palette.WARNING}'>lux sensor: no readings found for this recording. Choose the "
                     f"logger folder (or put the lux log in the recording's folder)</span>")
+        if rec.lux_sensor == "AS7341":
+            return (f"lux estimated from the AS7341's bands: {len(rec.lux_values):,} spectra (no TSL2591 log; drawn "
+                    f"with the luminance, exported)")
         return f"lux sensor: {len(rec.lux_values):,} readings (drawn with the luminance, exported)"
 
     def _update_sensors_label(self, folder: Path | None = None) -> None:

@@ -5,13 +5,34 @@ The AMS AS7341 (datasheet DS000504) measures the light in eight visible bands, a
 the same lux of blue and of red light do not constrict it alike. It is read by an Arduino Nano over USB and recorded by
 the [sensor logger](../usage/logger.md) next to the other sensors.
 
-The analysis does not use it yet: its counts are not lux or luminance until the sensor is calibrated
-([open issue 58](../OPEN_ISSUES.md)). The app shows its file under ΔPD and exports it, like the Shimmer's.
+Without a TSL2591 log, a glasses recording takes its lux from the AS7341 ([below](#as-a-lux-sensor)). The app also
+shows its file under ΔPD and exports it, like the Shimmer's.
 
-The datasheet's typical responsivity curves (DS000504 v3-00, Figure 19, relative to F8, 1 nm steps) are in
-[`data/as7341_responsivity.csv`](data/as7341_responsivity.csv), taken from the PDF's vector paths. They give the
-photopic light within about 10 % and the melanopic within about 25 % on a unit that has not been measured; see
+## As a lux sensor
+
+A glasses recording (Pupil Core, Neon, Tobii Pro Glasses 3) without the TSL2591's `lux.csv` takes its lux from the
+AS7341's `as7341.csv`, found the same way (`cwtool/spectral.py`). The TSL2591 comes first when both are there. The lux
+is a weighted sum of the eight bands in basic counts, with weights fitted to the datasheet's typical curves and the CIE
+photopic curve V(λ):
+
+- **Curves:** the datasheet's typical responsivity (DS000504 v3-00, Figure 19, relative to F8) and its test light
+  (Figure 16), taken from the PDF's vector paths. They are in [`data/`](data/), with V(λ).
+- **Scale:** each band is scaled so that the test light gives the datasheet's typical counts, so the estimate is in lux.
+- **Fit:** `tools/as7341_weights.py` fits the weights over blackbodies, white LEDs, display mixes, coloured LEDs and
+  fluorescents (4.8 % RMS on them). A test checks the weights in the code against it.
+- **Channels:** clear and NIR are not used, so an eye tracker's infrared does not enter. Saturated spectra are left
+  out.
+- **Smoothing:** a running median of 3 spectra, not 5.
+- **Labels:** the export names the column `lux (AS7341 estimate)`, and the app says where the lux came from.
+
+**Accuracy.** For a unit that has not been measured the estimate is within about 10 % RMS over many kinds of light
+(its bands sit up to 10 nm from the typical ones). The scale under the dome is not known, and the calibration's fitted
+sensitivity absorbs a constant scale. See
 [open issue 58](../OPEN_ISSUES.md#58-the-as7341-spectral-sensor-is-logged-but-not-calibrated-or-used-by-the-analysis).
+
+On the 22 November screen runs, with both sensors under their domes, the estimate read 0.92× the TSL2591's lux.
+Against the luminance-matched grays, it read red 1.21×, green 0.92× and blue 0.70×, where the TSL2591 read 1.48×,
+0.74× and 1.43×.
 
 ## Hardware
 

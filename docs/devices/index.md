@@ -62,6 +62,7 @@ Defined in `cwtool/recording.py`. All arrays share one time base.
 | `scene_video` | path of the scene video |
 | `scene_frame_times` | recorded time of each frame (s, same clock), or None for a constant frame rate |
 | `lux_time`, `lux_values` | lux sensor readings on the same clock, for lux devices |
+| `lux_sensor` | `TSL2591`, or `AS7341` when the lux is estimated from its bands; empty without readings |
 | `events` | list of `Event(label, start, end)` |
 | `profile` | the `DeviceProfile` |
 

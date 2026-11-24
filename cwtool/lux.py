@@ -11,6 +11,9 @@ clock, which does not know about time zones and drifts; compensate with the time
 The sensor logger (cwtool.logger) writes a single ``lux.csv`` per recording with a header and rows
 
     unix time (s), lux
+
+Without a TSL2591 log, the AS7341 spectral sensor's ``as7341.csv`` gives the lux instead, estimated from its eight
+bands (:mod:`cwtool.spectral`). The TSL2591 comes first when both are there.
 """
 
 from __future__ import annotations
@@ -23,7 +26,11 @@ from typing import Optional
 import numpy as np
 from scipy.ndimage import median_filter
 
+from cwtool import spectral
+
 FILE_PATTERN = re.compile(r"^(\d{1,2}_\d{1,2}_\d{1,2}|lux)\.csv$")
+SENSOR = "TSL2591"
+SMOOTH_SAMPLES = 5   # the running median: 0.5 s at the TSL2591's 10 readings a second
 
 
 def lux_files(folder: Path, recursive: bool = False) -> list[Path]:
@@ -67,9 +74,9 @@ def _span(path: Path):
 
 
 def find_lux_folder(recording_folder: Path) -> Optional[Path]:
-    """A folder with lux logs inside the recording, or its "lux" subfolder."""
+    """A folder with lux logs (or an AS7341 file) inside the recording, or its "lux" subfolder."""
     for candidate in (Path(recording_folder), Path(recording_folder) / "lux"):
-        if lux_files(candidate):
+        if lux_files(candidate) or spectral.files(candidate):
             return candidate
     return None
 
@@ -101,18 +108,19 @@ def read_lux(folder: Path, epoch_start: float, duration: float, margin: float = 
     return np.asarray(times, dtype=float)[order], np.asarray(values, dtype=float)[order]
 
 
-def smooth(values: np.ndarray) -> np.ndarray:
-    """Light smoothing of the ~10 Hz log: a running median of 5 samples, kept positive.
+def smooth(values: np.ndarray, size: int = SMOOTH_SAMPLES) -> np.ndarray:
+    """Light smoothing of the log: a running median of ``size`` samples (5 for the TSL2591's ~10 Hz, 3 for the
+    AS7341's 2.3-7.5 spectra a second), kept positive.
 
     A median keeps a step's timing and height and cannot overshoot, so a step into dim light cannot take the
     smoothed lux below zero, which gives NaN in the pupil model (open issue 63; 1.x and 2.0 up to November 2026
     used a Savitzky-Golay filter, 11 samples, order 6, which rings at a step). The result is held at or above
     the smallest positive reading, so a log with zeros (darkness) still gives a positive luminance."""
     values = np.asarray(values, dtype=float)
-    if len(values) < 5:
+    if len(values) < size or size < 2:
         out = values.copy()
     else:
-        out = median_filter(values, size=5, mode="nearest")
+        out = median_filter(values, size=size, mode="nearest")
     positive = values[values > 0]
     if len(positive):
         out = np.maximum(out, positive.min())
@@ -126,25 +134,43 @@ def average_luminance(lux: np.ndarray, gain: float, offset: float, solid_angle: 
     return (gain * np.asarray(lux, dtype=float) + offset) / solid_angle
 
 
+def route(sensor: str) -> str:
+    """The light sensor's part of a recording's route, for the operator."""
+    if not sensor:
+        return "no lux log"
+    return "lux sensor" if sensor == SENSOR else f"lux estimated from the {sensor}'s bands"
+
+
+def smoothing(sensor: str) -> int:
+    """The running median's length for a sensor's log."""
+    return spectral.SMOOTH_SAMPLES if sensor == spectral.SENSOR else SMOOTH_SAMPLES
+
+
 def load_log(recording_folder: Path, lux_folder: Optional[Path], epoch_start: float, duration: float):
     """The lux readings for a recording: from ``lux_folder`` (searched with its subfolders) when one is given,
-    else from a log in the recording folder or its ``lux`` subfolder. Returns (time, lux, notes), the arrays
-    None if there are no readings; the notes say why when a given folder yields none."""
+    else from a log in the recording folder or its ``lux`` subfolder. The TSL2591's log is used when it covers the
+    recording; otherwise the AS7341's estimate (:mod:`cwtool.spectral`). Returns (time, lux, notes, sensor), the
+    arrays None and the sensor empty if there are no readings; the notes say why when a given folder yields none."""
     notes: list[str] = []
     if lux_folder:
         folder = Path(lux_folder)
         if not folder.is_dir():
-            return None, None, [f"The lux folder {folder} does not exist."]
+            return None, None, [f"The lux folder {folder} does not exist."], ""
         recursive = True
     else:
         folder, recursive = find_lux_folder(recording_folder), False
         if folder is None:
-            return None, None, notes
+            return None, None, notes, ""
     t, v = read_lux(folder, epoch_start, duration, recursive=recursive)
     if len(t):
-        return t, v, notes
+        return t, v, notes, SENSOR
+    t, v = spectral.read(folder, epoch_start, duration, recursive=recursive)
+    if len(t):
+        notes.append("No TSL2591 lux log: the lux is estimated from the AS7341's spectral bands with the datasheet's "
+                     "typical curves (about 10 % for a sensor not calibrated; open issue 58).")
+        return t, v, notes, spectral.SENSOR
     if lux_folder:
-        n = len(lux_files(folder, recursive=True))
+        n = len(lux_files(folder, recursive=True)) + len(spectral.files(folder, recursive=True))
         notes.append(f"No lux readings in {folder} overlap this recording ({n} log files found): check the folder "
                      "and that the logger's clock matches the tracker's.")
-    return None, None, notes
+    return None, None, notes, ""

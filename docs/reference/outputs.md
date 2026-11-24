@@ -53,6 +53,7 @@ is not listed.
 ### `<name>_lux.csv`
 
 Only with a lux log: `timestamp_unix`, `timestamp_relative`, `lux` (the readings as logged), within the recording.
+Without a TSL2591 log, the AS7341's estimate, with the column named `lux (AS7341 estimate)`.
 
 ### `<name>_<sensor>.csv`
 

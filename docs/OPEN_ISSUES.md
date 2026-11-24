@@ -1350,7 +1350,8 @@ is revised; they remain in the git history of this file.
   alike (issue 56's blue steps), and the melanopic content of the light is what the slow part of the response follows.
 - **Now:** the logger saves the eight bands, clear and NIR in AMS's basic counts (raw / (gain × integration ms)), the
   gain, the integration time and a saturation flag, stamped by the board's clock mapped onto the computer's. The app
-  shows and exports the file like the Shimmer's; the luminance model does not use it.
+  shows and exports the file like the Shimmer's. Since 24 November 2026 a glasses recording without a TSL2591 log
+  takes its lux from the AS7341's bands, with the datasheet matrix below (`cwtool/spectral.py`).
 - **Not known:** the sensor's responsivity per band (counts per µW/cm²) for this unit, so the counts are not irradiance,
   lux or luminance; the actual gain ratios (nominally 2×, the datasheet allows a few percent), which matter because the
   firmware changes the gain automatically; the angular response in the housing (the TSL2591's field correction, 2.2, does
@@ -1430,6 +1431,12 @@ is revised; they remain in the git history of this file.
     issue 60.
   - **Files:** the curves are in `docs/hardware/data/as7341_responsivity.csv`; the simulation scripts are kept outside
     the repository.
+- **The datasheet matrix in use (24 November 2026):** the photopic weights are fitted by `tools/as7341_weights.py`,
+  with the bands scaled to the datasheet's typical counts under its test light, so the estimate is in lux. They are
+  used when a glasses recording has no TSL2591 log; the TSL2591 comes first when both are there. On the 22 November
+  screen runs (both sensors under their domes) the estimate read 0.92× the TSL2591's lux, and 0.31× it in the run
+  with the TSL2591 bare (its dome passes 1/3.0). Against the luminance-matched grays the estimate read red 1.21×,
+  green 0.92× and blue 0.70×, where the TSL2591 read 1.48×, 0.74× and 1.43×.
 - **Status:** open (needs a calibration).
 
 ### 59. VR presenters: the WebXR Layers path is not shown by a Quest 3 over Link

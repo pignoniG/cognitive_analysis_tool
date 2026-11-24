@@ -13,6 +13,7 @@ cwtool/
 │   ├── neon.py         Pupil Neon (Pupil Cloud export, native format), experimental
 │   └── tobii_g3.py     Tobii Pro Glasses 3 (SD card recording folder), experimental
 ├── lux.py              lux log files (hourly 1.x files and the logger's lux.csv): find, read, smooth, lux → average luminance
+├── spectral.py         lux estimated from the AS7341's bands (as7341.csv), when there is no TSL2591 log
 ├── sensors.py          the sensor logger's Shimmer and EmotiBit files (with their saved settings): find, read, cut, write
 ├── hrv.py              heart rate variability from a Shimmer's ECG: R peaks (NeuroKit2), trusted intervals, measures per window
 ├── trim.py             Trim: the part of a recording an export keeps (start, end, left-out segments)

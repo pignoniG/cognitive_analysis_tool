@@ -70,3 +70,13 @@ analysis.
     Events marked in the Neon Companion app or in Pupil Cloud, and Glasses 3 events (`eventdata.gz`), are read
     directly from the recording; see [Pupil Neon](../devices/pupil-neon.md#events) and
     [Tobii Pro Glasses 3](../devices/tobii-g3.md). An `event_log` CSV in the folder is read as well.
+
+## AS7341 weights
+
+`tools/as7341_weights.py` is not a logger. It fits the weights that turn the AS7341's bands into lux from the
+datasheet's curves and prints them for `cwtool/spectral.py`. See
+[AS7341 spectral sensor](../hardware/spectral-sensor.md#as-a-lux-sensor).
+
+```bash
+python tools/as7341_weights.py
+```
