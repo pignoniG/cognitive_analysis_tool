@@ -131,7 +131,8 @@ version. It is distributed in the hope that it will be useful, but WITHOUT ANY W
 warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.
 
 Versions up to commit `3e0d150` (November 2026) were released under the MIT License, and copies of them obtained under
-it keep it.
+it keep it. Version 2.0 was developed by reworking the 1.x code (2018–2022, begun at NTNU), so the original MIT notice
+is kept in [LICENSE-MIT-1.x](LICENSE-MIT-1.x) for the parts derived from it.
 
 Third-party files keep their own licences: the icons are [Tabler Icons](https://tabler.io/icons) (MIT,
 `cwtool/gui/icons/LICENSE-tabler-icons.txt`), the calibration presenter's three.js build is MIT
